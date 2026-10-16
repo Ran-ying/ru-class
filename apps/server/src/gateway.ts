@@ -50,6 +50,10 @@ export function createGateway(config: Config) {
         const account=normalizeAccount(JSON.parse(body),modelStore.models[kind]);
         if(operation==='test'){
           await probeAccount(account);
+          if(kind==='speech' && account.baseUrl===modelStore.models.speech.baseUrl && account.model===modelStore.models.speech.model && account.apiKey===modelStore.models.speech.apiKey) {
+            directReady=true;
+            clients.forEach(c=>send(c,'connection.status','',{worker_online:true,worker:directStatus()}));
+          }
           res.end(JSON.stringify({ok:true,detail:'已验证模型列表接口和模型名称；尚未测试实际推理'}));return;
         }
         await modelStore.persist(kind,account);
