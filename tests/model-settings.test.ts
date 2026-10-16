@@ -32,7 +32,7 @@ test('three profiles persist independently without tests or leaking keys',async(
     let before=JSON.parse(await readFile(file,'utf8'));
     assert.equal(before.models,undefined);
     assert.equal((await post('text','list',{baseUrl:image.baseUrl,apiKey:''})).status,400);
-    assert.equal((await post('image','list',{baseUrl:image.baseUrl,apiKey:'wrong'})).status,502);
+    assert.equal((await post('image','list',{baseUrl:image.baseUrl,apiKey:'wrong'})).status,400); // Provider rejected authentication.
     const save=await post('image','save',image);
     assert.equal(save.status,200);
     assert.equal((await save.json()).profile.keyConfigured,true);
