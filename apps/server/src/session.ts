@@ -1,11 +1,14 @@
 import { performance } from 'node:perf_hooks';
 import { AudioWindow } from './audio-window.js';
+import { TranscriptBuffer, type TranscriptUpdate } from './transcript.js';
 import { type AudioHeader, RATE } from './protocol.js';
 import { type InferenceAdapter } from './inference.js';
-export type Result = {text: string; window_start_sample: number; window_end_sample: number; sample_rate: number; inference_ms: number; queue_audio_ms: number; alignment_quality: string; final: boolean};
+export type Result = {text: string; window_start_sample: number; window_end_sample: number; sample_rate: number; inference_ms: number; queue_audio_ms: number; alignment_quality: string; final: boolean} & TranscriptUpdate;
 // One inference in flight. New audio replaces pending work, keeping memory and lag bounded.
 export class Session {
   readonly audio: AudioWindow;
+  readonly transcript = new TranscriptBuffer();
+  private lastResult?: Result;
   private running = false;
   private stopping = false;
   private cancelled = false;
@@ -40,13 +43,30 @@ export class Session {
   private async pump() {
     if (this.running || this.cancelled) return;
     const snapshot = this.audio.snapshot();
-    if (snapshot.end === this.lastEnd) { if (this.stopping) this.finish?.(); return; }
+    if (snapshot.end === this.lastEnd) {
+      if (this.stopping) {
+        const update = this.transcript.flush();
+        if (this.lastResult && !this.lastResult.final && (update.stable_delta || this.lastResult.partial_text)) {
+          const finalResult: Result = {...this.lastResult, ...update, final: true, inference_ms: 0, queue_audio_ms: 0};
+          this.lastResult = finalResult;
+          this.onResult(finalResult);
+        }
+        this.finish?.();
+      }
+      return;
+    }
     if (!this.stopping && (snapshot.end < RATE * this.minSeconds || snapshot.end - this.lastEnd < RATE * this.stepSeconds)) return;
     this.running = true; this.lastEnd = snapshot.end;
     const start = performance.now();
     try {
       const text = await this.inferWithBusyRetry(snapshot.pcm);
-      if (!this.cancelled) this.onResult({text, window_start_sample:snapshot.start, window_end_sample:snapshot.end, sample_rate:RATE, inference_ms:performance.now()-start, queue_audio_ms:(this.audio.continuity.sample-snapshot.end)/RATE*1000, alignment_quality:'window_only', final:this.stopping && this.audio.continuity.sample === snapshot.end});
+      if (!this.cancelled) {
+        const final = this.stopping && this.audio.continuity.sample === snapshot.end;
+        const update = this.transcript.update(text, snapshot.start, snapshot.end, final);
+        const result: Result = {text, window_start_sample:snapshot.start, window_end_sample:snapshot.end, sample_rate:RATE, inference_ms:performance.now()-start, queue_audio_ms:(this.audio.continuity.sample-snapshot.end)/RATE*1000, alignment_quality:'window_only', final, ...update};
+        this.lastResult = result;
+        this.onResult(result);
+      }
     } catch {
       if (!this.cancelled) { this.cancelled = true; this.onError(); this.finish?.(); }
     } finally {

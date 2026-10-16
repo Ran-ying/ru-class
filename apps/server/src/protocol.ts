@@ -5,7 +5,7 @@ export const RATE = 16000;
 export const MAX_FRAME_SAMPLES = 16000;
 export type Envelope = {protocol_version: string; type: string; session_id: string; message_id: string; payload: Record<string, any>};
 export type WorkerStatus = {model: string; os: string; backend: string; ready: true};
-export type PartialPayload = {text: string; window_start_sample: number; window_end_sample: number; sample_rate: 16000; inference_ms: number; queue_audio_ms: number; alignment_quality: 'window_only'; final: boolean};
+export type PartialPayload = {text: string; window_start_sample: number; window_end_sample: number; sample_rate: 16000; inference_ms: number; queue_audio_ms: number; alignment_quality: 'window_only'; final: boolean; stable_delta?: string; partial_text?: string; revision?: number};
 type Message<T extends string, P> = Omit<Envelope, 'type' | 'payload'> & {type: T; payload: P};
 export type ControlMessage =
   | Message<'auth', {token: string}>
