@@ -14,3 +14,5 @@
 - User implementation clarification (2026-10-16): use the current M1 / 8 GB machine for development and real engine integration now. Mac mini M4 formal acceptance is intentionally deferred; it does not block M1 development. Record M1 results separately and retain the v0.1-only scope.
 
 - UI clarification (2026-10-16): fixed viewport with no document scrolling; equal desktop columns; visible top/bottom bars removed. Gateway access moves into a top-right native Settings dialog. Content can scroll only inside its own panel. credentials-plan.md reserves three model configuration groups without adding model integrations.
+
+- Caption controls revision (2026-10-16): one recording button changes between start, connecting, stop and stopping states; time is on the left of the live toolbar. Course name moves to the left workspace; on narrow screens its compact row remains visible. Offline RU displays connection/Worker status instead of the ready placeholder. Worker diagnostics also remain available in Settings. Browser authentication still happens through the existing recording lifecycle; no background reconnect is introduced.

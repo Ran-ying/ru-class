@@ -5,7 +5,9 @@ let sent = [], stopTimer, startTimer, flushResolve;
 $('settings-open').onclick = () => $('settings').showModal();
 const errors = {WORKER_OFFLINE:'ASR Worker 未上线，请启动 Worker 后重试。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
-function controls(active) { $('start').disabled = active; $('stop').disabled = !running || stopping; $('token').disabled = active; }
+function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); $('token').disabled = active; }
+function setConnected(online) { $('connection-state').hidden = online; $('ru').hidden = !online; }
+function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待 ASR Worker'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
 async function cleanup() {
   running = false; clearTimeout(stopTimer); clearTimeout(startTimer); stream?.getTracks().forEach(t => t.stop());
   capture?.disconnect(); source?.disconnect();
@@ -14,15 +16,15 @@ async function cleanup() {
 }
 async function fail(message) {
   $('error').textContent = message; $('status').textContent = '已停止 · 发生错误';
-  await cleanup(); stopping = false; controls(false); ws?.close();
+  await cleanup(); stopping = false; updateWorker(false); controls(false); ws?.close();
 }
 function workerLabel(p) { return `${p.model || '未知模型'} · ${p.os || '未知系统'} · 后端：${p.backend || '未验证'}`; }
-$('start').onclick = async () => {
+async function startRecording() {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) { await fail('录音需要 HTTPS（或 localhost）以及支持 AudioWorklet 的浏览器。'); return; }
   if (!$('token').value) { $('error').textContent = '请在设置中输入网关访问令牌。'; $('settings').showModal(); return; }
   controls(true); $('error').textContent = ''; $('status').textContent = '请求麦克风权限…';
   sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false;
-  $('duration').textContent = '00:00'; $('ru').textContent = '等待俄语音频…'; $('latency').textContent = '等待第一条识别结果…';
+  $('duration').textContent = '00:00'; $('ru').textContent = '开始录音后，俄语字幕将在这里更新。'; $('latency').textContent = '等待第一条识别结果…';
   try {
     // Resume inside the user gesture before waiting for network events (Safari requirement).
     context = new AudioContext(); await context.resume();
@@ -37,10 +39,10 @@ $('start').onclick = async () => {
       try {
         const m = JSON.parse(data);
         if (m.protocol_version !== '0.1') throw new Error('协议版本不匹配');
-        if (m.type === 'auth.ok') { $('worker').textContent = m.payload.worker_online ? workerLabel(m.payload.worker) : '等待 ASR Worker'; send('session.start', {lesson_name:$('lesson').value}); }
+        if (m.type === 'auth.ok') { updateWorker(m.payload.worker_online, m.payload.worker); send('session.start', {lesson_name:$('lesson').value}); }
         else if (m.type === 'session.ready' && m.session_id === sessionId) {
           clearTimeout(startTimer);
-          $('worker').textContent = workerLabel(m.payload.worker);
+          updateWorker(true, m.payload.worker);
           const track = stream.getAudioTracks()[0];
           if(!track || track.readyState !== 'live') throw new Error('麦克风已中断，请重新开始。');
           source = context.createMediaStreamSource(stream); capture = new AudioWorkletNode(context, 'ru-capture');
@@ -63,16 +65,16 @@ $('start').onclick = async () => {
           const displayMs = anchor ? performance.now() - anchor.at : null;
           $('latency').textContent = `窗口 ${((m.payload.window_end_sample-m.payload.window_start_sample)/16000).toFixed(1)} s · 推理 ${m.payload.inference_ms.toFixed(0)} ms · 音频末端至显示 ${displayMs === null ? '—' : displayMs.toFixed(0)+' ms'}`;
         } else if(m.type === 'session.stopped' && m.session_id === sessionId) {
-          await cleanup(); stopping = false; $('status').textContent = '已停止 · 尾部识别完成'; controls(false); ws.close();
+          await cleanup(); stopping = false; $('status').textContent = '已停止 · 尾部识别完成'; updateWorker(false); controls(false); ws.close();
         } else if(m.type === 'session.error') await fail(errors[m.payload.code] || `服务错误：${m.payload.code}`);
-        else if(m.type === 'connection.status') $('worker').textContent = m.payload.worker_online ? workerLabel(m.payload.worker) : 'ASR Worker 离线';
+        else if(m.type === 'connection.status') updateWorker(m.payload.worker_online, m.payload.worker);
       } catch(e) { await fail(e.message || '无法处理服务端消息'); }
     };
     ws.onclose = event => { if(ws === socket && (running || stopping || context)) void fail(event.code === 1008 ? '认证失败，请检查访问令牌。' : '网关连接已断开，录音已停止。v0.1 不支持断网续传。'); };
     ws.onerror = () => { if(ws === socket) void fail('无法连接网关，请检查网络与 HTTPS/WSS 配置。'); };
   } catch(e) { await fail(e.name === 'NotAllowedError' ? '麦克风权限被拒绝，请在浏览器设置中允许访问后重试。' : `无法开始录音：${e.message}`); }
-};
-$('stop').onclick = async () => {
+}
+async function stopRecording() {
   if(!running || stopping) return;
   stopping = true; controls(true); $('status').textContent = '正在停止并识别尾部…';
   try {
@@ -80,5 +82,9 @@ $('stop').onclick = async () => {
     await cleanup(); send('session.stop');
     stopTimer = setTimeout(() => void fail('尾部识别超时，连接已关闭。'),70000);
   } catch(e) { await fail(e.message); }
+}
+$('record').onclick = async () => {
+  if ($('record').disabled || stopping) return;
+  if (running) await stopRecording(); else await startRecording();
 };
 window.addEventListener('pagehide', () => { stream?.getTracks().forEach(t => t.stop()); ws?.close(); });

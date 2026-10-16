@@ -320,3 +320,7 @@ lesson-YYYY-MM-DD.zip
 - 移除可见顶栏品牌/版本/副标题及底栏提示，版本限制继续保留在文档中。
 - 右上角增加设置按钮，将网关访问令牌移入设置弹窗，仅保存在页面内存。
 - 按语音识别、多模态、语言模型三类规划服务配置；本轮只展示规划状态，不开发新模型接入。本地 Whisper 不需要模型 API 密钥。未来模型密钥保存在服务端，与 CLIENT_TOKEN / WORKER_TOKEN 应用认证分开。
+
+## 18. Recording controls and caption state revision (2026-10-16)
+
+The user's latest UI direction supersedes earlier control placement: course name belongs at the top of the left workspace (a compact top row on narrow screens). Remove the caption heading/window caption and show only RU/ZH labels. The live panel toolbar has time on the left and one start/stop recording button on the right. The RU area shows connection status while disconnected and the start-recording placeholder only after an authenticated Worker-ready connection; errors and stopped states remain explicit. Settings stays at top right and holds the gateway token plus Worker diagnostics. No new version or model integration is authorized by this UI revision.

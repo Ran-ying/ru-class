@@ -49,3 +49,5 @@ npm run build
 M1 实测方法、模型版本和延迟数据见 [M1 development](docs/m1-development.md)，M4 后期流程见 [hardware validation](docs/hardware-validation.md)。
 
 界面固定满屏，桌面左右各半，无顶栏/底栏；访问令牌从右上角「设置」填写。模型凭证规划见 [credentials plan](docs/credentials-plan.md)。
+
+课程名称位于左侧工作区顶部，窄屏保留顶部输入行。字幕区仅显示 RU / ZH 标签；左侧为计时，右侧一个按钮切换开始/停止。未连接时 RU 区显示连接状态，连接就绪后才显示录音提示；Worker 诊断信息可从设置查看。
