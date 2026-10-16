@@ -14,7 +14,7 @@
  * the original Codex regression script's 36/32 "candidate spans" metric.
  */
 import {execFileSync} from 'node:child_process';
-import {mkdtemp,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,basename} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -133,7 +133,7 @@ if(!baselineRef||!candidateRef||!paths.length){
 }else{
   let temporary;
   try{
-    temporary=mkdtemp(join(tmpdir(),'ru-class-transcript-ab-'));
+    temporary=mkdtempSync(join(tmpdir(),'ru-class-transcript-ab-'));
     const versions=[];
     for(const [i,ref] of [baselineRef,candidateRef].entries()){
       // No shell, no network, no code submitted to remote services.
