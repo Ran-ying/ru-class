@@ -35,6 +35,28 @@ Each repository's full successful automated output is retained in [test-results-
 
 Automated DOM stubs and `SIMULATED_TEST` HTTP fixtures prove logic only. Accelerated five-minute synthetic frame input is not a five-minute hardware run. The M1 real engine run uses explicitly synthetic speech and lasts 101.16 seconds; it is not the required M4/natural classroom acceptance.
 
+## 修复待验收：浏览器 TranscriptBuffer（2026-10-16）
+
+基于用户在 Mac M1 上用 121.95 秒真实课堂录音完成的私有测试报告，现有浏览器 `apps/web/transcript.js` 被确认：**相同音频采样范围再次提交同一识别结果，120 次重放中的 45 次出现额外文字增长**；Web UI 的 `pending` + `unanchored` 也可能显示同一窗口的两个版本。原始 Whisper 同时存在错词与默认 beam 退化，两类问题独立。本轮只修复浏览器拼接层，不更换 ASR 模型、解码配置或窗口/步长。
+
+本分支改动：
+
+- 同一采样区间结果幂等处理；同区间不同解码不视为另一段发言；相邻重叠区间内容未变时也不额外添加同一原文。
+- 非重叠音频区间允许保留真实重复讲话。
+- 优先对齐已有候选和最新重叠窗口，草稿重叠时避免 `pending` 与 `unanchored` 直接整段重复显示。
+- 仅使用合成、无私人音频的单元测试验证上述不变式；不会声称 CI 测试已解决真实语音的全部错误。
+
+**本地私有原始窗口结果再验收（尚需在持有缓存的 Mac 上执行）**：
+
+```sh
+node scripts/replay-browser-transcript.mjs /private/path/fixed-windows.json
+node scripts/replay-browser-transcript.mjs /private/path/realtime-windows.json
+```
+
+脚本接受 JSON 数组（也接受 `{"windows":[...]}`、每行一条 JSON）；每条记录需包含 `text`、`window_start_sample`、`window_end_sample`，采样时间单位均为 16kHz 采样点。若本地缓存字段不同，需要先在本机转换为该格式。脚本不上传音频、不打印识别文本，仅输出窗口数、同采样范围二次投递的重复错误计数及最终词数。
+
+**验收不能跳步**：必须由 Codex/用户在有 121 与 106 条本地实际 ASR 缓存的 Mac 上分别回放，确认之前的 45 个无新音频重投反例归零；还需前后对比重复候选数、漏句、稳定文本、真实重复讲话和停止收尾，不得凭“重复率下降”宣布准确率通过。五分钟自然俄语、真实麦克风与 M4 硬件验收继续 `PENDING`。
+
 ## Actual M1 performance summary
 
 Multilingual small; 8 s maximum window, 1 s step, 2 s first threshold. In this one warmed run, HTTP inference averaged 763.2 ms with p95 852.9 ms. Audio-frame-end sent to replay-result received averaged 771.9 ms with p95 863.9 ms. The latter excludes microphone buffering, AudioWorklet/frame batching and UI rendering, and must not be presented as complete acoustic subtitle latency. The backend was verified from actual `using MTL0 backend` / `Apple M1` startup lines, independently of the Worker's honest unverified configuration label.
