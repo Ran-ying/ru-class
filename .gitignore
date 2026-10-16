@@ -9,6 +9,7 @@ config.local.json
 *.log
 coverage/
 artifacts/
+data/
 
 # Private classroom media and local model artifacts
 recordings/
