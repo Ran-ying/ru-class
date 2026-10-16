@@ -35,6 +35,21 @@ Each repository's full successful automated output is retained in [test-results-
 
 Automated DOM stubs and `SIMULATED_TEST` HTTP fixtures prove logic only. Accelerated five-minute synthetic frame input is not a five-minute hardware run. The M1 real engine run uses explicitly synthetic speech and lasts 101.16 seconds; it is not the required M4/natural classroom acceptance.
 
+## PR #13 初次真实课堂回归 FAIL 与第二轮 P1 修补（2026-10-16）
+
+**Codex 对 PR #13 初次 head `6b7891db15ce82711c96fdbbfaf82e0830913fb9` 的实际 C1/C2 私有缓存结论：FAIL，严禁合并该版本。** 45 个原同采样重投及 227 个首次停止前缀继续为 0，但 C1 最终词数 **828→272**，C2 **717→156**，且 PR 在 **所有非 final 识别窗口中 stable_delta 均为空**（原 main 分别 45/39 次含最终提交）。C2 原窗口索引 78（84.2–92.2s）显示 214→109 词，多个此前显示的独立话题永久丢失。原 14 条真实窗口的缩减复现仅在用户 Mac 私有目录，未公开上传；不能把重复候选归零当作成功。
+
+**两项 P1 根因与本轮修改：**
+
+1. `replacedDraft` 曾错误使用 `commonPrefix`（词面锚定函数）判断数组内容是否完全一致；独立 `-` 经过归一化 `key=""`，故同一 token 也不能通过 `equal()`。目前改用 `sameSequence()` 比较 token 表示是否一致；同时为稳定前缀比较 `commonPrefix` 单独支持**完全相同的纯标点 token**，但 `overlap()` 仍然禁止纯标点作为音频锚点。
+2. 历史文字长时间留在可变 `pending` 中，被后续仅 8 秒的 ASR 假设大面积覆盖。增加 **64 token 最大可变可见草稿上限**：每个新采样区间在尝试新窗口重对齐**之前**，先将当前已显示的旧前缀迁移至不可回写的 `stable`；在一次更新结尾再检查上限。64 不是实测语速或真实词级时间戳，只是防止无限可变历史的保守兜底，仍可能冻结原本可修正的错词，因此需要真实回归验证。
+
+新增无隐私内容的自动化用例：首条识别以独立 `-` 开头时第三个窗口必须正常提交稳定前缀；200 token 待确认课堂历史遇到一个较短的新窗口时必须保留明显早于 8 秒窗口的部分；连续多窗口必须在停止前逐步产生 `stable_delta`；原 PR #12 幂等/首次停止门禁保持不变。
+
+**增强的私有 C1/C2 A/B 工具** `scripts/compare-transcript-caches.mjs`：新增 `nonFinalStableUpdates`、`firstNonFinalStableSample`、`maxVisibleWordDrop`、`largeVisibleDrops`、`maxMutableWordsObserved`。以下情况工具额外设置 `reviewFlags` 并以非零状态退出：候选正常识别期间完全没有稳定提交；出现显著大于旧版本的单次可见历史缩减；最终词数相对 main 大幅减少。**这些只是高风险回归预警，不是能证明没有漏句的准确率标准。**
+
+**当前状态：第二轮提交仅通过合成 CI；真实缓存尚未复验。** 在 Mac 上用独立的 `pr13-regression` 测试环境和原 121 条 C1 / 106 条 C2 缓存再次执行全部原始检查，特别是 `punctuation-regression.mjs`、`minimize-loss.mjs`、`loss-audit.mjs` 与官方 A/B 工具。要求恢复**正常的非 final stable_delta**、前 14 条真实缩减反例不能再吞掉旧独立段落、C2 索引 78 无大段历史删除，同时 45/227 门禁仍为 0；私有逐词 diff 复查真实重复讲话后，才能考虑合并。不得单凭统计减少而合并。整体 v0.1 仍未完成课堂验收。
+
 ## PR #12 合并后：移动窗口跨区间重复固化专项修复（待 Mac 真实缓存复验）
 
 针对 PR #12 合并后的剩余问题：真实课堂缓存中，C1 (121 窗口) 最终至少 5 词重复候选跨度为 **36**、稳定提交候选 **30**，C2 (106 窗口) 为 **32 / 25**。这些是词面筛查候选，不能全部等同老师未说过的内容；用户真实重复发言必须保留。原 45 个同采样范围重投、16/11 个首次停止前缀复发已在上轮由本机 Codex 验证为 0。
