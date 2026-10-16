@@ -270,3 +270,37 @@ test('a clearly independent moving-window topic remains available',()=>{
   assert.match(finished.display,/Карточка отслеживается банком/);
   assert.match(finished.display,/Совсем другая тема здесь объясняется подробно/);
 });
+
+
+test('two occurrences of a short lexical anchor inside a moving window keep the later occurrence',()=>{
+  const r=new Recorder();
+  r.update('Сначала мы проверяем данные',0,8*S);
+  const first=r.update('проверяем данные потом проверяем данные заново',S,9*S);
+  assert.equal(first.display,'Сначала мы проверяем данные потом проверяем данные заново');
+  assert.equal(r.flush().display,first.display);
+});
+
+test('identical speech in temporally disjoint windows remains duplicated after anchor tie break',()=>{
+  const r=new Recorder();
+  r.update('Теперь говорим о банкомате',0,2*S);
+  r.update('Теперь говорим о банкомате',12*S,14*S);
+  assert.equal(r.flush().display,'Теперь говорим о банкомате Теперь говорим о банкомате');
+});
+
+test('every prefix in a moving-window correction scenario survives stop without resurrecting words',()=>{
+  const rows=[
+    ['Вот карточка отслеживается',0,2],
+    ['карточка отслеживается банком',1,3],
+    ['Теперь обсудим электронный кошелёк',2,4],
+    ['обсудим электронный кошелёк отдельно',3,5],
+    ['в электронном кошельке есть подпись',4,6],
+    ['кошельке есть подпись банка',5,7],
+  ] as const;
+  for(let n=1;n<=rows.length;n++){
+    const r=new Recorder();
+    for(const [text,start,end] of rows.slice(0,n))r.update(text,start*S,end*S);
+    const seen=r.current();
+    assert.equal(r.flush().display,seen,'prefix '+n);
+    assert.equal(r.flush().stable_delta,'','re-flush prefix '+n);
+  }
+});
