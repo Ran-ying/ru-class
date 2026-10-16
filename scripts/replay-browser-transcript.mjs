@@ -27,7 +27,9 @@ if(!file){
     const windows=Array.isArray(content)?content:content?.windows;
     if(!Array.isArray(windows)||!windows.length)throw Error('Expected nonempty JSON array or {windows:array}');
     const reducer=new TranscriptBuffer();
+    const plain=new TranscriptBuffer();
     let stable='',partial='',duplicateViolations=0,duplicateStableDeltas=0;
+    let firstStopVisibilityViolations=0,plainVsInjectedMismatches=0;
     let minEnd=Infinity,maxEnd=0,previousEnd=-1;
     for(let index=0;index<windows.length;index++){
       const item=windows[index];
@@ -39,19 +41,36 @@ if(!file){
         throw Error('Invalid/out-of-order window at index '+index+' (start/end must be 16kHz sample positions)');
       }
       previousEnd=end;minEnd=Math.min(minEnd,end);maxEnd=Math.max(maxEnd,end);
-      const response=reducer.update(text,start,end);
+      // Retain the input's final flag: some real replay fixtures already
+      // include a final update from a normal stop at the end of the file.
+      const final=item.final===true;
+      const response=reducer.update(text,start,end,final);
+      const expected=plain.update(text,start,end,final);
+      if(response.stable_delta!==expected.stable_delta ||
+         response.partial_text!==expected.partial_text)plainVsInjectedMismatches++;
       if(response.stable_delta)stable=[stable,response.stable_delta].filter(Boolean).join(' ');
       partial=response.partial_text;
       const before=[stable,partial].filter(Boolean).join(' ');
-      // This is the exact same-range replay control from the user's report:
-      // ZERO new audio, same text, same start/end.
-      const repeated=reducer.update(text,start,end);
-      if(repeated.stable_delta)duplicateStableDeltas++;
-      const after=[stable, repeated.partial_text].filter(Boolean).join(' ');
-      if(repeated.stable_delta || after!==before)duplicateViolations++;
-      partial=repeated.partial_text;
+      // A stop at ANY earlier prefix must commit the exact words displayed
+      // immediately before stop. This caught 16/11 real-cache regressions in
+      // the previous PR review that a second-flush-only test missed.
+      const checkpoint=Object.assign(new TranscriptBuffer(),structuredClone({...reducer}));
+      const stop=checkpoint.flush();
+      const atStop=[stable,stop.stable_delta,stop.partial_text].filter(Boolean).join(' ');
+      if(atStop!==before)firstStopVisibilityViolations++;
+      // No new audio. Non-final replay should have zero text/state effect.
+      if(!final){
+        const repeated=reducer.update(text,start,end);
+        if(repeated.stable_delta)duplicateStableDeltas++;
+        const after=[stable,repeated.partial_text].filter(Boolean).join(' ');
+        if(repeated.stable_delta || after!==before)duplicateViolations++;
+        partial=repeated.partial_text;
+      }
     }
     const finished=reducer.flush();
+    const plainFinished=plain.flush();
+    if(finished.stable_delta!==plainFinished.stable_delta ||
+       finished.partial_text!==plainFinished.partial_text)plainVsInjectedMismatches++;
     if(finished.stable_delta)stable=[stable,finished.stable_delta].filter(Boolean).join(' ');
     partial=finished.partial_text;
     const once=[stable,partial].filter(Boolean).join(' ');
@@ -62,11 +81,14 @@ if(!file){
       audioStartEndSamples:{firstEnd:minEnd,lastEnd:maxEnd},
       sameRangeReplayViolations:duplicateViolations,
       sameRangeReplayStableDeltas:duplicateStableDeltas,
+      firstStopVisibilityViolations,
+      plainVsInjectedMismatches,
       doubleFlushSafe:flushIdempotent,
       finalWordCount:once.trim()?once.trim().split(/\s+/u).length:0,
-      note:'No raw transcripts or API keys were printed. This does not measure WER or prove real-audio fidelity.'
+      note:'No raw transcripts or API keys were printed. This does not measure WER, repeated-speech correctness, or real-audio fidelity.'
     };
     process.stdout.write(JSON.stringify(result,null,2)+'\n');
-    if(duplicateViolations||!flushIdempotent)process.exitCode=1;
+    if(duplicateViolations||duplicateStableDeltas||firstStopVisibilityViolations||
+       plainVsInjectedMismatches||!flushIdempotent)process.exitCode=1;
   }catch(e){console.error('Local private replay failed:',e.message);process.exitCode=1;}
 }
