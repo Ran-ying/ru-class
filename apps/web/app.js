@@ -191,6 +191,7 @@ function updateModelProgress(kind){
 }
 function setModelChoices(kind,ids){
   const step=steps[kind];
+  const previousChoice=step.ready?selectedModel(kind):'';
   step.ready=true;
   step.mode=ids.length?'select':'manual';
   $(kind+'-model-stage').hidden=false;
@@ -198,7 +199,8 @@ function setModelChoices(kind,ids){
   $(kind+'-model-manual-wrap').hidden=!!ids.length;
   $(kind+'-model-select').required=!!ids.length;
   $(kind+'-model').required=!ids.length;
-  const preferred=savedProfiles[kind]?.baseUrl===$(kind+'-url').value.trim()?savedProfiles[kind]?.model:'';
+  const stored=savedProfiles[kind]?.baseUrl===$(kind+'-url').value.trim()?savedProfiles[kind]?.model:'';
+  const preferred=previousChoice||stored||'';
   if(ids.length){
     // Only IDs returned by the provider can be chosen; no manual option.
     const options=ids.map(id=>{
