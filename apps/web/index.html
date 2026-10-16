@@ -1,8 +1,49 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.1</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.1.3</title><link rel="stylesheet" href="/style.css"></head>
 <body>
 <main><section class="notes"><div class="workspace-top"><label>课程名称<input id="lesson" maxlength="120" placeholder="例如：信息安全导论"></label></div><div class="notes-placeholder"><span class="eyebrow">课堂工作区</span><h1>留给思考的空间。</h1><p>笔记区域预留</p><small>当前版本提供右侧俄语实时字幕。</small></div></section>
 <section class="transcription" aria-label="课堂转写">
 <section class="history"><div class="history-title"><span>俄语</span><span>中文</span></div><div class="empty"><span>双语历史</span><p>将在后续版本提供</p></div></section>
 <section class="live"><div class="ru"><span class="label">RU</span><div id="connection-state" role="status"><p id="status">尚未连接</p><small id="worker">等待语音识别 API</small></div><p id="ru" lang="ru" aria-live="polite" hidden>开始录音后，俄语字幕将在这里更新。</p></div><p id="error" role="alert"></p><div class="zh"><span class="label">ZH</span><p>实时中文翻译 · 后续版本</p></div></section>
-<footer class="bottom-toolbar" aria-label="录音控制"><button id="record" type="button">开始录音</button><output id="duration" aria-label="录音时长">00:00</output><small id="latency">窗口跨度 / 推理耗时 / 音频末端至显示延迟：—</small><button id="settings-open" class="settings-button" type="button" aria-label="设置" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button></footer></section></main><dialog id="settings" aria-labelledby="settings-title"><div class="settings-heading"><h2 id="settings-title">设置</h2><form method="dialog"><button class="close-button" aria-label="关闭设置">×</button></form></div><form id="asr-settings"><label>语音识别 API 地址<input id="asr-url" type="url" required placeholder="http://127.0.0.1:8090/v1"></label><label>模型名称<input id="asr-model" required value="small"></label><label>语音识别 API key<input id="asr-key" type="password" autocomplete="off" placeholder="输入 ru-class-asr 配置的 API key"></label><p class="settings-help">主项目服务端调用 OpenAI 兼容接口。key 不会回传到页面；留空保留现有 key。此处保存仅在当前服务进程有效，重启配置请使用本地 .env。</p><button id="asr-save" type="submit">保存并测试连接</button><p id="asr-feedback" role="status"></p></form><form id="site-auth" hidden><label>站点访问令牌<input id="site-token" type="password" autocomplete="off" minlength="24" placeholder="请输入服务器设置的访问令牌" required></label><p class="settings-help">公网模式使用 HTTPS/WSS；站点令牌只保存在当前浏览器标签页会话。ASR API 密钥仅在服务器 config.json 中配置，不会发送到浏览器。</p><button type="submit">保存站点令牌</button><p id="site-feedback" role="status"></p></form><p id="worker-detail" class="settings-help">等待语音识别 API</p><div class="service-settings"><h3>模型服务规划</h3><div><span>语音识别</span><small>独立 ASR 服务 · OpenAI 兼容 API</small></div><div><span>多模态模型</span><small>后续版本 · 服务端独立配置</small></div><div><span>语言模型</span><small>后续版本 · 服务端独立配置</small></div></div></dialog><script type="module" src="/app.js"></script></body></html>
+<footer class="bottom-toolbar" aria-label="录音控制"><button id="record" type="button">开始录音</button><output id="duration" aria-label="录音时长">00:00</output><small id="latency">窗口跨度 / 推理耗时 / 音频末端至显示延迟：—</small><button id="settings-open" class="settings-button" type="button" aria-label="设置" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button></footer></section></main><dialog id="settings" aria-labelledby="settings-title">
+  <div class="settings-heading"><h2 id="settings-title">设置</h2><form method="dialog"><button class="close-button" aria-label="关闭设置">×</button></form></div>
+  <div class="settings-tabs" role="tablist" aria-label="设置分类">
+    <button type="button" class="settings-tab" id="tab-models" role="tab" aria-selected="true" aria-controls="panel-models">模型</button>
+    <button type="button" class="settings-tab" id="tab-access" role="tab" aria-selected="false" aria-controls="panel-access" tabindex="-1">访问</button>
+  </div>
+  <section id="panel-models" role="tabpanel" aria-labelledby="tab-models">
+    <p class="settings-help">各模型的 API 地址、模型名称、密钥独立保存。“保存配置”不会连接服务；“测试连接”只检查 OpenAI 兼容的模型列表接口。</p>
+    <p id="models-unavailable" hidden class="settings-help">公网模式不在浏览器中修改模型服务配置，请编辑服务器私有 config.json。</p>
+    <div id="model-cards">
+      <form class="model-card" id="model-speech">
+        <h3>语音</h3><p class="model-purpose">俄语实时识别 · 当前可用</p>
+        <label>API 地址<input id="speech-url" type="url" required placeholder="http://127.0.0.1:8090/v1"></label>
+        <label>模型名称<input id="speech-model" required placeholder="small"></label>
+        <label>API Key<input id="speech-key" type="password" autocomplete="off" placeholder="留空表示保留已保存的密钥"></label>
+        <div class="model-actions"><button type="submit" id="speech-save">保存配置</button><button type="button" class="secondary" id="speech-test">测试连接</button></div>
+        <p id="speech-feedback" class="model-feedback" role="status"></p>
+      </form>
+      <form class="model-card" id="model-image">
+        <h3>图像</h3><p class="model-purpose">未来课堂图片处理 · 本版仅保存与检查接口</p>
+        <label>API 地址<input id="image-url" type="url" required placeholder="https://provider.example.com/v1"></label>
+        <label>模型名称<input id="image-model" required placeholder="视觉模型 ID"></label>
+        <label>API Key<input id="image-key" type="password" autocomplete="off" placeholder="留空表示保留已保存的密钥"></label>
+        <div class="model-actions"><button type="submit" id="image-save">保存配置</button><button type="button" class="secondary" id="image-test">测试连接</button></div>
+        <p id="image-feedback" class="model-feedback" role="status"></p>
+      </form>
+      <form class="model-card" id="model-text">
+        <h3>文字</h3><p class="model-purpose">未来 DeepSeek 断句与翻译 · 本版仅保存与检查接口</p>
+        <label>API 地址<input id="text-url" type="url" required placeholder="https://provider.example.com/v1"></label>
+        <label>模型名称<input id="text-model" required placeholder="文字模型 ID"></label>
+        <label>API Key<input id="text-key" type="password" autocomplete="off" placeholder="留空表示保留已保存的密钥"></label>
+        <div class="model-actions"><button type="submit" id="text-save">保存配置</button><button type="button" class="secondary" id="text-test">测试连接</button></div>
+        <p id="text-feedback" class="model-feedback" role="status"></p>
+      </form>
+    </div>
+    <p id="worker-detail" class="settings-help">语音模型状态将在开始录音时更新。</p>
+  </section>
+  <section id="panel-access" role="tabpanel" aria-labelledby="tab-access" hidden>
+    <p id="local-access-help" class="settings-help">当前为本机模式。浏览器身份验证自动处理，无需输入站点令牌。</p>
+    <form id="site-auth" hidden><label>站点访问令牌<input id="site-token" type="password" autocomplete="off" minlength="24" placeholder="请输入服务器设置的访问令牌" required></label><p class="settings-help">公网模式使用 HTTPS/WSS。站点令牌只保存在当前标签页；模型 API Key 只在服务器端保存。</p><button type="submit">保存访问令牌</button><p id="site-feedback" role="status"></p></form>
+  </section>
+</dialog><script type="module" src="/app.js"></script></body></html>
