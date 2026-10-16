@@ -130,7 +130,7 @@ test('tab navigation and model setup require explicit discovery, Token reveal, s
     assert.equal(calls.length,1);
     get('image-token-open').onclick();
     assert.equal(get('image-key-wrap').hidden,false);
-    assert.equal(get('image-actions').hidden,false);
+    assert.equal(get('image-actions').hidden,true);
     get('image-key').value='vision-secret';
     get('image-key').oninput();
     assert.equal(get('image-actions').hidden,false);
