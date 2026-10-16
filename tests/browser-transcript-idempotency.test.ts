@@ -304,3 +304,23 @@ test('every prefix in a moving-window correction scenario survives stop without 
     assert.equal(r.flush().stable_delta,'','re-flush prefix '+n);
   }
 });
+
+test('local A/B cache comparer uses exact Git modules and emits metrics without transcript text',()=>{
+  const run=spawnSync(process.execPath,[
+    'scripts/compare-transcript-caches.mjs',
+    'HEAD','HEAD','tests/fixtures/synthetic-window-hypotheses.json'
+  ],{encoding:'utf8'});
+  assert.equal(run.status,0,run.stderr||run.stdout);
+  const data=JSON.parse(run.stdout);
+  assert.equal(data.files.length,1);
+  assert.equal(data.files[0].inputWindows,5);
+  assert.equal(data.files[0].changes.wordEditDistance,0);
+  assert.equal(data.files[0].changes.wordCountDelta,0);
+  assert.equal(data.files[0].changes.repeated5GramStartDelta,0);
+  assert.equal(data.files[0].changes.finalTextIdentical,true);
+  for(const key of ['duplicateViolations','duplicateStateChanges','firstStopVisibilityViolations','stableRewriteViolations']){
+    assert.equal(data.files[0].candidate[key],0,key);
+  }
+  assert.equal(data.files[0].candidate.doubleFlushSafe,true);
+  assert.doesNotMatch(run.stdout,/Сегодня|кошельке|защиты|банка/,'No transcript content should leave local runner');
+});
