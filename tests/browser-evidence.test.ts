@@ -104,6 +104,10 @@ test('raw ASR hypotheses survive caption rewrites and are exported as private po
     'Retrying same audio endpoint cannot create a second hypothesis');
 });
 
+test('empty evidence export is reported clearly for recordings created before schema v2',async()=>{
+  await assert.rejects(lessonHypothesesJson('older-lesson'),/没有原始 ASR 窗口记录/);
+});
+
 test('validate hypotheses before writing and clear private evidence with browser data',async()=>{
   await assert.rejects(saveHypothesis('course-a',{text:'test',
     startSample:0,endSample:0}),/INVALID_ASR_HYPOTHESIS/);
