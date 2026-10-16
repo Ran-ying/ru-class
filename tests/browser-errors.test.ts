@@ -234,3 +234,32 @@ test('401 model discovery asks for Token before proceeding without opening save 
     assert.equal(requests,2);
   }finally{(globalThis as any).fetch=before;}
 });
+
+test('stale model-list response cannot restore steps after the API address changes',async()=>{
+  const previousFetch=(globalThis as any).fetch;
+  let finish:any;
+  const deferred=new Promise<any>(resolve=>{finish=resolve;});
+  (globalThis as any).fetch=async(url:string)=>{
+    if(url==='/api/bootstrap')return {ok:true,status:200,json:async()=>({
+      clientToken:'SIMULATED_BROWSER_TOKEN',ready:true,
+      models:{speech:{},image:{},text:{}}
+    })};
+    if(url==='/api/models/image/list')return deferred;
+    throw Error('Unexpected URL '+url);
+  };
+  try{
+    await get('settings-open').onclick();
+    get('image-url').value='https://first.example/v1';
+    get('image-url').oninput();
+    get('image-list').onclick();
+    await new Promise(r=>setImmediate(r));
+    get('image-url').value='https://new.example/v1';
+    get('image-url').oninput();
+    finish({ok:true,status:200,json:async()=>({models:['stale-model']})});
+    await new Promise(r=>setImmediate(r));
+    assert.equal(get('image-model-stage').hidden,true);
+    assert.equal(get('image-token-stage').hidden,true);
+    assert.equal(get('image-actions').hidden,true);
+    assert.equal(get('image-model-select').options.length,0);
+  }finally{(globalThis as any).fetch=previousFetch;}
+});
