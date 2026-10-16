@@ -79,17 +79,29 @@ function run(Buffer,windows){
   const b=new Buffer();
   let stable='',partial='',duplicateViolations=0,duplicateStateChanges=0,
     firstStopVisibilityViolations=0,stableRewriteViolations=0,
-    partialRepeated5GramUpdates=0,finalUpdates=0;
-  let beforeStable='';
+    partialRepeated5GramUpdates=0,finalUpdates=0,
+    nonFinalStableUpdates=0,firstNonFinalStableSample=null,
+    maxVisibleWordDrop=0,largeVisibleDrops=0,maxMutableWordsObserved=0;
+  let beforeStable='',previousVisibleWords=0;
   for(const w of windows){
     const response=b.update(w.text,w.start,w.end,w.final);
     if(response.stable_delta)stable=[stable,response.stable_delta].filter(Boolean).join(' ');
     partial=response.partial_text;
+    if(response.stable_delta && !w.final) {
+      nonFinalStableUpdates++;
+      if(firstNonFinalStableSample===null)firstNonFinalStableSample=w.end;
+    }
     if(!stable.startsWith(beforeStable))stableRewriteViolations++;
     beforeStable=stable;
     if(repeated5Grams(partial)>0)partialRepeated5GramUpdates++;
     if(w.final)finalUpdates++;
     const before=[stable,partial].filter(Boolean).join(' ');
+    const visibleWords=tokens(before).length;
+    const loss=Math.max(0,previousVisibleWords-visibleWords);
+    maxVisibleWordDrop=Math.max(maxVisibleWordDrop,loss);
+    if(loss>=24)largeVisibleDrops++;
+    previousVisibleWords=visibleWords;
+    if(Array.isArray(b.pending))maxMutableWordsObserved=Math.max(maxMutableWordsObserved,b.pending.length);
     const check=Object.assign(new Buffer(),structuredClone({...b}));
     const firstStop=check.flush();
     const after=[stable,firstStop.stable_delta,firstStop.partial_text].filter(Boolean).join(' ');
@@ -114,6 +126,11 @@ function run(Buffer,windows){
     totalCharacters:finalText.length,
     repeated5GramStarts:repeated5Grams(finalText),
     partialRepeated5GramUpdates,
+    nonFinalStableUpdates,
+    firstNonFinalStableSample,
+    maxVisibleWordDrop,
+    largeVisibleDrops,
+    maxMutableWordsObserved,
     duplicateViolations,
     duplicateStateChanges,
     firstStopVisibilityViolations,
@@ -147,9 +164,17 @@ if(!baselineRef||!candidateRef||!paths.length){
     for(const path of paths){
       const windows=loadWindows(path);
       const baseline=run(versions[0],windows),candidate=run(versions[1],windows);
+      const reviewFlags=[];
+      if(baseline.nonFinalStableUpdates>0 && candidate.nonFinalStableUpdates===0)
+        reviewFlags.push('STABLE_PROGRESS_STALLED');
+      if(candidate.maxVisibleWordDrop>Math.max(32,baseline.maxVisibleWordDrop+24))
+        reviewFlags.push('LARGE_NEW_VISIBLE_HISTORY_LOSS');
+      if(baseline.totalWords>=100 && candidate.totalWords<baseline.totalWords*0.75)
+        reviewFlags.push('LARGE_FINAL_TRANSCRIPT_REDUCTION');
       files.push({
         fixture:basename(path),inputWindows:windows.length,
         baseline:safe(baseline),candidate:safe(candidate),
+        reviewFlags,
         changes:{
           wordEditDistance:wordEditDistance(baseline.rawFinalText,candidate.rawFinalText),
           wordCountDelta:candidate.totalWords-baseline.totalWords,
@@ -172,7 +197,7 @@ if(!baselineRef||!candidateRef||!paths.length){
     if(files.some(x=>
       x.candidate.duplicateViolations||x.candidate.duplicateStateChanges||
       x.candidate.firstStopVisibilityViolations||x.candidate.stableRewriteViolations||
-      !x.candidate.doubleFlushSafe))process.exitCode=1;
+      x.reviewFlags.length||!x.candidate.doubleFlushSafe))process.exitCode=1;
   }catch(e){
     console.error('Local comparison failed:',e.message);
     process.exitCode=1;
