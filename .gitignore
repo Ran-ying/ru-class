@@ -7,3 +7,14 @@ dist/
 *.log
 coverage/
 artifacts/
+
+# Private classroom media and local model artifacts
+recordings/
+private/
+models/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.pcm

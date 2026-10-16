@@ -41,3 +41,7 @@ npm run build
 贡献请提供系统版本、CPU/GPU、推理后端、Node/whisper.cpp 版本、复现步骤及脱敏日志。勿提交令牌、`.env`、私人域名、课堂录音或个人资料。社区运行反馈不等同于作者亲测。
 
 长期边界见 [PROJECT_SPEC.md](PROJECT_SPEC.md)，架构记录见 [decisions](docs/decisions.md)，开发进展见 [development log](docs/development-log.md)。
+
+模块关系见 [architecture](docs/architecture.md)，完整自动化输出见 [test results](docs/test-results-v0.1.txt)。
+
+![v0.1 桌面页面；未连接 Worker](docs/screenshots/desktop-v0.1.jpg)

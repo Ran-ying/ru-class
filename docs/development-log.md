@@ -15,3 +15,9 @@ No later-version feature or production VPS deployment is authorized by this impl
 - Checked the actual page in the in-app browser at 1366×900 and 390×844; fixed narrow placeholder/subtitle overlap. Missing-token interaction works; no console warning/error observed. Actual microphone/Safari/iPad validation remains pending.
 - Hardware query confirms the implementation host is Apple M1 / 8 GB. It is not the required M4; no Metal or Russian performance claim is made. Real validation instructions and privacy-reduced replay metrics are supplied.
 - Only v0.1 code and explicit future-feature placeholders are present. No production infrastructure was changed. Final public-source scanning and repository commits are part of delivery.
+
+### Repository delivery
+
+Source baselines: ru-class `d07280d4a8f51ba93907388f90be1ac7f0426a4c`; ru-class-asr `0134b428f080e24a35bcc7dd3b8eafb6c19d8f2a`. Final tests were run directly in the target repositories after `npm ci`; both typechecks/builds succeeded. Main: 9/9 including the joint chain; Worker: 6/6. Successful console evidence is in `docs/test-results-v0.1.txt`. Runtime dependency audit found 0 vulnerabilities. Public-source review found no real secret/private key or personal absolute path; local environment, media/models/logs and generated artifacts are ignored.
+
+The actual page was checked without granting microphone access. M4/Metal and five-minute Russian real acceptance are PENDING_HARDWARE_VALIDATION. Git history is local; no remote push or production deployment occurred.
