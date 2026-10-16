@@ -154,7 +154,12 @@ export class BrowserAsrSession {
       if(!this.active&&!final)return;
       this.lastSentEnd=snapshot.end;
       const result=this.transcript.update(text,snapshot.start,snapshot.end,final);
-      this.onUpdate({...result,window_start_sample:snapshot.start,window_end_sample:snapshot.end,inference_ms:performance.now()-start,final});
+      this.onUpdate({...result,
+        // This is the *unmodified provider response*, not a stable subtitle.
+        // The UI may keep a local-only evidence journal for future replays.
+        raw_hypothesis_text:text,
+        window_start_sample:snapshot.start,window_end_sample:snapshot.end,
+        inference_ms:performance.now()-start,final});
     })();
     this.inFlight=task;
     try{await task;}finally{this.inFlight=null;}
