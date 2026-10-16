@@ -11,6 +11,10 @@ const speech={baseUrl:'http://127.0.0.1:8090/v1',model:'small',apiKey:'speech-se
 test('three profiles persist independently without tests or leaking keys',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'ru-class-models-'));const file=join(dir,'config.json');
   const provider=http.createServer((req,res)=>{
+    if(req.url==='/public/models'){
+      res.setHeader('Content-Type','application/json');
+      res.end(JSON.stringify({data:[{id:'public-model'}]}));return;
+    }
     if(req.url!=='/v1/models'||req.headers.authorization!=='Bearer vision-secret'){res.writeHead(401).end();return;}
     res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:[{id:'vision-model'},{id:'vision-model'},{id:'alpha-vision'},{id:'bad model'}]}));
   });
@@ -25,6 +29,15 @@ test('three profiles persist independently without tests or leaking keys',async(
   const post=(kind:string,action:string,data:any)=>fetch(origin+'/api/models/'+kind+'/'+action,{method:'POST',headers,body:JSON.stringify(data)});
   try {
     const image={baseUrl:'http://127.0.0.1:'+port+'/v1',model:'vision-model',apiKey:'vision-secret'};
+    // A public provider may list models before the Token is supplied.
+    const noToken=await post('text','list',{baseUrl:'http://127.0.0.1:'+port+'/public',apiKey:''});
+    assert.equal(noToken.status,200);
+    assert.deepEqual((await noToken.json()).models,['public-model']);
+    // Authentication-required providers return an explicit 401-derived response:
+    // the UI must request Token, never silently switch to manual input.
+    const authRequired=await post('text','list',{baseUrl:'http://127.0.0.1:'+port+'/v1',apiKey:''});
+    assert.equal(authRequired.status,400);
+    assert.equal((await authRequired.json()).error,'MODEL_HTTP_401');
     // Model discovery accepts an UNSAVED endpoint/key and never persists it.
     let discovery=await post('image','list',{baseUrl:image.baseUrl,apiKey:image.apiKey});
     assert.equal(discovery.status,200);
