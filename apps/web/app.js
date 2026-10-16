@@ -67,6 +67,9 @@ async function startRecording() {
           track.onmute = () => { if(running && !stopping) void fail('麦克风输入暂停，录音已停止，请检查设备后重新开始。'); };
           $('status').textContent = '录音中 · 俄语识别'; controls(true);
         } else if (m.type === 'asr.partial' && m.session_id === sessionId) {
+          const ruPanel = $('ru');
+          const autoFollow = Number.isFinite(ruPanel.scrollHeight) &&
+            ruPanel.scrollHeight - ruPanel.clientHeight - ruPanel.scrollTop < 64;
           const p = m.payload;
           if (Number.isSafeInteger(p.revision) && typeof p.stable_delta === 'string' && typeof p.partial_text === 'string') {
             // The server sends only newly confirmed words. Overlapping Whisper
@@ -85,6 +88,7 @@ async function startRecording() {
             $('ru').textContent = p.text || '当前窗口未识别到语音';
             if (p.text?.trim()) hasTranscript = true;
           }
+          if (autoFollow) ruPanel.scrollTop = ruPanel.scrollHeight;
           const anchor = sent.find(x => x.end >= m.payload.window_end_sample);
           const displayMs = anchor ? performance.now() - anchor.at : null;
           $('latency').textContent = `窗口 ${((m.payload.window_end_sample-m.payload.window_start_sample)/16000).toFixed(1)} s · 推理 ${m.payload.inference_ms.toFixed(0)} ms · 音频末端至显示 ${displayMs === null ? '—' : displayMs.toFixed(0)+' ms'}`;
