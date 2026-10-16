@@ -43,8 +43,10 @@ Historic decisions remain in `docs/decisions.md` and old acceptance reports.
 - Keep real private WAV, raw hypotheses, personal domains, bearer tokens,
   model binaries and user-specific logs out of commits.
 - Run `npm test`, `npm run typecheck`, `npm run build`. For cross-repo
-  compatibility, validate alongside `ru-class-asr`. GitHub CI is not
-  physical Safari/M1/M4/five-minute classroom acceptance.
+  compatibility, validate alongside `ru-class-asr`. Their legacy mirrored
+  `src/protocol.ts` and `docs/protocol.md` must remain byte-for-byte equal;
+  document deprecation in separate pages, not in the mirrored files.
+  GitHub CI is not physical Safari/M1/M4/five-minute classroom acceptance.
 - M1 synthetic/Metal development smoke is recorded; M4 is deferred.
   **P2 full recording recovery, in-app replay and endurance work is deferred
   by the user.** Do not modify these features as an incidental refactor.
