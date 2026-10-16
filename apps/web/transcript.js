@@ -73,9 +73,9 @@ export class TranscriptBuffer {
 
   // Without per-word timestamps, no old 8-second window can authoritatively
   // revise arbitrarily long history. Limit the uncommitted visible suffix to
-  // a conservative 96 words (far more than typical 8 seconds of Russian
-  // classroom speech). This is a fail-safe, not a word-timing claim.
-  maxMutableWords = 96;
+  // a conservative 64 words (up to 8 words per second in an 8-second window).
+  // This is a fail-safe, not a word-timing claim or guaranteed word alignment.
+  maxMutableWords = 64;
   commitOldDraft() {
     const visible = this.effectiveDraft();
     if (visible.length <= this.maxMutableWords) return;
@@ -106,6 +106,10 @@ export class TranscriptBuffer {
     if (this.sameWindow(windowStart, windowEnd)) {
       return final ? this.flush() : this.state();
     }
+    // Freeze historical visible words BEFORE any new lexical reconciliation.
+    // Waiting until the end of update() is too late: a short 8-second
+    // hypothesis could already have deleted a large pending lecture history.
+    this.commitOldDraft();
     // A lexical match from 30 seconds ago is not evidence that the *current*
     // overlapping audio contains that same phrase. Gate old-text matching on
     // the immediately preceding raw Whisper window and actual audio overlap.
