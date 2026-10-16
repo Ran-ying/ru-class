@@ -324,3 +324,7 @@ lesson-YYYY-MM-DD.zip
 ## 18. Recording controls and caption state revision (2026-10-16)
 
 The user's latest UI direction supersedes earlier control placement: course name belongs at the top of the left workspace (a compact top row on narrow screens). Remove the caption heading/window caption and show only RU/ZH labels. The live panel toolbar has time on the left and one start/stop recording button on the right. The RU area shows connection status while disconnected and the start-recording placeholder only after an authenticated Worker-ready connection; errors and stopped states remain explicit. Settings stays at top right and holds the gateway token plus Worker diagnostics. No new version or model integration is authorized by this UI revision.
+
+## 19. Global bottom recording toolbar (2026-10-16)
+
+The latest user direction moves recording controls to the bottom of the entire viewport. Order: single start/stop recording button, recording duration, window/inference/audio-end-to-display metrics, Settings at the far right. This supersedes the placement in sections 17–18. The toolbar takes its own layout row; desktop content remains equal halves, narrow screens keep the same control order, and the document stays fixed to the viewport. No audio, authentication or future-version scope changes.

@@ -60,3 +60,7 @@ UI revision 2026-10-16: fixed viewport, equal desktop columns, no document scrol
 UI revision checks passed: 1366×900, 390×844 and 900×400 document heights matched viewport heights. Desktop widths were 683/683. Settings open/close and missing-token redirect were checked in the actual browser; main regression 12/12, typecheck and build passed. No new model integration or key storage was added.
 
 Compact-controls revision 2026-10-16: left workspace course input, one recording button/right with timer/left, RU/ZH-only labels and connection-aware RU placeholder. Main regression 12/12, typecheck/build and desktop/narrow visual checks passed; source lifecycle state tests use explicit browser stubs. See ui-recording-controls-v0.1.md.
+
+### Global bottom toolbar (2026-10-16)
+
+Moved record toggle, duration, metrics and Settings into one viewport-wide bottom row. Supersedes earlier live-toolbar/top-right Settings placement. Main joint regression 12/12, typecheck and build passed. Actual browser at 1366×900, 390×844 and 900×400 confirmed no document overflow and toolbar at viewport bottom; Settings open/close passed, no warning/error observed. Public-source scan passed. Audio protocol unchanged; M4 formal acceptance remains deferred. See ui-bottom-toolbar-v0.1.md.

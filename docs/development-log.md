@@ -37,3 +37,7 @@ UI validation: main regression 12/12 passed; TypeScript and build passed. Actual
 ### Compact caption controls and course placement (2026-10-16)
 
 Moved course name above the left workspace and kept it available on narrow screens. Removed the live heading and engine suffixes; added a left timer/right single recording control. Initial disconnected connection/Worker messages now occupy the RU placeholder position; the ready message is revealed only for an authenticated available Worker. Stop/error paths restore a visible connection state. Worker diagnostics remain in Settings. Updated lifecycle assertions verify one-button start/stop and connected/offline visibility. Regression 12/12, typecheck and build passed; desktop/narrow browser layout and empty-token Settings flow passed. See ui-recording-controls-v0.1.md.
+
+### Global bottom toolbar (2026-10-16)
+
+Moved record toggle, duration, metrics and Settings into one viewport-wide bottom row. Supersedes earlier live-toolbar/top-right Settings placement. Main joint regression 12/12, typecheck and build passed. Actual browser at 1366×900, 390×844 and 900×400 confirmed no document overflow and toolbar at viewport bottom; Settings open/close passed, no warning/error observed. Public-source scan passed. Audio protocol unchanged; M4 formal acceptance remains deferred. See ui-bottom-toolbar-v0.1.md.

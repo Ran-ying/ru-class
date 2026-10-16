@@ -35,3 +35,7 @@ Data lifetime: browser frame buffers, gateway transient messages and an at-most-
 Deployment boundary: gateway is lightweight and independently deployed on a VPS; external whisper-server is local to the ASR host and holds the model resident. Platform-specific build/acceleration is outside the portable Worker. Only loopback development may use cleartext; public gateways use HTTPS/WSS and exact PUBLIC_ORIGIN. Browser and Worker secrets are distinct and supplied locally. No OpenAI or DeepSeek API credentials are required in v0.1.
 
 Validation boundary: mock HTTP/adapter tests prove scheduling and protocol behavior. They cannot prove Russian accuracy, GPU selection, real microphone continuity or hardware latency. The acceptance report records these independently.
+
+### Global recording toolbar
+
+The browser main grid reserves a bottom row spanning the viewport for the recording toggle, duration, latency metrics and Settings. The two desktop content columns share the remaining height equally in width; narrow screens retain the compact course row. Existing app.js lifecycle and dialog handlers own these controls by their unchanged IDs.
