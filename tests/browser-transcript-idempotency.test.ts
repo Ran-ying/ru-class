@@ -383,3 +383,44 @@ test('a much later 8-second hypothesis cannot erase the committed earlier lectur
   assert.ok(r.current().startsWith(committed),'Earlier stable history must survive later rewrites');
   assert.equal(r.flush().partial_text,'');
 });
+
+
+test('new eight-second window cannot erase an old 200-word visible classroom draft',()=>{
+  // The real C2 failure had stable=0 and over 200 words in pending before a
+  // short hypothesis re-anchored into much earlier text. Construct the same
+  // state shape without storing private classroom speech in public tests.
+  const r=new Recorder();
+  const tok=(display:string)=>({display,key:display.toLowerCase()});
+  const history=['-',...Array.from({length:200},(_,i)=>'тема'+i)];
+  r.buffer.pending=history.map(tok);
+  r.buffer.lastHypothesis=history.slice(-20).map(tok);
+  r.buffer.lastWindowStart=82*S;
+  r.buffer.lastWindowEnd=90*S;
+  r.partial=r.buffer.state().partial_text;
+  assert.equal(r.stable,'');
+  assert.equal(r.buffer.pending.length,201);
+  const response=r.update(
+    history.slice(35,60).join(' ')+' новая_тема',
+    84*S,92*S
+  );
+  assert.ok(r.stable.length>0,'Old long draft must be committed before new reconciliation');
+  assert.ok(response.display.startsWith('- тема0 тема1 тема2 тема3'));
+  assert.ok(response.display.includes('тема130'),'Words far outside a new eight-second window must survive');
+  assert.ok(response.display.split(/\\s+/u).length>=201-r.buffer.maxMutableWords,
+    'A short new ASR window must not erase most of an old visible transcript');
+  const before=r.current();
+  assert.equal(r.flush().display,before);
+});
+
+test('punctuation at the start of a long moving transcript does not permanently stall stable deltas',()=>{
+  const r=new Recorder();
+  let advances=0;
+  for(let i=0;i<20;i++){
+    const text='- Тема '+i+' подробно описывает необходимые технические понятия и учебные задачи';
+    const update=r.update(text,Math.max(0,i-7)*S,(i+1)*S);
+    if(update.stable_delta)advances++;
+  }
+  assert.ok(advances>0,'Non-final stable updates must occur before ending lecture');
+  const visible=r.current();
+  assert.equal(r.flush().display,visible);
+});
