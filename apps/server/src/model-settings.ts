@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename, chmod, unlink } from 'node:fs/promises';
+import { readFile, writeFile, rename, chmod, unlink, mkdir } from 'node:fs/promises';
 import { dirname, basename, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
@@ -41,10 +41,6 @@ export async function probeAccount(account: ModelAccount):Promise<void> {
   if(!Array.isArray(data.data)||!data.data.some(x=>x?.id===account.model))throw new Error('MODEL_NOT_LISTED');
 }
 
-export function envSpeechOverride():boolean {
-  return ['ASR_BASE_URL','ASR_MODEL','ASR_API_KEY'].some(k=>process.env[k]!==undefined);
-}
-
 export function createModelStore(path:string, initial:Accounts) {
   const file=resolve(path);
   const models:Accounts={speech:{...initial.speech},image:{...initial.image},text:{...initial.text}};
@@ -59,6 +55,7 @@ export function createModelStore(path:string, initial:Accounts) {
       root.models={...existing,[kind]:account};
       // Keep existing settings (including listen and site) untouched. Speech in models
       // takes precedence over older "asr" JSON on restart.
+      await mkdir(dirname(file),{recursive:true,mode:0o700});
       const temp=resolve(dirname(file),'.'+basename(file)+'.'+randomBytes(8).toString('hex')+'.tmp');
       try {
         await writeFile(temp,JSON.stringify(root,null,2)+'\n',{mode:0o600,flag:'wx'});
