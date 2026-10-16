@@ -6,7 +6,7 @@ const kinds=['speech','image','text'];
 let profiles={speech:null,image:null,text:null};
 const stages=Object.fromEntries(kinds.map(kind=>[kind,{revision:0,ready:false,manual:false}]));
 let running=false,stopping=false,stream,context,source,capture,asr,lessonId='',sampleCount=0,chunkIndex=0;
-let startedAt=0,flushResolve=null,writing=Promise.resolve();
+let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve();
 let stable='',draft='',hasTranscript=false,marks=[];
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function status(message=''){
@@ -33,6 +33,7 @@ function showTranscript(update){
   const point=marks.find(m=>m.end>=update.window_end_sample);
   const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
   $('latency').textContent='窗口 '+((update.window_end_sample-update.window_start_sample)/16000).toFixed(1)+' s · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
+  if(lessonId)void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
 }
 async function cleanupMicrophone(){
   running=false;
@@ -42,7 +43,11 @@ async function cleanupMicrophone(){
   stream=null;capture=null;source=null;context=null;
 }
 function finishLesson(outcome){
-  return saveLesson({id:lessonId,title:$('lesson').value.trim(),startedAt,durationSeconds:sampleCount/16000,transcript:[stable,draft].filter(Boolean).join(' '),outcome,hasAudio:chunkIndex>0});
+  // Snapshot at the time of scheduling, never after a later async callback.
+  const record={id:lessonId,title:$('lesson').value.trim(),startedAt,durationSeconds:sampleCount/16000,
+    transcript:[stable,draft].filter(Boolean).join(' '),outcome,hasAudio:chunkIndex>0};
+  lessonWrites=lessonWrites.catch(()=>{}).then(()=>saveLesson(record));
+  return lessonWrites;
 }
 async function onFailure(e){
   const message=errorMessage(e);
@@ -68,7 +73,7 @@ async function start(){
     return;
   }
   lessonId=crypto.randomUUID();startedAt=Date.now();
-  sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();
+  sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();
   stable='';draft='';hasTranscript=false;
   $('ru').textContent='等待俄语语音…';$('ru').hidden=false;
   $('duration').textContent='00:00';$('error').textContent='';$('latency').textContent='等待第一条识别结果…';
@@ -77,6 +82,7 @@ async function start(){
     // Safari: construct/resume audio inside the user's click handler.
     context=new AudioContext();await context.resume();
     stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    await finishLesson('recording'); // Recovery metadata exists before audio chunks arrive.
     await context.audioWorklet.addModule('/capture-worklet.js');
     source=context.createMediaStreamSource(stream);
     capture=new AudioWorkletNode(context,'ru-capture');
@@ -295,6 +301,7 @@ async function renderLessons(){
   }catch(e){$('local-feedback').textContent=errorMessage(e);}
 }
 $('clear-local').onclick=async()=>{
+  if(running||stopping){$('local-feedback').textContent='请先停止录音，再清空浏览器数据。';return;}
   if(!confirm('确定清空此浏览器里所有 API 配置、课堂文本和录音吗？此操作无法撤销。'))return;
   try{await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();await renderLessons();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
   catch(e){$('local-feedback').textContent='清空失败：'+errorMessage(e);}
