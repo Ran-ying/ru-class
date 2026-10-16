@@ -47,6 +47,15 @@ test('three profiles persist independently without tests or leaking keys',async(
     assert.equal((await post('image','save',{...image,apiKey:''})).status,200);
     disk=JSON.parse(await readFile(file,'utf8'));assert.equal(disk.models.image.apiKey,'vision-secret');
     assert.equal((await post('image','save',{...image,baseUrl:'http://127.0.0.1:8989/v1',apiKey:''})).status,400);
+    const speechDraft={baseUrl:image.baseUrl,model:'vision-model',apiKey:'vision-secret'};
+    assert.equal((await post('speech','save',speechDraft)).status,200);
+    assert.equal((await fetch(origin+'/health').then(r=>r.json())).worker_online,false);
+    assert.equal((await post('speech','test',{...speechDraft,apiKey:''})).status,200);
+    assert.equal((await fetch(origin+'/health').then(r=>r.json())).worker_online,true);
+    disk=JSON.parse(await readFile(file,'utf8'));
+    assert.equal(disk.models.speech.model,'vision-model');
+    assert.equal(disk.models.image.apiKey,'vision-secret');
+    assert.equal(disk.models.text.apiKey,'text-secret');
   }finally{await gateway.close();await new Promise<void>(r=>provider.close(()=>r()));await rm(dir,{recursive:true,force:true});}
 });
 
