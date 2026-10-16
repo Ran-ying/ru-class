@@ -57,20 +57,42 @@ export class TranscriptBuffer {
   lastWindowEnd = -1;
   lastHypothesis = [];
 
+  /**
+   * A repeated result for the very same sample range is a transport/replay
+   * duplicate, NOT evidence that the speaker repeated the words. A different
+   * hypothesis for that identical range is also not a second utterance.
+   * We cannot retract an already emitted stable_delta, so do not append it.
+   */
+  sameWindow(start, end) {
+    return start === this.lastWindowStart && end === this.lastWindowEnd;
+  }
+
   /** Apply the next ordered hypothesis for this session's audio time range. */
   update(text, windowStart, windowEnd, final = false) {
     if (!Number.isSafeInteger(windowStart) || !Number.isSafeInteger(windowEnd) || windowStart < 0 || windowEnd <= windowStart || windowEnd < this.lastWindowEnd) {
       throw new Error('TRANSCRIPT_WINDOW_ORDER');
+    }
+    // A replay of the SAME audio range must never grow the transcript, even
+    // if another ASR decoding of those samples uses different spelling.
+    // The caller may still request a final flush without introducing speech.
+    if (this.sameWindow(windowStart, windowEnd)) {
+      return final ? this.flush() : this.state();
     }
     // A lexical match from 30 seconds ago is not evidence that the *current*
     // overlapping audio contains that same phrase. Gate old-text matching on
     // the immediately preceding raw Whisper window and actual audio overlap.
     const consecutive = this.lastWindowEnd < 0 || windowStart < this.lastWindowEnd;
     const next = words(text);
+    const unchanged = consecutive && !!next.length && next.length === this.lastHypothesis.length &&
+      commonPrefix(this.lastHypothesis, next) === next.length;
     const recentOverlap = consecutive ? overlap(this.lastHypothesis, next) : undefined;
     this.lastWindowStart = windowStart;
     this.lastWindowEnd = windowEnd;
     if (next.length) this.lastHypothesis = next;
+    // An identical hypothesis from a moving, overlapping 8-second window
+    // does not establish an additional spoken occurrence. Nonoverlapping
+    // windows are NOT deduplicated: a teacher may truly repeat a phrase.
+    if (unchanged) return final ? this.flush() : this.state();
     if (!next.length) {
       this.emptyWindows++;
       // A single silent window may be a transient ASR miss.  Two successive
@@ -87,7 +109,11 @@ export class TranscriptBuffer {
       this.pending = next;
       this.unanchored = undefined;
     } else {
-      const possible = recentOverlap && !this.unanchored ? overlap(old, next) : undefined;
+      // Even after an ambiguous intermediate hypothesis, try to re-anchor
+      // the latest result to the immediately preceding visible draft before
+      // confirming another utterance. This prevents an alternate rendering
+      // of the SAME overlapping audio from becoming a new stable sentence.
+      const possible = recentOverlap ? overlap(old, next) : undefined;
       let candidate = possible ? [...old.slice(0, possible.old), ...next.slice(possible.next)] : [];
       if (possible && !this.stable.length && possible.old === 0 && possible.next > 0) {
         // Whisper can prepend words to the *first* hypothesis.
@@ -104,11 +130,24 @@ export class TranscriptBuffer {
         // One-word/very short identical windows are not new utterances.
         this.unanchored = undefined;
       } else if (this.unanchored && overlap(this.unanchored, next)) {
-        // The previous unanchored hypothesis is an independent new utterance.
-        // Prefer confirming it over matching common terminology in old history.
+        // Confirm a genuinely new tentative segment ONLY after checking if
+        // it is a second interpretation of already retained draft words.
+        // Historical matches alone are not enough; the previous raw windows
+        // must actually overlap (or be part of the same active 8s window).
         const fresh = overlap(this.unanchored, next);
-        this.stable.push(...this.pending);
-        this.pending = [...this.unanchored.slice(0, fresh.old), ...next.slice(fresh.next)];
+        const duplicate = consecutive ? overlap(old, this.unanchored) : undefined;
+        const tailMatch = duplicate && duplicate.old + duplicate.length >= old.length - 2;
+        if (tailMatch && commonPrefix(this.stable,
+          [...old.slice(0, duplicate.old), ...this.unanchored.slice(duplicate.next)]
+        ) === this.stable.length) {
+          const amended = [...old.slice(0, duplicate.old), ...this.unanchored.slice(duplicate.next)];
+          // Keep stable tokens immutable; refine the draft, then append any
+          // newly evidenced continuation from the next raw window.
+          this.pending = [...amended.slice(this.stable.length), ...next.slice(fresh.next + fresh.length)];
+        } else {
+          this.stable.push(...this.pending);
+          this.pending = [...this.unanchored.slice(0, fresh.old), ...next.slice(fresh.next)];
+        }
         this.unanchored = undefined;
       } else if (!this.pending.length && overlap(this.stable.slice(-12), next, 1)) {
         // A historical word alone is not a trustworthy current-window anchor.
@@ -139,7 +178,19 @@ export class TranscriptBuffer {
   state(forcePartial) {
     const stable_delta = joined(this.stable.slice(this.sentStable));
     this.sentStable = this.stable.length;
-    const pending = forcePartial !== undefined ? [] : [...this.pending, ...(this.unanchored || [])];
+    // unanchored is a tentative interpretation of overlapping audio, not
+    // necessarily an independent sentence. Collapse a lexical draft-tail
+    // overlap for display; NEVER append both interpretations verbatim.
+    let pending = [...this.pending];
+    if (forcePartial === undefined && this.unanchored) {
+      const match = overlap(pending, this.unanchored);
+      if (match && match.old + match.length >= pending.length - 2) {
+        pending = [...pending.slice(0, match.old), ...this.unanchored.slice(match.next)];
+      } else {
+        pending.push(...this.unanchored);
+      }
+    }
+    if (forcePartial !== undefined) pending = [];
     return {stable_delta, partial_text: joined(pending), revision: ++this.revision};
   }
 }
