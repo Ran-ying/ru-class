@@ -30,8 +30,17 @@ test('model selector and refresh use matching SVG dimensions and Token is direct
   for(const kind of ['speech','image','text']){
     assert.match(html,new RegExp('id="'+kind+'-discovery"'));
     assert.match(html,new RegExp('id="'+kind+'-refresh"'));
-    assert.match(html,new RegExp('id="'+kind+'-token-stage" hidden'));
-    assert.match(html,new RegExp('id="'+kind+'-key-wrap"(?=>)'));
+    const card=html.match(new RegExp('<form class="model-card" id="model-'+kind+'">([\\s\\S]*?)<\\/form>'))?.[1];
+    assert.ok(card,'Expected a model card for '+kind);
+    const urlAt=card.indexOf('id="'+kind+'-url"');
+    const tokenAt=card.indexOf('id="'+kind+'-key"');
+    const discoveryAt=card.indexOf('id="'+kind+'-list"');
+    const modelAt=card.indexOf('id="'+kind+'-model-stage" hidden');
+    const actionsAt=card.indexOf('id="'+kind+'-actions" hidden');
+    assert.ok(urlAt>=0&&urlAt<tokenAt&&tokenAt<discoveryAt&&discoveryAt<modelAt&&modelAt<actionsAt,
+      'Expected URL → always-visible Token → fetch → hidden model choices → actions for '+kind);
+    assert.match(card,new RegExp('id="'+kind+'-key-wrap"(?=>)'));
+    assert.doesNotMatch(card,new RegExp('id="'+kind+'-token-stage"'));
     assert.doesNotMatch(html,new RegExp('id="'+kind+'-token-open"'));
     assert.match(html,new RegExp('class="model-icon model-chevron-icon"'));
     assert.match(html,new RegExp('class="model-icon model-refresh-icon"'));
