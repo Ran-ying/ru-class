@@ -85,7 +85,11 @@ if(!file){
       plainVsInjectedMismatches,
       doubleFlushSafe:flushIdempotent,
       finalWordCount:once.trim()?once.trim().split(/\s+/u).length:0,
-      note:'No raw transcripts or API keys were printed. This does not measure WER, repeated-speech correctness, or real-audio fidelity.'
+      // These are diagnostic risk counters, NOT proof of dropped words.
+      // Real speech can be lexically indistinguishable from an ASR rewrite.
+      ambiguousCandidateReplacements:reducer.unanchoredReplacementCount,
+      ambiguousCandidateTokens:reducer.unanchoredReplacementTokens,
+      note:'No raw transcripts or API keys were printed. Ambiguous replacements are risk signals, not measured word loss or WER; review private audio/window evidence.'
     };
     process.stdout.write(JSON.stringify(result,null,2)+'\n');
     if(duplicateViolations||duplicateStableDeltas||firstStopVisibilityViolations||
