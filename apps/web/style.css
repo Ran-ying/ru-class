@@ -56,3 +56,28 @@ main{grid-template-rows:minmax(0,1fr)}
 #worker-detail{margin:8px 0 0}
 #panel-access .settings-help{margin:0 0 18px}
 @media(max-width:500px){#settings{padding:18px}.model-card{padding:14px}.model-actions{gap:8px}}
+
+/* v0.1.4 — fixed settings header; only the panel below it scrolls. */
+#settings{width:min(570px,calc(100% - 24px));max-height:calc(100dvh - 24px);padding:0;overflow:hidden}
+#settings[open]{display:flex;flex-direction:column}
+#settings .settings-heading{position:relative;z-index:2;flex:none;display:grid;grid-template-columns:minmax(68px,1fr) minmax(142px,1.8fr) minmax(68px,1fr);align-items:center;gap:10px;padding:16px 20px;margin:0;background:#fffef9;border-bottom:1px solid #e0e5dc}
+#settings .settings-heading h2{font-size:15px;font-weight:500;justify-self:start;border:1px solid #d8dfd7;border-radius:999px;padding:10px 15px;line-height:18px;margin:0;white-space:nowrap}
+#settings .settings-heading form{justify-self:end;margin:0}
+#settings .settings-heading .close-button{border:1px solid #d8dfd7;border-radius:999px;background:#fffef9;min-width:42px;min-height:40px;line-height:18px;padding:8px 12px;display:grid;place-items:center}
+#settings .settings-heading .close-button:hover{background:#e9eee5}
+#settings .settings-tabs{margin:0;min-width:0;justify-self:stretch;border:1px solid #d8dfd7;background:#ecf0ea}
+#settings .settings-tab{padding:8px 9px}
+#settings .settings-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;flex:1;padding:20px;scrollbar-gutter:stable}
+#settings select{width:100%;font:inherit;font-size:13px;color:#183330;background:#fffef9;border:1px solid #d8dfd7;border-radius:8px;padding:9px 30px 9px 10px;margin-top:7px}
+#settings select:focus-visible{outline:2px solid #4e9475;outline-offset:2px}
+#settings .model-discovery{display:flex;align-items:center;gap:12px;margin:6px 0 16px;flex-wrap:wrap}
+#settings .model-discovery button{background:#e9eee5;color:#245946;border:1px solid #cbd9cd;border-radius:8px;padding:8px 12px;font-size:12px}
+#settings .model-discovery button:disabled{opacity:.5}
+#settings .model-discovery span{color:#738177;font-size:11px;overflow-wrap:anywhere;flex:1;min-width:0}
+#settings .model-card label[hidden]{display:none!important}
+@media(max-width:500px){
+ #settings .settings-heading{padding:12px;gap:6px;grid-template-columns:minmax(60px,1fr) minmax(128px,1.6fr) minmax(42px,1fr)}
+ #settings .settings-heading h2{padding:8px 10px;font-size:13px}
+ #settings .settings-heading .close-button{min-width:38px;min-height:36px}
+ #settings .settings-body{padding:14px;scrollbar-gutter:auto}
+}
