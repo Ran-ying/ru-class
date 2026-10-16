@@ -114,6 +114,7 @@ test('tab navigation and model setup require explicit discovery, Token reveal, s
     get('tab-models').onclick();assert.equal(get('panel-access').hidden,true);
     assert.equal(get('image-model-stage').hidden,true);
     assert.equal(get('image-token-stage').hidden,true);
+    assert.equal(get('image-discovery').hidden,false);
     assert.equal(get('image-actions').hidden,true);
     get('image-url').value='https://vision.example/v1';
     get('image-url').oninput();
@@ -122,13 +123,15 @@ test('tab navigation and model setup require explicit discovery, Token reveal, s
     assert.equal(get('image-model-manual-wrap').hidden,true);
     assert.equal(get('image-model-select').options.length,3);
     assert.equal(get('image-model-select').value,'');
-    assert.equal(get('image-token-stage').hidden,true);
+    assert.equal(get('image-discovery').hidden,true);
+    assert.equal(get('image-model-count').textContent,'');
+    assert.equal(get('image-token-stage').hidden,false);
+    assert.equal(get('image-key-wrap').hidden,false);
     get('image-model-select').value='vision-a';
     get('image-model-select').onchange();
     assert.equal(get('image-token-stage').hidden,false);
     assert.equal(get('image-actions').hidden,true);
     assert.equal(calls.length,1);
-    get('image-token-open').onclick();
     assert.equal(get('image-key-wrap').hidden,false);
     assert.equal(get('image-actions').hidden,true);
     get('image-key').value='vision-secret';
@@ -172,6 +175,8 @@ test('model list refresh, empty/manual fallback and changing API address reset t
     assert.equal(get('image-model-manual-wrap').hidden,true);
     assert.equal(get('image-model').required,false);
     assert.equal(get('image-model-choice').hidden,false); // Refresh button belongs to visible select row.
+    assert.equal(get('image-discovery').hidden,true);
+    assert.equal(get('image-key-wrap').hidden,false);
     get('image-model-select').value='vision-b';
     get('image-model-select').onchange();
     listing=['vision-b','vision-c'];
@@ -184,7 +189,7 @@ test('model list refresh, empty/manual fallback and changing API address reset t
     assert.equal(get('image-model-manual-wrap').hidden,false);
     get('image-model').value='custom-model';
     get('image-model').oninput();
-    get('image-token-open').onclick();
+    assert.equal(get('image-key-wrap').hidden,false);
     assert.equal(get('image-actions').hidden,true);
     get('image-key').value='image-secret';
     get('image-key').oninput();
@@ -221,12 +226,15 @@ test('401 model discovery asks for Token before proceeding without opening save 
     assert.equal(get('text-token-stage').hidden,false);
     assert.equal(get('text-actions').hidden,true);
     assert.match(get('text-model-count').textContent,/先填写 Token/);
-    get('text-token-open').onclick();
+    assert.equal(get('text-discovery').hidden,false);
     assert.equal(get('text-key-wrap').hidden,false);
     assert.equal(get('text-actions').hidden,true);
     get('text-key').value='secret-token';
     await get('text-list').onclick();await new Promise(r=>setImmediate(r));
     assert.equal(get('text-model-select').value,'');
+    assert.equal(get('text-discovery').hidden,true);
+    assert.equal(get('text-model-count').textContent,'');
+    assert.equal(get('text-key-wrap').hidden,false);
     assert.equal(get('text-actions').hidden,true);
     get('text-model-select').value='text-model';
     get('text-model-select').onchange();
