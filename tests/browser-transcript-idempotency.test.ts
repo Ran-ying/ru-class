@@ -144,6 +144,8 @@ test('privacy-safe local replay CLI can verify a synthetic cache without printin
   assert.equal(report.inputWindows,5);
   assert.equal(report.sameRangeReplayViolations,0);
   assert.equal(report.sameRangeReplayStableDeltas,0);
+  assert.equal(report.firstStopVisibilityViolations,0);
+  assert.equal(report.plainVsInjectedMismatches,0);
   assert.equal(report.doubleFlushSafe,true);
   assert.ok(report.finalWordCount>0);
   assert.doesNotMatch(run.stdout,/кошельке|защиты/,'Report must not leak raw classroom transcript');
