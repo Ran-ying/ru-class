@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 let ws, stream, context, capture, source, sessionId, seq = 0, samples = 0, running = false, stopping = false;
 let clientToken='', publicMode = false, hasTranscript = false;
 let sent = [], stopTimer, startTimer, flushResolve;
+let stableRussian = '', provisionalRussian = '', transcriptRevision = 0;
 const errors = {WORKER_OFFLINE:'语音识别 API 未就绪，请在设置中检查地址、key 和模型。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
 function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['asr-url','asr-model','asr-key','asr-save'])$(id).disabled=active; }
@@ -24,6 +25,7 @@ async function startRecording() {
 
   controls(true); $('error').textContent = ''; $('status').textContent = '请求麦克风权限…';
   sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false; hasTranscript = false;
+  stableRussian = ''; provisionalRussian = ''; transcriptRevision = 0;
   $('duration').textContent = '00:00'; $('ru').textContent = '开始录音后，俄语字幕将在这里更新。'; $('latency').textContent = '等待第一条识别结果…';
   try {
     // Resume inside the user gesture before waiting for network events (Safari requirement).
@@ -65,8 +67,24 @@ async function startRecording() {
           track.onmute = () => { if(running && !stopping) void fail('麦克风输入暂停，录音已停止，请检查设备后重新开始。'); };
           $('status').textContent = '录音中 · 俄语识别'; controls(true);
         } else if (m.type === 'asr.partial' && m.session_id === sessionId) {
-          $('ru').textContent = m.payload.text || '当前窗口未识别到语音';
-          if(m.payload.text?.trim()) hasTranscript = true;
+          const p = m.payload;
+          if (Number.isSafeInteger(p.revision) && typeof p.stable_delta === 'string' && typeof p.partial_text === 'string') {
+            // The server sends only newly confirmed words. Overlapping Whisper
+            // windows must never be appended directly to the displayed text.
+            if (p.revision > transcriptRevision) {
+              transcriptRevision = p.revision;
+              if (p.stable_delta.trim()) stableRussian = stableRussian ? stableRussian + ' ' + p.stable_delta.trim() : p.stable_delta.trim();
+              provisionalRussian = p.partial_text.trim();
+              const combined = [stableRussian, provisionalRussian].filter(Boolean).join(' ');
+              $('ru').textContent = combined || '当前窗口未识别到语音';
+              if (combined) hasTranscript = true;
+            }
+          } else {
+            // Legacy Worker protocol: newest window only; never pretend that
+            // this is a stable history.
+            $('ru').textContent = p.text || '当前窗口未识别到语音';
+            if (p.text?.trim()) hasTranscript = true;
+          }
           const anchor = sent.find(x => x.end >= m.payload.window_end_sample);
           const displayMs = anchor ? performance.now() - anchor.at : null;
           $('latency').textContent = `窗口 ${((m.payload.window_end_sample-m.payload.window_start_sample)/16000).toFixed(1)} s · 推理 ${m.payload.inference_ms.toFixed(0)} ms · 音频末端至显示 ${displayMs === null ? '—' : displayMs.toFixed(0)+' ms'}`;
