@@ -94,9 +94,10 @@ export function wavBlob(samples){
 }
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export class BrowserAsrSession {
-  constructor(profile,onUpdate,onError){
+  constructor(profile,onUpdate,onError,onRawHypothesis=()=>{}){
     this.profile=validateProfile(profile);
     this.onUpdate=onUpdate;this.onError=onError;
+    this.onRawHypothesis=onRawHypothesis;
     this.ring=new AudioRing();
     this.transcript=new TranscriptBuffer();
     this.latestEnd=0;
@@ -152,11 +153,16 @@ export class BrowserAsrSession {
       const start=performance.now();
       const text=await this.transcribe(snapshot);
       if(!this.active&&!final)return;
+      const raw={
+        // Preserve the exact provider text before any lossy transcript
+        // stabilization. A projection failure must not erase this evidence.
+        text,startSample:snapshot.start,endSample:snapshot.end,
+        inferenceMs:performance.now()-start,final
+      };
+      await this.onRawHypothesis(raw);
       this.lastSentEnd=snapshot.end;
       const result=this.transcript.update(text,snapshot.start,snapshot.end,final);
       this.onUpdate({...result,
-        // This is the *unmodified provider response*, not a stable subtitle.
-        // The UI may keep a local-only evidence journal for future replays.
         raw_hypothesis_text:text,
         window_start_sample:snapshot.start,window_end_sample:snapshot.end,
         inference_ms:performance.now()-start,final});
