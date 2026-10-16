@@ -46,3 +46,38 @@ test('model selector and refresh use matching SVG dimensions and Token is direct
     assert.match(html,new RegExp('class="model-icon model-refresh-icon"'));
   }
 });
+
+
+test('wide desktop settings align all three compact model cards in a row and wrap on narrower screens',()=>{
+  const css=readFileSync('apps/web/style.css','utf8');
+  const html=readFileSync('apps/web/index.html','utf8');
+  const js=readFileSync('apps/web/app.js','utf8');
+  assert.match(css,/#settings\{width:min\(1120px,calc\(100% - 32px\)\);padding:0\}/);
+  assert.match(css,/#model-cards\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css,/@media\(max-width:960px\)\{[\s\S]*?#model-cards\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css,/@media\(max-width:650px\)\{[\s\S]*?#model-cards\{grid-template-columns:minmax\(0,1fr\)/);
+  for(const kind of ['speech','image','text']){
+    assert.match(html,new RegExp('<form class="model-card" id="model-'+kind+'">'));
+  }
+  assert.doesNotMatch(js,/不会发送给 RU-Class 服务器/);
+  assert.match(js,/已保存到此浏览器。/);
+});
+
+test('RU caption area stays mounted and blank until actual Russian text arrives',()=>{
+  const html=readFileSync('apps/web/index.html','utf8');
+  const css=readFileSync('apps/web/style.css','utf8');
+  const js=readFileSync('apps/web/app.js','utf8');
+  assert.match(html,/<div class="ru"><span class="label">RU<\/span><p id="ru" lang="ru" aria-live="polite"><\/p><\/div>/);
+  assert.doesNotMatch(html,/id="connection-state"|id="status"|id="worker"/);
+  assert.match(css,/\.live\{flex:0 0 clamp\(190px,36dvh,370px\);max-height:60%\}/);
+  assert.match(css,/\.live \.ru\{flex:1;min-height:0;display:flex;flex-direction:column\}/);
+  assert.match(css,/\.live \.ru #ru\{[\s\S]*?flex:1;min-height:0;max-height:none;/);
+  assert.match(js,/\$\('ru'\)\.textContent='';/);
+  assert.match(js,/panel\.textContent=text;/);
+  assert.doesNotMatch(js,/\$\('ru'\)\.hidden\s*=|panel\.hidden\s*=/);
+  for(const placeholder of ['尚未连接','等待语音识别 API','录音中 · 俄语识别',
+    '等待俄语语音…','开始录音后，俄语字幕将在这里更新。']){
+    assert.ok(!html.includes(placeholder)&&!js.includes(placeholder),
+      'RU should have no state-dependent placeholder: '+placeholder);
+  }
+});

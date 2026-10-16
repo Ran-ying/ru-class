@@ -9,10 +9,6 @@ let running=false,stopping=false,stream,context,source,capture,asr,lessonId='',s
 let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve();
 let stable='',draft='',hasTranscript=false,marks=[];
 const errorMessage=e=>e instanceof Error?e.message:String(e);
-function status(message=''){
-  $('status').textContent=message;
-  $('connection-state').hidden=!message || hasTranscript;
-}
 function buttons(){
   $('record').disabled=stopping;
   $('record').textContent=stopping?'正在停止…':running?'停止录音':'开始录音';
@@ -25,10 +21,9 @@ function showTranscript(update){
   if(update.stable_delta?.trim())stable=stable?[stable,update.stable_delta.trim()].join(' '):update.stable_delta.trim();
   draft=update.partial_text?.trim()||'';
   const text=[stable,draft].filter(Boolean).join(' ');
-  panel.textContent=text||'等待俄语语音…';
+  // Silence or an empty ASR window leaves the reserved RU region blank.
+  panel.textContent=text;
   if(text)hasTranscript=true;
-  panel.hidden=false;
-  status();
   if(follow)panel.scrollTop=panel.scrollHeight;
   const point=marks.find(m=>m.end>=update.window_end_sample);
   const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
@@ -59,7 +54,7 @@ async function onFailure(e){
     await writing;
     if(lessonId)await finishLesson('interrupted');
   }catch(storageError){$('error').textContent+='；本地保存失败：'+errorMessage(storageError);}
-  stopping=false;buttons();status();
+  stopping=false;buttons();
 }
 async function start(){
   if(running||stopping)return;
@@ -75,9 +70,8 @@ async function start(){
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();
   stable='';draft='';hasTranscript=false;
-  $('ru').textContent='等待俄语语音…';$('ru').hidden=false;
-  $('duration').textContent='00:00';$('error').textContent='';$('latency').textContent='等待第一条识别结果…';
-  status('请求麦克风权限…');
+  $('ru').textContent='';
+  $('duration').textContent='00:00';$('error').textContent='';$('latency').textContent='—';
   try{
     // Safari: construct/resume audio inside the user's click handler.
     context=new AudioContext();await context.resume();
@@ -107,12 +101,11 @@ async function start(){
     track.onended=()=>{if(running&&!stopping)void onFailure(Error('麦克风已中断'));};
     track.onmute=()=>{if(running&&!stopping)void onFailure(Error('麦克风已暂停'));};
     context.onstatechange=()=>{if(running&&!stopping&&context?.state==='suspended')void onFailure(Error('浏览器暂停了录音，请保持页面处于前台'));};
-    status('录音中 · 俄语识别');
   }catch(e){await onFailure(e);}
 }
 async function stop(){
   if(!running||stopping)return;
-  stopping=true;buttons();status('正在识别最后的语音…');
+  stopping=true;buttons();
   try{
     await Promise.race([
       new Promise((resolve,reject)=>{
@@ -129,7 +122,7 @@ async function stop(){
   }catch(e){
     asr?.cancel();$('error').textContent='停止或保存失败：'+errorMessage(e);
   }finally{
-    stopping=false;buttons();status();$('ru').hidden=!hasTranscript;
+    stopping=false;buttons();
     void renderLessons();
   }
 }
@@ -235,7 +228,7 @@ async function modelAction(kind,mode){
         profiles[kind]=profile;
         $(kind+'-key').value='';
         $(kind+'-key').placeholder='已存储在此浏览器中；留空继续使用';
-        label.textContent='已保存到此浏览器，不会发送给 RU-Class 服务器。';
+        label.textContent='已保存到此浏览器。';
       }else{
         await testConnection(profile);
         label.textContent='连接成功：API 模型列表包含所选模型。';
@@ -308,4 +301,4 @@ $('clear-local').onclick=async()=>{
 };
 try{profiles={speech:null,image:null,text:null,...await loadProfiles()};}
 catch(e){$('error').textContent='浏览器本地存储不可用：'+errorMessage(e);}
-buttons();status();$('ru').hidden=true;
+buttons();
