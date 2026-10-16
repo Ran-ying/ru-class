@@ -1,3 +1,13 @@
+# RU-Class current development rules (BYOK v0.1.7)
+
+- **Most recent user decision overrides historical notes**: RU-Class is intended to become a publicly usable BYOK service. EVERY user including the maintainer chooses and provides their own speech, image and text provider URLs, model IDs and API Tokens. No default AI providers or shared/global AI keys.
+- `config.json` and deployment environment variables only configure app listeners, origins and site administration. Ignore legacy `ASR_*` variables and legacy `asr`/`models` fields in `config.json`; do NOT reintroduce them as global provider defaults.
+- `data/local-models.json` is a temporary **single-user private local testing** profile only. Never use or expose it to public users. Public launch requires authenticated independent user profiles, encrypted credentials, isolated ASR adapters and sessions, SSRF-safe API proxying and quota control. See `docs/byok-public-service.md`.
+- Preserve previously approved v0.1.6 model UI, text alignment, audio-window behavior, and independent ru-class-asr API. Changes to v0.2 features still require user approval.
+- Do not commit secrets, recordings or private endpoints. Run tests, typecheck and build. Simulated CI is not Mac/iPad field validation. Do not deploy public or local services without authorization.
+
+## Historical development notes (superseded where conflicting)
+
 # Repository working agreement
 
 - Read PROJECT_SPEC.md and docs/decisions.md before changes. Only v0.1 and its v0.1.1 bug/config fixes are approved; later versions require explicit user direction.
