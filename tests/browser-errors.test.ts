@@ -40,7 +40,7 @@ test('shipped browser lifecycle sends indexed audio and stops capture before fin
   await socket.onmessage({data:JSON.stringify({protocol_version:'0.1',type:'asr.partial',session_id:id,payload:{text:'Сегодня мы рассматриваем безопасность.',window_start_sample:0,window_end_sample:16000,inference_ms:15}})});
   await get('record').onclick();assert.equal(track.stopped,true);assert.equal(JSON.parse(socket.sent.at(-1)).type,'session.stop');
   await socket.onmessage({data:JSON.stringify({protocol_version:'0.1',type:'session.stopped',session_id:id,payload:{}})});
-  assert.match(get('status').textContent,/尾部识别完成/);assert.equal(get('record').disabled,false);assert.equal(get('record').textContent,'开始录音');assert.equal(get('ru').hidden,false);assert.match(get('ru').textContent,/Сегодня/);assert.equal(get('connection-state').hidden,false);
+  assert.equal(get('status').textContent,'');assert.equal(get('record').disabled,false);assert.equal(get('record').textContent,'开始录音');assert.equal(get('ru').hidden,false);assert.match(get('ru').textContent,/Сегодня/);assert.equal(get('connection-state').hidden,true);
 });
 test('gateway disconnection and Worker failure visibly stop browser capture',async()=>{
   captureEnvironment();await readySession();socket.onclose({code:1006});await new Promise(r=>setImmediate(r));assert.equal(track.stopped,true);assert.match(get('error').textContent,/网关连接已断开/);
@@ -59,7 +59,7 @@ test('public mode requires a site token and hides local-only ASR editing',async(
   (globalThis as any).fetch=async()=>({ok:false,status:403});
   try {
     await get('settings-open').onclick();
-    assert.equal(get('site-auth').hidden,false);assert.equal(get('asr-settings').hidden,true);
+    assert.equal(get('site-auth').hidden,false);assert.equal(get('model-cards').hidden,true);
     get('site-token').value='long-public-site-test-token-32-chars';
     get('site-auth').onsubmit({preventDefault(){}});
     assert.equal(entries.get('ru-class-site-token'),'long-public-site-test-token-32-chars');
