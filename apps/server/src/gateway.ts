@@ -3,11 +3,18 @@ import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
+import { Session } from './session.js';
+import { OpenAICompatibleAsr, type AsrOptions } from './inference.js';
 import { Continuity, decodeAudio, event, parseEvent } from './protocol.js';
 
-type Config = {clientToken: string; workerToken: string; publicOrigin?: string; webRoot?: string};
+type Config = {clientToken: string; workerToken: string; publicOrigin?: string; webRoot?: string; asr?:AsrOptions; localBootstrap?:boolean};
 export function createGateway(config: Config) {
   if (config.clientToken.length < 24 || config.workerToken.length < 24 || config.clientToken === config.workerToken) throw new Error('Configure distinct CLIENT_TOKEN and WORKER_TOKEN (at least 24 characters)');
+  let directAdapter=config.asr ? new OpenAICompatibleAsr(config.asr) : undefined;
+  let directReady=false;
+  const directStatus=()=>({model:directAdapter?.options.model||'未配置',os:'ASR API',backend:'remote:unverified',ready:true});
+  const ready=()=>directAdapter ? directReady : !!worker;
+  const status=()=>directAdapter ? directStatus() : workerStatus;
   const webRoot = config.webRoot ?? resolve('apps/web');
   const assets: Record<string, [string, string]> = {'/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/audio.js': ['audio.js', 'text/javascript'], '/capture-worklet.js': ['capture-worklet.js', 'text/javascript'], '/style.css': ['style.css', 'text/css']};
   const server = http.createServer(async (req, res) => {
@@ -16,9 +23,26 @@ export function createGateway(config: Config) {
     res.setHeader('Content-Security-Policy', "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
     res.setHeader('Permissions-Policy', 'microphone=(self)');
     res.setHeader('Cache-Control', 'no-store');
+    const apiPath=new URL(req.url??'/','http://localhost').pathname;
+    const host=req.headers.host?.split(':')[0];
+    const local=config.localBootstrap && ['localhost','127.0.0.1'].includes(host||'') && ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress||'') && !config.publicOrigin;
+    if(apiPath==='/api/bootstrap') {
+      if(req.method!=='GET'||!local||(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)){res.writeHead(403).end();return;}
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({clientToken:config.clientToken,asr:{baseUrl:directAdapter?.options.baseUrl||'',model:directAdapter?.options.model||'small',keyConfigured:!!directAdapter?.options.apiKey},ready:directReady}));return;
+    }
+    if(apiPath==='/api/asr') {
+      if(req.method!=='POST'||!local||req.headers.origin!==`http://${req.headers.host}`||req.headers.authorization!==`Bearer ${config.clientToken}`){res.writeHead(403).end();return;}
+      if(active){res.writeHead(409).end(JSON.stringify({error:'请先停止录音'}));return;}
+      try {let raw='';for await(const part of req){raw+=part;if(raw.length>8192)throw new Error('请求过大');}
+        const body=JSON.parse(raw);if(!body.apiKey&&directAdapter&&body.baseUrl!==directAdapter.options.baseUrl)throw new Error('ASR_NEW_URL_REQUIRES_KEY');const adapter=new OpenAICompatibleAsr({baseUrl:body.baseUrl,model:body.model,apiKey:body.apiKey||directAdapter?.options.apiKey||''});
+        await adapter.probe();if(active)throw new Error('请先停止录音');directAdapter=adapter;directReady=true;
+        clients.forEach(c=>send(c,'connection.status','',{worker_online:true,worker:directStatus()}));
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}));
+      }catch(e){res.writeHead(400).end(JSON.stringify({error:e instanceof Error&&/^(ASR_|INVALID_ASR)/.test(e.message)?e.message:'API 配置无效或连接失败'}));}return;
+    }
     if (req.method !== 'GET') { res.writeHead(405).end(); return; }
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;
-    if (path === '/health') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ok: true, worker_online: !!worker})); return; }
+    if (path === '/health') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ok: true, worker_online: ready()})); return; }
     const asset = assets[path];
     if (!asset) { res.writeHead(404).end(); return; }
     try { res.setHeader('Content-Type', `${asset[1]}; charset=utf-8`); res.end(await readFile(`${webRoot}/${asset[0]}`)); }
@@ -29,13 +53,14 @@ export function createGateway(config: Config) {
   let workerConnection: WebSocket | undefined;
   let stopTimeout: ReturnType<typeof setTimeout> | undefined;
   let workerStatus: Record<string, any> = {};
-  let active: {id: string; client: WebSocket; continuity: Continuity; stopping: boolean} | undefined;
+  let active: {id: string; client: WebSocket; continuity: Continuity; stopping: boolean; session?:Session} | undefined;
   const clients = new Set<WebSocket>();
   const send = (ws: WebSocket | undefined, type: string, id = '', payload = {}) => { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event(type, id, payload))); };
   function fail(ws: WebSocket, code: string, id = '') { send(ws, 'session.error', id, {code}); }
   function abort(code: string) {
     if (!active) return;
     fail(active.client, code, active.id);
+    active.session?.cancel();
     send(worker, 'session.cancel', active.id);
     active = undefined; clearTimeout(stopTimeout);
   }
@@ -43,7 +68,7 @@ export function createGateway(config: Config) {
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;
     const role = path === '/ws/client' ? 'client' : path === '/ws/worker' ? 'worker' : null;
     const expected = config.publicOrigin || `http://${req.headers.host}`;
-    if (!role || (role === 'client' && req.headers.origin !== expected) || wss.clients.size >= 12) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); socket.destroy(); return; }
+    if (!role || (directAdapter && role==='worker') || (role === 'client' && req.headers.origin !== expected) || wss.clients.size >= 12) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, ws => {
       let authenticated = false;
       let alive = true;
@@ -62,14 +87,15 @@ export function createGateway(config: Config) {
             authenticated = true; clearTimeout(authTimer);
             if (role === 'worker') workerConnection = ws;
             if (role === 'client') clients.add(ws);
-            send(ws, 'auth.ok', '', {worker_online: !!worker, worker: workerStatus});
+            send(ws, 'auth.ok', '', {worker_online: ready(), worker: status()});
             return;
           }
           if (binary) {
             if (role !== 'client') throw new Error('UNEXPECTED_BINARY');
-            const {header} = decodeAudio(Buffer.from(data as Buffer));
+            const {header,pcm} = decodeAudio(Buffer.from(data as Buffer));
             if (!active || active.client !== ws || active.id !== header.session_id || active.stopping) throw new Error('UNKNOWN_SESSION');
             active.continuity.accept(header);
+            if(directAdapter){active.session!.push(header,pcm);return;}
             if (!worker || worker.bufferedAmount > 1024 * 1024) { abort('WORKER_UNAVAILABLE_OR_SLOW'); return; }
             worker.send(data, {binary: true}); return;
           }
@@ -79,7 +105,7 @@ export function createGateway(config: Config) {
             if (m.type === 'worker.ready' && workerConnection === ws && !worker) {
               if (typeof m.payload.model !== 'string' || typeof m.payload.os !== 'string' || typeof m.payload.backend !== 'string' || m.payload.ready !== true) throw new Error('INVALID_WORKER_STATUS');
               worker = ws; workerStatus = m.payload;
-              clients.forEach(c => send(c, 'connection.status', '', {worker_online: true, worker: workerStatus})); return;
+              clients.forEach(c => send(c, 'connection.status', '', {worker_online: true, worker: status()})); return;
             }
             if (worker !== ws || !active || m.session_id !== active.id) throw new Error('UNKNOWN_SESSION');
             if (m.type === 'asr.partial') {
@@ -94,14 +120,19 @@ export function createGateway(config: Config) {
           if (m.type === 'session.start') {
             if (!/^[a-zA-Z0-9-]{16,64}$/.test(m.session_id)) throw new Error('INVALID_SESSION_ID');
             if (active) throw new Error('SESSION_BUSY');
-            if (!worker) throw new Error('WORKER_OFFLINE');
+            if (!ready()) throw new Error('WORKER_OFFLINE');
             active = {id: m.session_id, client: ws, continuity: new Continuity(), stopping: false};
+            if(directAdapter){
+              const owner=active;
+              owner.session=new Session(directAdapter,result=>{if(active===owner)send(ws,'asr.partial',owner.id,result);},()=>{if(active===owner)abort('INFERENCE_FAILED');});
+            }
             send(worker, 'session.start', active.id);
-            send(ws, 'session.ready', active.id, {worker: workerStatus});
+            send(ws, 'session.ready', active.id, {worker: status()});
           } else if (m.type === 'session.stop') {
             if (!active || active.client !== ws || active.id !== m.session_id) throw new Error('UNKNOWN_SESSION');
             active.stopping = true; send(worker, 'session.stop', active.id);
             stopTimeout = setTimeout(() => abort('STOP_TIMEOUT'), 65000);
+            if(active.session){const owner=active;void owner.session!.stop().then(()=>{if(active===owner){send(ws,'session.stopped',owner.id);active=undefined;clearTimeout(stopTimeout);}});}
           } else throw new Error('UNKNOWN_EVENT');
         } catch (e) {
           const code = e instanceof Error && /^[A-Z_]+$/.test(e.message) ? e.message : 'INVALID_MESSAGE';
@@ -113,9 +144,10 @@ export function createGateway(config: Config) {
         clearTimeout(authTimer); clearInterval(heartbeat); clients.delete(ws);
         if (workerConnection === ws) workerConnection = undefined;
         if (worker === ws) { worker = undefined; workerStatus = {}; abort('WORKER_DISCONNECTED'); clients.forEach(c => send(c, 'connection.status', '', {worker_online: false})); }
-        if (active?.client === ws) { send(worker, 'session.cancel', active.id); active = undefined; clearTimeout(stopTimeout); }
+        if (active?.client === ws) { active.session?.cancel(); send(worker, 'session.cancel', active.id); active = undefined; clearTimeout(stopTimeout); }
       });
     });
   });
-  return {server, close: async () => { for (const ws of wss.clients) ws.terminate(); await new Promise<void>(r => wss.close(() => r())); await new Promise<void>(r => server.close(() => r())); }};
+  const probe=async()=>{if(directAdapter){try{await directAdapter.probe();directReady=true;}catch{directReady=false;}}};
+  return {server, probe, close: async () => { active?.session?.cancel(); for (const ws of wss.clients) ws.terminate(); await new Promise<void>(r => wss.close(() => r())); await new Promise<void>(r => server.close(() => r())); }};
 }

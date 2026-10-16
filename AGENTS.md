@@ -8,3 +8,5 @@
 - Simulated tests must remain labeled. Required M4/Metal + five-minute Russian/browser validation is independent and stays pending until measured.
 
 - User clarification, 2026-10-16: M1 is the current development/integration machine. M4 formal hardware acceptance is deferred to a later stage; do not block current development on M4 availability or mislabel M1 measurements as M4.
+
+- Latest user correction: default ASR entry point serves an independent OpenAI-compatible HTTP API; main server calls URL/model/key and owns window scheduling. No outbound Worker is required in normal startup. Keep current contract in docs/api-integration-v0.1.md; older Worker docs/tests are migration history. Local setup remains loopback-only until public site authentication/deployment is reviewed. Toolbar belongs to the right half.

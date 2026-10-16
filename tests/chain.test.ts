@@ -44,9 +44,9 @@ test('cross-repository HTTP adapter → Worker → gateway → client; early cap
     const temp=await mkdtemp(resolve(tmpdir(),'ru-class-simulated-replay-'));
     try {
       const {wav}=await import(pathToFileURL(resolve(asr,'src/audio-window.ts')).href);
-      await writeFile(resolve(temp,'SIMULATED.wav'),wav(Buffer.alloc(16000*2*2.2)));
+      await writeFile(resolve(temp,'SIMULATED.wav'),wav(Buffer.alloc(16000*2*3.2)));
       await promisify(execFile)(process.execPath,['--import','tsx','scripts/replay.ts',resolve(temp,'SIMULATED.wav'),resolve(temp,'report.json'),'--allow-short'],{cwd:asr,env:{...process.env,CLIENT_TOKEN:clientToken,GATEWAY_CLIENT_URL:`ws://127.0.0.1:${port}/ws/client`,WHISPER_MODEL:'SIMULATED_TEST'},timeout:15000});
-      const report=JSON.parse(await readFile(resolve(temp,'report.json'),'utf8'));assert.equal(report.captions_before_stop,true);assert.equal(report.audio_seconds,2.2);assert.equal(report.configured_model,'SIMULATED_TEST');assert.ok(report.inference_ms.count>=2);assert.ok(report.audio_end_to_result_ms.p95>=0);
+      const report=JSON.parse(await readFile(resolve(temp,'report.json'),'utf8'));assert.equal(report.captions_before_stop,true);assert.equal(report.audio_seconds,3.2);assert.equal(report.configured_model,'SIMULATED_TEST');assert.ok(report.inference_ms.count>=2);assert.ok(report.audio_end_to_result_ms.p95>=0);
     } finally {await rm(temp,{recursive:true,force:true});}
   } finally {client?.terminate();worker?.terminate();await app.close();await new Promise<void>(r=>mock.close(()=>r()));}
 });

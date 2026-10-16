@@ -1,55 +1,38 @@
 # RU-Class · v0.1
 
-俄语课堂实时字幕原型。左侧 1/2 预留笔记区，右下显示真实 Whisper 滚动窗口字幕、录音时间和延迟指标；双语历史和中文翻译标注为后续版本。**v0.1 不保存完整录音，不适合作为重要课堂的唯一录音。**
+俄语课堂实时字幕。左侧 1/2 预留课堂工作区，右侧显示字幕；录音按钮、时长、延迟和设置位于右侧底部。固定满屏，页面不整体滚动。只实现 v0.1；中文翻译、历史和笔记暂未实现，不保存完整录音。
 
-浏览器 AudioWorklet → Node.js 网关 → 主动出站连接的 Node.js Worker → 常驻 whisper.cpp `whisper-server`。跨平台架构，当前在 M1 / 8 GB 上开发，small/Metal 的真实联调已通过；Mac mini M4 留待后期正式验收。当前验证事实见 [报告](docs/acceptance-v0.1.md)。其他操作系统尚未由作者验证，欢迎自行部署并反馈。
+浏览器 AudioWorklet → 主项目服务端滚动窗口 → 独立 ru-class-asr OpenAI 兼容 API → 常驻 whisper.cpp。本机先在 M1 开发，M4 后期正式验收。旧 Worker 主动连网关方案已被用户修正；当前正常启动不需要 Worker。
 
-## 本地运行
+## 本地启动
 
-要求 Node.js 22.6+、npm；使用 Chrome/Safari 等支持 AudioWorklet 的现代浏览器。
+需要 Node.js 22.6+。先按 ru-class-asr README 启动其引擎和 API，再运行：
 
 ```sh
 npm ci
 cp .env.example .env
-# 在本地生成两个不同随机令牌：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# 将令牌填入 .env 的 CLIENT_TOKEN / WORKER_TOKEN
+# 本地填写 ASR_BASE_URL / ASR_API_KEY / ASR_MODEL；key 与 ASR 服务一致
 node --env-file=.env --import tsx apps/server/src/index.ts
 ```
 
-在相邻的 `ru-class-asr` 仓库按其 README 启动 whisper-server 与 Worker（Worker 使用相同 WORKER_TOKEN）。打开 `http://localhost:3000`，输入 CLIENT_TOKEN，点击开始并允许麦克风，说俄语。等待字幕在讲话期间更新，再点击停止，等待尾部完成。令牌留在内存，不写浏览器存储。无演示假字幕。
+打开 http://localhost:3000，设置中填写或测试语音识别 API 地址（含 /v1）、模型和 key，点击开始并允许麦克风。**本机无需手动输入网关访问令牌**；内部浏览器认证自动建立。API key 由服务端使用，保存的 key 不回传页面。设置只保存到当前服务进程，重启配置放在被忽略的本地 .env。默认只能绑定 loopback；公网登录、HTTPS/WSS 和部署需另行审查授权。本轮未推送或部署。
 
 ```sh
-npm test
+ASR_REPO=../ru-class-asr npm test
 npm run typecheck
 npm run build
-# 已构建时：node --env-file=.env dist/apps/server/src/index.js
+# 构建后从仓库根目录启动
+node --env-file=.env dist/apps/server/src/index.js
 ```
 
-从仓库根目录运行服务。`HOST` 默认 `127.0.0.1`，`PORT` 默认 3000。完整配置见 `.env.example`。源码目录：`apps/web` 为页面与采集，`apps/server/src` 为认证/路由/协议，`tests` 为音频和 WS 测试。
+## 模块与边界
 
-## VPS 独立部署
+- apps/web：采集、重采样、设置和字幕；apps/server/src：会话、滚动窗口、调度和兼容 API 客户端。
+- 默认 8 秒窗口、1 秒步长、2 秒首次推理；一次推理，其间合并到最新音频，停止识别尾部。只替换最近窗口，不是完整转写归档。
+- API 地址含 /v1，服务端调用 /models 和 /audio/transcriptions；远程 API 必须 HTTPS，不跟随重定向。当前 ASR 服务支持俄语 16 kHz 单声道 PCM16 WAV，非完整 OpenAI API 功能集。
+- 网络、API、麦克风中断后停止；不支持断网恢复。请另行保留重要课堂录音。
+- 模型 key、.env、私人路径、录音、模型和原始日志不能提交。未来多模态和语言模型分别配置，尚未开发。
 
-先在独立目录执行 `npm ci && npm run build`，将 `.env` 留在服务器本地并限制读取权限。进程管理器从该目录运行 `node --env-file=.env dist/apps/server/src/index.js`，监听独立 loopback 端口。反向代理提供 HTTPS，转发 `/` 和 `/ws/*` 并允许 WebSocket Upgrade，设置 `PUBLIC_ORIGIN=https://class.example.org`。只公开 HTTPS 入口，Worker 通过 `wss://class.example.org/ws/worker` 主动连入。不在 VPS 运行模型。实际生产部署需另行授权；本仓库未修改任何现有面板或服务。
+![当前页面](docs/screenshots/desktop-v0.1.jpg)
 
-## 排错与边界
-
-- `/health` 返回网关状态和 Worker 是否在线。`WORKER_OFFLINE`：确认 Worker 推理探测已通过并使用正确令牌。`INFERENCE_FAILED`：检查本机 whisper-server 与模型。
-- 麦克风要求安全上下文，公网必须 HTTPS；WS 升级失败检查代理和 PUBLIC_ORIGIN。权限被拒绝后在浏览器站点设置中允许麦克风。
-- 网络、Worker、麦克风或采样连续性出错时结束本次采集，重新开始创建新会话；不承诺缺失音频恢复。保持页面前台，Safari 后台/锁屏不作保证。
-- 字幕替换显示最近最多 8 秒窗口，历史尚未保存。窗口跨度、推理耗时和音频末端到显示估计分开显示；后者不包含设备输入缓冲，详见 [协议](docs/protocol.md)。后端显示 `unverified:*` 时不能视为 Metal 验证。
-
-贡献请提供系统版本、CPU/GPU、推理后端、Node/whisper.cpp 版本、复现步骤及脱敏日志。勿提交令牌、`.env`、私人域名、课堂录音或个人资料。社区运行反馈不等同于作者亲测。
-
-长期边界见 [PROJECT_SPEC.md](PROJECT_SPEC.md)，架构记录见 [decisions](docs/decisions.md)，开发进展见 [development log](docs/development-log.md)。
-
-模块关系见 [architecture](docs/architecture.md)，完整自动化输出见 [test results](docs/test-results-v0.1.txt)。
-
-![v0.1 桌面页面；未连接 Worker](docs/screenshots/desktop-v0.1.jpg)
-
-M1 实测方法、模型版本和延迟数据见 [M1 development](docs/m1-development.md)，M4 后期流程见 [hardware validation](docs/hardware-validation.md)。
-
-界面固定满屏，桌面左右各半，无顶栏/底栏；访问令牌从右上角「设置」填写。模型凭证规划见 [credentials plan](docs/credentials-plan.md)。
-
-课程名称位于左侧工作区顶部，窄屏保留顶部输入行。字幕区仅显示 RU / ZH 标签；左侧为计时，右侧一个按钮切换开始/停止。未连接时 RU 区显示连接状态，连接就绪后才显示录音提示；Worker 诊断信息可从设置查看。
-
-Current UI: the viewport-wide bottom toolbar contains recording toggle, duration, latency metrics and Settings, in that order. See [layout validation](docs/ui-bottom-toolbar-v0.1.md).
+[当前架构与 API 合约](docs/api-integration-v0.1.md) · [验收记录](docs/acceptance-v0.1.md) · [后期 M4 流程](docs/hardware-validation.md)。M1 真实短音频 API 联调已通过，不代表 M4 或五分钟自然课堂验收。

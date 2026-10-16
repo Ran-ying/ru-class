@@ -58,3 +58,7 @@ The audio range is `[window_start_sample, window_end_sample)` in the single cour
 ## Metrics
 
 `window span` is window samples / sample rate. `inference_ms` measures HTTP inference on the Worker, excluding audio collection. `queue_audio_ms` is newer audio accumulated during that inference. The browser's audio-end-to-display measurement uses its own monotonic clock: result display time minus sending time of the frame containing the returned window end. It excludes microphone/device capture buffering, worklet filtering and frame batching; do not label it complete acoustic latency. Real replay reports the same network/queue/inference estimate separately from window span. No clocks are subtracted across machines.
+
+## Current API topology revision (2026-10-16)
+
+Current entry points use browser-to-main WS only. worker.ready and related fields below describe the retained historical Worker transport/tests; an outbound Worker is not started. Main owns window scheduling and calls the independent ASR HTTP API with a Bearer key. The public compatibility boundary is GET /v1/models and multipart POST /v1/audio/transcriptions (file/model/language/response_format → text). See api-integration-v0.1.md for the current subset and authentication. Browser envelope version stays 0.1; worker-shaped status fields are internal compatibility names.

@@ -24,3 +24,13 @@ main{grid-template-rows:minmax(0,1fr) auto}
 .bottom-toolbar .settings-button{justify-self:end;margin:0}
 @media(max-width:760px){main{grid-template-rows:auto minmax(0,1fr) auto}.bottom-toolbar{gap:10px;padding:10px 12px}.bottom-toolbar #record{padding:9px 10px;font-size:12px}.bottom-toolbar output{font-size:12px}.bottom-toolbar .settings-button{gap:4px;padding:8px 0;font-size:12px}.bottom-toolbar #latency{font-size:10px}}
 @media(max-height:600px){.bottom-toolbar{padding-top:8px;padding-bottom:8px}}
+
+/* The toolbar belongs to the right transcription column. */
+main{grid-template-rows:minmax(0,1fr)}
+.bottom-toolbar{flex:none;display:grid;gap:12px;padding:12px 20px}
+.bottom-toolbar #record{white-space:nowrap}
+.bottom-toolbar #duration{font-size:12px}
+#asr-feedback{font-size:12px;line-height:1.5;color:#60746a;overflow-wrap:anywhere}
+#asr-settings{margin-bottom:24px}
+@media(max-width:760px){main{grid-template-rows:auto minmax(0,1fr)}.bottom-toolbar{gap:10px;padding:10px 12px}}
+@media(max-height:600px){.bottom-toolbar{padding-top:8px;padding-bottom:8px}}

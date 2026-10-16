@@ -1,41 +1,34 @@
-# v0.1 architecture and module ownership
+# Current v0.1 interface revision · 2026-10-16
+
+This document supersedes the earlier outbound Worker topology and full-width bottom toolbar. The user's correction explicitly authorizes the following v0.1 boundary; no later-version model integrations are added.
 
 ```mermaid
 flowchart LR
-  A[Browser microphone] --> B[AudioWorklet mix / low-pass / 16 kHz PCM]
-  B -->|authenticated binary frames| C[Node gateway]
-  W[Node ASR Worker] -->|authenticated outbound WSS| C
-  C -->|session audio| W
-  W --> D[bounded overlapping audio window]
-  D --> E[serial inference adapter]
-  E -->|multipart WAV / HTTP| F[resident local whisper-server]
-  F --> E
-  E -->|asr.partial + audio range| C
-  C --> G[replace live RU window text]
+  B[Browser AudioWorklet / PCM] -->|same-origin WS| M[ru-class: bounded window / scheduling]
+  M -->|Bearer API key / multipart WAV| A[ru-class-asr: OpenAI-compatible API]
+  A -->|local HTTP| W[resident whisper.cpp]
+  W --> A --> M --> B
 ```
 
-| Repository / module | Responsibility |
+| Owner | Module / responsibility |
 | --- | --- |
-| ru-class / `apps/web/audio.js` | Portable streaming resampler and binary PCM encoder; original-to-16 kHz sample mapping |
-| ru-class / `capture-worklet.js` | Mix channels, retain filter context, send 200 ms frames, flush tail |
-| ru-class / `app.js` | Single start/stop control, connection-aware RU placeholder, user permission, session lifecycle, bounded socket backlog, capture errors, replacement subtitles and local-clock latency estimate |
-| ru-class / `index.html`, `style.css` | 1:1 fullscreen viewport layout, narrow-screen layout, truthful later-version placeholders |
-| ru-class / `apps/server/src/gateway.ts` | Same-origin HTTP assets, independent token authentication, one-session ownership, metadata validation, WS routing and liveness |
-| both / `protocol.ts` | Version 0.1 types, binary encoding/validation, strict sequence and sample continuity |
-| ru-class-asr / `audio-window.ts` | At most one bounded PCM ring-equivalent buffer, audio sample ranges, PCM WAV header |
-| ru-class-asr / `session.ts` | Single running inference, coalesced latest window, stop flush, cancellation and stale result suppression |
-| ru-class-asr / `inference.ts` | Platform-independent adapter contract and whisper.cpp multipart HTTP implementation |
-| ru-class-asr / `worker.ts`, `index.ts` | External service probe, outbound authentication, ready/model/OS/unverified-backend reporting, session routing |
-| ru-class-asr / `scripts/replay.ts` | Real-time paced WAV acceptance driver and local privacy-reduced metrics report |
+| ru-class | apps/web: course input, capture, right-half bottom toolbar, API settings and live RU; later-version placeholders only |
+| ru-class | gateway.ts: same-origin browser sessions, local bootstrap, in-memory API settings; no API key is returned to browser |
+| ru-class | audio-window.ts / session.ts: 8 s bounded window, 1 s step, 2 s first inference, coalescing, stop/flush/cancel |
+| ru-class | inference.ts: OpenAI-compatible `/models` validation and `/audio/transcriptions` with model, language=ru, response_format=json and Bearer key |
+| ru-class-asr | api.ts: standalone authenticated `/v1/models` and `/v1/audio/transcriptions`, WAV validation, one active inference, cancellation |
+| ru-class-asr | inference.ts: internal whisper.cpp `/inference` adapter; index.ts probes resident engine before serving API |
 
-Audio/time ownership: the browser generates a course sample sequence; neither gateway nor inference completion creates audio timestamps. The gateway and Worker independently check continuity. The Worker maps each result to its snapshot's `[start,end)` samples. There is no committed text layer in v0.1.
+ASR has no runtime dependency on the main application and does not register with it. Previous worker.ts and legacy WS tests remain as migration regression utilities; neither current entry point starts them. Browser protocol stays 0.1; its historical worker-shaped field names are internal status fields, not a second credential the operator must enter.
 
-Data lifetime: browser frame buffers, gateway transient messages and an at-most-8-second default Worker audio buffer are memory-only. Pending inference is coalesced rather than queued indefinitely. The user must separately preserve important recordings. The preview and tests do not implement course archives or long-term transcript storage. Raw recognized text is not logged by default.
+## Configuration and credentials
 
-Deployment boundary: gateway is lightweight and independently deployed on a VPS; external whisper-server is local to the ASR host and holds the model resident. Platform-specific build/acceleration is outside the portable Worker. Only loopback development may use cleartext; public gateways use HTTPS/WSS and exact PUBLIC_ORIGIN. Browser and Worker secrets are distinct and supplied locally. No OpenAI or DeepSeek API credentials are required in v0.1.
+ASR local `.env`: ASR_API_KEY (random, at least 24 characters), ASR_PORT=8090, WHISPER_URL pointing to local whisper.cpp, WHISPER_MODEL=small. Main local `.env`: ASR_BASE_URL=http://127.0.0.1:8090/v1, matching ASR_API_KEY, ASR_MODEL=small. The main app calls the API on the server; keys are not embedded in assets or returned by configuration responses.
 
-Validation boundary: mock HTTP/adapter tests prove scheduling and protocol behavior. They cannot prove Russian accuracy, GPU selection, real microphone continuity or hardware latency. The acceptance report records these independently.
+The local Settings dialog can save and test API address/model/key for the current server process. A blank key retains the configured key at the same address; changing address requires a new key. It is not written to browser storage or source files. Persist restarts with the ignored server `.env`. Keep env files mode 0600. ASR credentials are independent from future multimodal and language model credentials, which remain unimplemented.
 
-### Global recording toolbar
+The old gateway access token was browser-to-main authentication, not a model API key. Current local startup generates this internal credential automatically; the local bootstrap endpoint delivers it only with loopback peer + literal localhost/127.0.0.1 Host validation. Configuration POST additionally requires same-origin Origin and internal Bearer credential. The default startup binds only to loopback and rejects public-origin/public-listener settings: remote site authentication and deployment need a separately reviewed setup. This does not expose an unauthenticated public configuration endpoint. Remote ASR URLs require HTTPS; redirects are rejected to avoid forwarding credentials.
 
-The browser main grid reserves a bottom row spanning the viewport for the recording toggle, duration, latency metrics and Settings. The two desktop content columns share the remaining height equally in width; narrow screens retain the compact course row. Existing app.js lifecycle and dialog handlers own these controls by their unchanged IDs.
+## API subset
+
+OpenAI-compatible request/response shape, not the full OpenAI API. Auth: Authorization: Bearer <ASR_API_KEY>. GET /v1/models returns data[{id,object,owned_by}]. POST /v1/audio/transcriptions accepts multipart file and model; optional language defaults ru and response_format defaults json. v0.1 only accepts 16 kHz mono PCM16 WAV, 0–30 s (nonempty), up to 2 MiB total request; model must match advertised model. json returns {text}; text returns plain text. Other language/format/model or invalid WAV receives 400, invalid key 401, busy inference 429, engine failure 502. No streaming/SSE, MP3 decoder, timestamps or permanent audio storage is claimed. Streaming captions come from repeated overlapping requests scheduled by ru-class. Multiple projects may call this API; one inference is admitted at a time.

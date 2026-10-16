@@ -1,13 +1,14 @@
 import { encodeFrame } from './audio.js';
 const $ = id => document.getElementById(id);
 let ws, stream, context, capture, source, sessionId, seq = 0, samples = 0, running = false, stopping = false;
+let clientToken='';
 let sent = [], stopTimer, startTimer, flushResolve;
 $('settings-open').onclick = () => $('settings').showModal();
-const errors = {WORKER_OFFLINE:'ASR Worker 未上线，请启动 Worker 后重试。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
+const errors = {WORKER_OFFLINE:'语音识别 API 未就绪，请在设置中检查地址、key 和模型。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
-function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); $('token').disabled = active; }
+function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['asr-url','asr-model','asr-key','asr-save'])$(id).disabled=active; }
 function setConnected(online) { $('connection-state').hidden = online; $('ru').hidden = !online; }
-function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待 ASR Worker'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
+function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待语音识别 API'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
 async function cleanup() {
   running = false; clearTimeout(stopTimer); clearTimeout(startTimer); stream?.getTracks().forEach(t => t.stop());
   capture?.disconnect(); source?.disconnect();
@@ -21,19 +22,20 @@ async function fail(message) {
 function workerLabel(p) { return `${p.model || '未知模型'} · ${p.os || '未知系统'} · 后端：${p.backend || '未验证'}`; }
 async function startRecording() {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) { await fail('录音需要 HTTPS（或 localhost）以及支持 AudioWorklet 的浏览器。'); return; }
-  if (!$('token').value) { $('error').textContent = '请在设置中输入网关访问令牌。'; $('settings').showModal(); return; }
+
   controls(true); $('error').textContent = ''; $('status').textContent = '请求麦克风权限…';
   sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false;
   $('duration').textContent = '00:00'; $('ru').textContent = '开始录音后，俄语字幕将在这里更新。'; $('latency').textContent = '等待第一条识别结果…';
   try {
     // Resume inside the user gesture before waiting for network events (Safari requirement).
     context = new AudioContext(); await context.resume();
+    if(!clientToken)await loadConfig();
     stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     await context.audioWorklet.addModule('/capture-worklet.js');
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/client`);
     const socket = ws;
     startTimer = setTimeout(() => void fail('建立录音会话超时，请检查网关与 Worker。'),15000);
-    ws.onopen = () => send('auth', {token:$('token').value});
+    ws.onopen = () => send('auth', {token:clientToken});
     ws.onmessage = async ({data}) => {
       if(ws !== socket) return;
       try {
@@ -88,3 +90,20 @@ $('record').onclick = async () => {
   if (running) await stopRecording(); else await startRecording();
 };
 window.addEventListener('pagehide', () => { stream?.getTracks().forEach(t => t.stop()); ws?.close(); });
+
+async function loadConfig(){
+  const res=await fetch('/api/bootstrap');if(!res.ok)throw new Error('本地访问认证失败，请通过 localhost 打开页面。');
+  const config=await res.json();clientToken=config.clientToken;
+  $('asr-url').value=config.asr.baseUrl;$('asr-model').value=config.asr.model;
+  $('asr-key').placeholder=config.asr.keyConfigured?'已配置；留空保持不变':'输入 ASR API key';
+  $('worker-detail').textContent=config.ready?'语音识别 API 已连接':'语音识别 API 未就绪，请保存并测试连接';
+}
+$('settings-open').onclick=async()=>{$('settings').showModal();try{await loadConfig();}catch(e){$('asr-feedback').textContent=e.message;}};
+$('asr-settings').onsubmit=async event=>{
+  event.preventDefault();$('asr-save').disabled=true;$('asr-feedback').textContent='正在测试连接…';
+  try{if(!clientToken)await loadConfig();
+    const res=await fetch('/api/asr',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${clientToken}`},body:JSON.stringify({baseUrl:$('asr-url').value,model:$('asr-model').value,apiKey:$('asr-key').value})});
+    const body=await res.json();if(!res.ok)throw new Error(body.error||'连接失败');
+    $('asr-key').value='';$('asr-feedback').textContent='连接成功；配置已保存到当前服务进程。';await loadConfig();
+  }catch(e){$('asr-feedback').textContent=e.message;}finally{$('asr-save').disabled=false;}
+};

@@ -64,3 +64,7 @@ Compact-controls revision 2026-10-16: left workspace course input, one recording
 ### Global bottom toolbar (2026-10-16)
 
 Moved record toggle, duration, metrics and Settings into one viewport-wide bottom row. Supersedes earlier live-toolbar/top-right Settings placement. Main joint regression 12/12, typecheck and build passed. Actual browser at 1366×900, 390×844 and 900×400 confirmed no document overflow and toolbar at viewport bottom; Settings open/close passed, no warning/error observed. Public-source scan passed. Audio protocol unchanged; M4 formal acceptance remains deferred. See ui-bottom-toolbar-v0.1.md.
+
+## Current API boundary correction (2026-10-16)
+
+The user corrected the topology: ASR is an independent OpenAI-compatible HTTP API, called by the main server using base URL/model/key. Current entry points no longer require an outbound Worker; local browser authentication is automatic. Toolbar is inside the right half. Earlier Worker-topology and full-width-toolbar descriptions/measurements are historical. Main 13/13, ASR 7/7, both typechecks/builds passed; real M1 8 s synthetic Russian API replay produced 6 results before stop with tail completion. M4 remains deferred. Full contract, credential boundary, measurements and limits: [api-integration-v0.1.md](api-integration-v0.1.md).

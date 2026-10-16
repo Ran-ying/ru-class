@@ -328,3 +328,7 @@ The user's latest UI direction supersedes earlier control placement: course name
 ## 19. Global bottom recording toolbar (2026-10-16)
 
 The latest user direction moves recording controls to the bottom of the entire viewport. Order: single start/stop recording button, recording duration, window/inference/audio-end-to-display metrics, Settings at the far right. This supersedes the placement in sections 17–18. The toolbar takes its own layout row; desktop content remains equal halves, narrow screens keep the same control order, and the document stays fixed to the viewport. No audio, authentication or future-version scope changes.
+
+## 20. User correction: independent ASR API and right-half toolbar (2026-10-16)
+
+This explicit user correction supersedes prior Worker topology and section 19 toolbar placement. ru-class-asr must independently serve an OpenAI-compatible transcription API with URL and key. ru-class calls it on the server, owns rolling audio window scheduling and exposes API address/model/key configuration in Settings. Local use must not require manual entry of a gateway token. Keep site authentication separate from provider credentials. The bottom toolbar belongs at the bottom of the right 1/2, not across the page. Current implementation contract and limits are in docs/api-integration-v0.1.md; this remains v0.1 and does not authorize later model integrations or public deployment.

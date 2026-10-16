@@ -1,0 +1,38 @@
+{
+  "kind": "REALTIME_REPLAY_REQUIRES_MANUAL_HARDWARE_AND_LANGUAGE_REVIEW",
+  "date_utc": "2026-10-16T12:55:51.674Z",
+  "node": "v25.9.0",
+  "os": "darwin/arm64",
+  "cpu": "Apple M1",
+  "source_sha256": "51da66159a77038313f54e48d93c8fdb15af799836a28339ac0f7a441adbc537",
+  "audio_seconds": 8,
+  "replayed_seconds": 9.438963333,
+  "frames": 40,
+  "results": 6,
+  "captions_before_stop": true,
+  "configured_model": "small",
+  "actual_backend": "UNVERIFIED_CHECK_ENGINE_LOGS",
+  "inference_ms": {
+    "count": 6,
+    "mean": 1189.9875416666673,
+    "p50": 1013.010417000005,
+    "p95": 1610.5073329999977,
+    "max": 1709.9027080000014
+  },
+  "audio_end_to_result_ms": {
+    "count": 6,
+    "mean": 1304.2257501666668,
+    "p50": 1155.270708,
+    "p95": 1620.3347920000006,
+    "max": 1789.4566249999998
+  },
+  "window_span_ms": {
+    "count": 6,
+    "mean": 5166.666666666667,
+    "p50": 4600,
+    "p95": 7200,
+    "max": 8000
+  },
+  "maximum_consecutive_equal_text_results": 1,
+  "notes": "No transcript, token, host, source filename or audio is stored here. Check Russian accuracy, UI responsiveness, repetition and engine backend manually. This network estimate excludes capture buffering."
+}

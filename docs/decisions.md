@@ -18,3 +18,7 @@
 - Caption controls revision (2026-10-16): one recording button changes between start, connecting, stop and stopping states; time is on the left of the live toolbar. Course name moves to the left workspace; on narrow screens its compact row remains visible. Offline RU displays connection/Worker status instead of the ready placeholder. Worker diagnostics also remain available in Settings. Browser authentication still happens through the existing recording lifecycle; no background reconnect is introduced.
 
 - Bottom-toolbar revision (2026-10-16): place the existing record toggle, timer, latency and Settings in one viewport-wide bottom row, in that order. The content row shrinks to accommodate it; metric text may wrap on narrow screens. Existing IDs and lifecycle handlers remain unchanged. This supersedes prior top-right Settings/live-toolbar placement.
+
+## Current API boundary correction (2026-10-16)
+
+The user corrected the topology: ASR is an independent OpenAI-compatible HTTP API, called by the main server using base URL/model/key. Current entry points no longer require an outbound Worker; local browser authentication is automatic. Toolbar is inside the right half. Earlier Worker-topology and full-width-toolbar descriptions/measurements are historical. Main 13/13, ASR 7/7, both typechecks/builds passed; real M1 8 s synthetic Russian API replay produced 6 results before stop with tail completion. M4 remains deferred. Full contract, credential boundary, measurements and limits: [api-integration-v0.1.md](api-integration-v0.1.md).

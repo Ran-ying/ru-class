@@ -1,0 +1,38 @@
+Current independent ASR API revision; automated mocks are explicitly labeled.
+
+
+> ru-class@0.1.0 test
+> node --import tsx --test tests/*.test.ts
+
+✔ 44.1/48 kHz streaming resampling preserves duration across arbitrary blocks (189.52125ms)
+✔ resampling filters out frequencies above target Nyquist (35.56275ms)
+✔ browser PCM encoding, clamping and original sample mapping round-trip (5.46025ms)
+✔ protocol rejects malformed envelopes, oversized/truncated/mismatched audio and discontinuities (0.690625ms)
+✔ microphone permission refusal is visible and closes AudioContext (1.667458ms)
+✔ insecure context reports the HTTPS requirement before recording (0.109291ms)
+✔ shipped browser lifecycle sends indexed audio and stops capture before final completion (6.678ms)
+✔ gateway disconnection and Worker failure visibly stop browser capture (10.389125ms)
+✔ muted microphone is surfaced as interruption, never fake continued recording (0.546792ms)
+{"event":"worker.ready","model":"SIMULATED_TEST","os":"darwin/arm64","backend":"unverified:mock","ready":true}
+✔ cross-repository HTTP adapter → Worker → gateway → client; early captions and final flush (3825.678ms)
+{"event":"worker.disconnected","code":1006}
+✔ primary chain: browser → main window scheduler → authenticated independent ASR API (379.647417ms)
+✔ authenticated routing, unknown session, continuity, stop and Worker disconnect (70.367916ms)
+✔ bad authentication, origin and required distinct secrets are rejected (8.118167ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4202.207084
+
+
+> ru-class@0.1.0 typecheck
+> tsc --noEmit
+
+
+
+> ru-class@0.1.0 build
+> tsc
