@@ -1,3 +1,16 @@
+> **CURRENT RUNTIME OVERRIDE · 2026-10-17**: This long-term specification mixes
+> historical gateway/Worker plans with the current product. The active v0.2.2
+> runtime is **anonymous static browser-direct BYOK**: per-user model keys,
+> lesson data, PCM recording and Russian transcript remain in browser IndexedDB;
+> the browser calls the user's HTTPS+CORS ASR directly. No server ASR relay,
+> public login, shared API credentials or default providers.
+> Read [current status](docs/current-status.md),
+> [active browser architecture](docs/browser-direct-byok.md) and
+> [current maintainer contract](AGENTS.md) **before implementing roadmap items**.
+> M1 synthetic proof is not live-classroom or deferred M4 acceptance.
+> Long recording/playback/recovery (P2) is intentionally deferred.
+> The later version tables are design targets, not accepted deliverables.
+
 # RU-Class — 项目总任务书与分版本开发计划
 
 > 文档版本：规划稿 2.0 · 2026-10-16（浏览器直连 BYOK 与本地录音）  
