@@ -46,6 +46,17 @@ Automated DOM stubs and `SIMULATED_TEST` HTTP fixtures prove logic only. Acceler
 - 添加俄语重复短语、稳定尾部锚点、多窗口文本变化、真正不相交音频重复和所有中途停止前缀的合成测试。
 - **未添加词级时间戳，不会推断真实说话时刻**；窗口交叠且两次发言分别落在不交叠的声音区间时，仅凭 Whisper 整窗文本仍无法可靠区分，不得夸大修复范围。
 
+**PR #13 新增本地 A/B 对比命令（不输出课堂原文）**：从 `ru-class` 仓库里先 `git fetch origin main`，然后在 PR #13 的独立 checkout 中运行：
+
+```sh
+node scripts/compare-transcript-caches.mjs \
+  origin/main HEAD \
+  /private/C1-fixed-windows-converted.json \
+  /private/C2-realtime-windows-converted.json
+```
+
+该脚本直接从本地 Git 提取两个版本的 `apps/web/transcript.js`，在相同的私有原始窗口数组上运行真正的浏览器 `TranscriptBuffer`，不请求网络或 Whisper，不输出任何转写原文。比较输出各版本最终词数、字符串长度、重复 5-gram 出现起点、临时重复窗口次数、完整文字编辑距离、每个前缀首次停止一致性、同采样窗口幂等性和稳定前缀不回写。使用的重复 5-gram 指标**不能**直接对标 Codex 早先报告的 36/32 个“重复候选跨度”（口径不同），不是真实重复错误数。正常结束时打印统计 JSON；验收还必须运行 Codex 原 `pr12-second-round` 独立 harness 并在私有目录审查文本差异，防止删掉老师真实重复发言。发现任何新异常必须继续保留 PR 不合并。
+
 **Mac 私有缓存必做复验：**沿用 Codex 已建立的 `classroom-benchmark-20261016/private` C1/C2 缓存与 `pr12-second-round` 严格回放流程，在 PR 新分支分别对比 main 与候选版本，至少列出最终稳定提交重复、临时重复、词数、全部 227 个首次 stop 前缀和原 45 个重投反例。任何新漏句、真实重复被吞或停止增字都应阻止合并。保留用户原始音频与识别文本在本地，不上传公开仓库。
 
 **整体 v0.1 仍未验收完成**：独立人工听校真值、5 分钟真实录音、真实浏览器麦克风到屏幕延迟及 M4 后期验收均待完成。
