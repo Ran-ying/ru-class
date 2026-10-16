@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const elements=new Map<string,any>();
-const get=(id:string)=>{if(!elements.has(id))elements.set(id,{textContent:'',value:'local-test-access-token',disabled:false});return elements.get(id);};
+const get=(id:string)=>{if(!elements.has(id))elements.set(id,{
+  textContent:'',value:'local-test-access-token',disabled:false,
+  replaceChildren(...options:any[]){this.options=options;this.value=options[0]?.value||'';},
+  setAttribute(name:string,value:string){this[name]=value;}
+});return elements.get(id);};
 (globalThis as any).fetch=async()=>({ok:true,json:async()=>({clientToken:'SIMULATED_BROWSER_TOKEN',asr:{baseUrl:'http://localhost/v1',model:'SIMULATED_TEST',keyConfigured:true},ready:true})});
-(globalThis as any).document={getElementById:get};
+(globalThis as any).document={getElementById:get,createElement:()=>({value:'',textContent:''})};
 (globalThis as any).window={isSecureContext:true,AudioWorkletNode:function(){},addEventListener:()=>{}};
 let closed=0;
 (globalThis as any).AudioContext=class{state='running';async resume(){}async close(){closed++;this.state='closed';}};
