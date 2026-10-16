@@ -406,7 +406,7 @@ test('new eight-second window cannot erase an old 200-word visible classroom dra
   assert.ok(r.stable.length>0,'Old long draft must be committed before new reconciliation');
   assert.ok(response.display.startsWith('- тема0 тема1 тема2 тема3'));
   assert.ok(response.display.includes('тема130'),'Words far outside a new eight-second window must survive');
-  assert.ok(response.display.split(/\\s+/u).length>=201-r.buffer.maxMutableWords,
+  assert.ok(response.display.split(/\s+/u).length>=201-r.buffer.maxMutableWords,
     'A short new ASR window must not erase most of an old visible transcript');
   const before=r.current();
   assert.equal(r.flush().display,before);
