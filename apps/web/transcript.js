@@ -142,23 +142,34 @@ export class TranscriptBuffer {
         // One-word/very short identical windows are not new utterances.
         this.unanchored = undefined;
       } else if (this.unanchored && overlap(this.unanchored, next)) {
-        // Confirm a genuinely new tentative segment ONLY after checking if
-        // it is a second interpretation of already retained draft words.
-        // Historical matches alone are not enough; the previous raw windows
-        // must actually overlap (or be part of the same active 8s window).
+        // The next window confirms that the tentative words persist, but
+        // NOT necessarily that they were an independent second utterance.
+        // The previous UI may already be showing a *replacement* of pending
+        // with unanchored. Never hard-commit the superseded pending version.
         const fresh = overlap(this.unanchored, next);
-        const duplicate = consecutive ? overlap(old, this.unanchored) : undefined;
-        const tailMatch = duplicate && duplicate.old + duplicate.length >= old.length - 2;
-        if (tailMatch && commonPrefix(this.stable,
-          [...old.slice(0, duplicate.old), ...this.unanchored.slice(duplicate.next)]
-        ) === this.stable.length) {
-          const amended = [...old.slice(0, duplicate.old), ...this.unanchored.slice(duplicate.next)];
-          // Keep stable tokens immutable; refine the draft, then append any
-          // newly evidenced continuation from the next raw window.
-          this.pending = [...amended.slice(this.stable.length), ...next.slice(fresh.next + fresh.length)];
+        const visibleDraft = this.effectiveDraft();
+        const concatenated = [...this.pending, ...this.unanchored];
+        const replacedDraft = visibleDraft.length !== concatenated.length ||
+          commonPrefix(visibleDraft, concatenated) !== visibleDraft.length;
+        if (replacedDraft) {
+          // The transcript that was visible is the only eligible draft:
+          // preserve its prefix and append just the new confirmed tail.
+          this.pending = [...visibleDraft, ...next.slice(fresh.next + fresh.length)];
         } else {
-          this.stable.push(...this.pending);
-          this.pending = [...this.unanchored.slice(0, fresh.old), ...next.slice(fresh.next)];
+          // There is no sufficient lexical evidence that the two segments
+          // refer to the same words. Keep the earlier stable prefix intact,
+          // and retain only the confirmed tail of the new hypothesis.
+          const duplicate = consecutive ? overlap(old, this.unanchored) : undefined;
+          const tailMatch = duplicate && duplicate.old + duplicate.length >= old.length - 2;
+          if (tailMatch && commonPrefix(this.stable,
+            [...old.slice(0, duplicate.old), ...this.unanchored.slice(duplicate.next)]
+          ) === this.stable.length) {
+            const amended = [...old.slice(0, duplicate.old), ...this.unanchored.slice(duplicate.next)];
+            this.pending = [...amended.slice(this.stable.length), ...next.slice(fresh.next + fresh.length)];
+          } else {
+            this.stable.push(...this.pending);
+            this.pending = [...this.unanchored.slice(0, fresh.old), ...next.slice(fresh.next)];
+          }
         }
         this.unanchored = undefined;
       } else if (!this.pending.length && overlap(this.stable.slice(-12), next, 1)) {
