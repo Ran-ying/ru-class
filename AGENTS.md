@@ -1,10 +1,10 @@
-# RU-Class development agreement (current: browser-direct BYOK v0.2.0)
+# RU-Class development agreement (current: browser-direct BYOK v0.2.1)
 
 - **Most recent and authoritative user decision:** public website, **NO LOGIN**, **NO server accounts or user database**, **NO default API services**. Every visitor including maintainer selects own speech/image/text provider URL, model and API Token. All configuration, recordings, transcripts and lesson data live in **that browser's IndexedDB**.
 - **Browser requests the user's third-party API directly.** No RU-Class server API proxy, CORS workaround, server-side ASR, per-user server session, or global model/Token. APIs that do not support browser CORS are unsupported; do not reintroduce fallback proxies without an explicit new user decision.
 - `apps/server/src/index.ts` hosts static assets only (or deploy `apps/web` to an HTTPS static host). Legacy `gateway.ts`, `session.ts`, old `config.ts`, and their tests are retained solely for historical reference; they MUST NOT be invoked by the active entrypoint.
 - `apps/web/direct-asr.js` performs browser-side 8-second rolling window and serial ASR requests. `apps/web/transcript.js` runs the existing stable/partial Russian algorithm. `apps/web/local-store.js` persists IndexedDB profiles, lessons and chunked WAV audio; do not upload them to RU-Class.
-- Browser model setup continues the progressive API URL → fetch real models → dropdown or manual fallback → directly visible Token field → separate Save/Test buttons. On 401/403, Token entered before list retry. Never assume a model is available without a real provider response.
+- Browser model setup initially shows API URL and optional Token together, followed by the Fetch Models button; only after discovery show dropdown or manual fallback, then separate Save/Test buttons. Token changes invalidate earlier results; 401/403 allows immediate Token correction and retry. Never assume model availability without provider response.
 - Only opt-in exact-origin CORS is allowed in independent `ru-class-asr`. No global CORS wildcard for users' private ASR secrets. API endpoints must be HTTPS except own loopback for development.
 - Browser tokens are readable by same-origin JS; keep strict CSP, no third-party injected scripts, disclose this risk and local browser data loss. Never commit real Tokens or audio.
 - v0.3 future stable/8-second audio safety gate for DeepSeek has not been implemented. Do not fabricate word timestamps or consume mutable text.

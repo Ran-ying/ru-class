@@ -156,7 +156,6 @@ function reset(kind,clearKey=true){
   $(kind+'-model-stage').hidden=true;
   $(kind+'-model-choice').hidden=true;
   $(kind+'-model-manual-wrap').hidden=true;
-  $(kind+'-token-stage').hidden=true;
   $(kind+'-actions').hidden=true;
   $(kind+'-model-select').replaceChildren();
   $(kind+'-model-select').required=false;
@@ -193,7 +192,6 @@ function showModels(kind,ids){
     const select=$(kind+'-model-select');
     select.replaceChildren(place,...options);select.value=ids.includes(oldChoice)?oldChoice:'';
   }else $(kind+'-model').value=oldChoice||'';
-  $(kind+'-token-stage').hidden=false;
   updateActions(kind);
 }
 async function discover(kind){
@@ -213,11 +211,11 @@ async function discover(kind){
     if(step.revision!==revision)return;
     const message=errorMessage(e);
     if(/MODEL_HTTP_40[13]/.test(message)){
-      // An authenticated provider may require the Token before listing IDs.
+      // Token is available from the start, so retry without changing stages.
+      // Never interpret 401/403 as an empty model list.
       discovery.hidden=false;
-      $(kind+'-token-stage').hidden=false;
       $(kind+'-actions').hidden=true;
-      $(kind+'-model-count').textContent='该 API 需要 Token。填写后再次获取可用模型。';
+      $(kind+'-model-count').textContent='API 拒绝了模型列表请求（401/403），请检查 Token 后重试。';
     }else feedback.textContent='获取失败：'+message;
   }finally{
     if(step.revision===revision){list.disabled=kind==='speech'&&(running||stopping);refresh.disabled=kind==='speech'&&(running||stopping);}
@@ -266,7 +264,9 @@ for(const kind of kinds){
   $(kind+'-url').oninput=()=>reset(kind);
   $(kind+'-model-select').onchange=()=>updateActions(kind);
   $(kind+'-model').oninput=()=>updateActions(kind);
-  $(kind+'-key').oninput=()=>updateActions(kind);
+  // Model lists can depend on the API Token. Changing it invalidates the
+  // earlier selection and any in-flight discovery without clearing the draft.
+  $(kind+'-key').oninput=()=>reset(kind,false);
 }
 async function renderLessons(){
   const holder=$('local-lessons');

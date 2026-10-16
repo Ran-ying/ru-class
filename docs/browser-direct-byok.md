@@ -38,7 +38,7 @@ Node 启动入口改为 `createSite`，不注册 `/api/*` 或 `/ws/client`。旧
 
 ## API 使用规则
 
-模型检索：`GET {baseUrl}/models`，仅渲染 API 实际返回的模型 ID；明确不支持列表时允许手动输入。需要 Token 才能列出模型的 API 在 401/403 时先展示 Token，再重试。正常的保存操作只写浏览器 IndexedDB，不联网；测试连接单独请求 API。音频转写：`POST {baseUrl}/audio/transcriptions`，multipart 包含 WAV / model / language=ru / response_format=json。
+模型配置（v0.2.1）：最初同时展示 API 地址与可选 API Token，下面展示“获取可用模型”；用户填写 Token 后可以直接检索，无需先触发 401。点击获取后显示模型下拉框，接口明确不支持模型列表时显示手动输入；修改 API 地址或 Token 均会清除旧模型选项并要求重新获取。保存配置与测试连接保留独立操作。\n\n模型检索：`GET {baseUrl}/models`，仅渲染 API 实际返回的模型 ID；明确不支持列表时允许手动输入。需要 Token 才能列出模型的 API 在 401/403 时先展示 Token，再重试。正常的保存操作只写浏览器 IndexedDB，不联网；测试连接单独请求 API。音频转写：`POST {baseUrl}/audio/transcriptions`，multipart 包含 WAV / model / language=ru / response_format=json。
 
 请求仅支持 HTTPS，或浏览器本机 loopback 的 HTTP；始终拒绝跳转和有 URL 用户密码的地址。不能从网页绕过 CORS。CORS 失败和网络失败在浏览器中可能显示为相同的 `TypeError`，UI 只提醒用户检验 CORS、连通性及 TLS，不假称能够精确区分。
 
