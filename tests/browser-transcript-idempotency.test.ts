@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
 // @ts-ignore Intentional import of the production browser JavaScript module.
 import {TranscriptBuffer} from '../apps/web/transcript.js';
 
@@ -131,4 +132,19 @@ test('out-of-order older audio is rejected; identical current audio is not',()=>
   r.update('Вторая гипотеза',S,3*S);
   assert.throws(()=>r.update('Устаревший пакет',0,2*S),/TRANSCRIPT_WINDOW_ORDER/);
   assert.doesNotThrow(()=>r.update('Вторая гипотеза',S,3*S));
+});
+
+test('privacy-safe local replay CLI can verify a synthetic cache without printing speech',()=>{
+  const run=spawnSync(process.execPath,[
+    'scripts/replay-browser-transcript.mjs',
+    'tests/fixtures/synthetic-window-hypotheses.json'
+  ],{encoding:'utf8'});
+  assert.equal(run.status,0,run.stderr||run.stdout);
+  const report=JSON.parse(run.stdout);
+  assert.equal(report.inputWindows,5);
+  assert.equal(report.sameRangeReplayViolations,0);
+  assert.equal(report.sameRangeReplayStableDeltas,0);
+  assert.equal(report.doubleFlushSafe,true);
+  assert.ok(report.finalWordCount>0);
+  assert.doesNotMatch(run.stdout,/кошельке|защиты/,'Report must not leak raw classroom transcript');
 });
