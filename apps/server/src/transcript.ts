@@ -90,25 +90,19 @@ export class TranscriptBuffer {
       this.pending = next;
       this.unanchored = undefined;
     } else {
-      const anchor = recentOverlap ? overlap(old, next) : undefined;
+      const possible = recentOverlap && !this.unanchored ? overlap(old, next) : undefined;
+      let candidate = possible ? [...old.slice(0, possible.old), ...next.slice(possible.next)] : [];
+      if (possible && !this.stable.length && possible.old === 0 && possible.next > 0) {
+        // Whisper can prepend words to the *first* hypothesis.
+        candidate = next;
+      }
+      const anchor = possible && commonPrefix(this.stable, candidate) === this.stable.length ? possible : undefined;
       if (anchor) {
         this.unanchored = undefined;
-        // The matched part is already represented on the left, while newer
-        // hypotheses may rewrite the right edge of the previous window.
-        let candidate = [...old.slice(0, anchor.old), ...next.slice(anchor.next)];
-        if (!this.stable.length && anchor.old === 0 && anchor.next > 0) {
-          // Early recognitions can add words before the first anchor.
-          candidate = next;
-        }
-        if (commonPrefix(this.stable, candidate) === this.stable.length) {
-          const agreed = commonPrefix(old, candidate);
-          const advanceTo = Math.max(this.stable.length, Math.min(agreed, candidate.length - 3));
-          if (advanceTo > this.stable.length) this.stable.push(...old.slice(this.stable.length, advanceTo));
-          this.pending = candidate.slice(this.stable.length);
-        } else {
-          // Never silently rewrite words already confirmed.
-          this.pending = old.slice(this.stable.length);
-        }
+        const agreed = commonPrefix(old, candidate);
+        const advanceTo = Math.max(this.stable.length, Math.min(agreed, candidate.length - 3));
+        if (advanceTo > this.stable.length) this.stable.push(...old.slice(this.stable.length, advanceTo));
+        this.pending = candidate.slice(this.stable.length);
       } else if (next.length === old.length && commonPrefix(next, old) === next.length) {
         // One-word/very short identical windows are not new utterances.
         this.unanchored = undefined;
