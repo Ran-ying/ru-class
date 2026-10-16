@@ -88,3 +88,19 @@ test('endpoint validator forbids HTTP remote secrets and retains same-endpoint k
   assert.throws(()=>normalizeAccount({baseUrl:'https://new.example/v1',model:'m',apiKey:''},speech),/NEW_MODEL_URL_REQUIRES_KEY/);
   assert.equal(normalizeAccount({baseUrl:speech.baseUrl,model:'different',apiKey:''},speech).apiKey,speech.apiKey);
 });
+
+test('first BYOK save creates a private single-user profile file outside deployment config',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'ru-class-byok-'));
+  const file=join(dir,'data','local-models.json');
+  const profile={baseUrl:'https://own-service.test/v1',model:'own-speech-model',apiKey:'only-the-user-knows-this-key'};
+  const initial={speech:{baseUrl:'',model:'',apiKey:''},image:{baseUrl:'',model:'',apiKey:''},text:{baseUrl:'',model:'',apiKey:''}};
+  try{
+    const store=createModelStore(file,initial);
+    await store.persist('speech',profile);
+    const raw=JSON.parse(await readFile(file,'utf8'));
+    assert.deepEqual(raw.models.speech,profile);
+    assert.ok(!raw.models.image);
+    const {stat}=await import('node:fs/promises');
+    assert.equal((await stat(file)).mode & 0o777,0o600);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});
