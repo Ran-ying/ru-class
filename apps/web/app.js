@@ -6,7 +6,7 @@ let sent = [], stopTimer, startTimer, flushResolve;
 let stableRussian = '', provisionalRussian = '', transcriptRevision = 0;
 const errors = {WORKER_OFFLINE:'语音识别 API 未就绪，请在设置中检查地址、key 和模型。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
-function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh','speech-token-open'])$(id).disabled=active; }
+function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh'])$(id).disabled=active; }
 function setConnected(online) { $('connection-state').hidden = online || hasTranscript; $('ru').hidden = !online && !hasTranscript; }
 function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待语音识别 API'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
 async function cleanup() {
@@ -129,7 +129,7 @@ let savedProfiles={
   image:{baseUrl:'',model:'',keyConfigured:false},
   text:{baseUrl:'',model:'',keyConfigured:false}
 };
-const steps=Object.fromEntries(profiles.map(kind=>[kind,{generation:0,ready:false,mode:null,tokenOpen:false}]));
+const steps=Object.fromEntries(profiles.map(kind=>[kind,{generation:0,ready:false,mode:null}]));
 function selectTab(page){
   const models=page==='models';
   $('panel-models').hidden=!models; $('panel-access').hidden=models;
@@ -148,7 +148,9 @@ function resetModelFlow(kind,{clearToken=true}={}){
   step.generation++;
   step.ready=false;
   step.mode=null;
-  step.tokenOpen=false;
+  $(kind+'-discovery').hidden=false;
+  $(kind+'-list').disabled=kind==='speech'&&(running||stopping);
+  $(kind+'-refresh').disabled=kind==='speech'&&(running||stopping);
   $(kind+'-model-stage').hidden=true;
   $(kind+'-model-choice').hidden=true;
   $(kind+'-model-manual-wrap').hidden=true;
@@ -157,7 +159,6 @@ function resetModelFlow(kind,{clearToken=true}={}){
   $(kind+'-model-select').required=false;
   $(kind+'-model-select').replaceChildren();
   $(kind+'-token-stage').hidden=true;
-  $(kind+'-token-open').hidden=false;
   $(kind+'-key-wrap').hidden=true;
   $(kind+'-actions').hidden=true;
   if(clearToken)$(kind+'-key').value='';
@@ -186,8 +187,9 @@ function updateModelProgress(kind){
   const step=steps[kind];
   if(!step.ready)return;
   const hasModel=!!selectedModel(kind);
-  $(kind+'-token-stage').hidden=!hasModel;
-  $(kind+'-actions').hidden=!(hasModel&&step.tokenOpen&&canUseToken(kind));
+  // Once model enumeration completes, Token is always visible, even before a
+  // model is selected; Save/Test require both a choice and usable credentials.
+  $(kind+'-actions').hidden=!(hasModel&&canUseToken(kind));
 }
 function setModelChoices(kind,ids){
   const step=steps[kind];
@@ -216,19 +218,14 @@ function setModelChoices(kind,ids){
   } else {
     $(kind+'-model').value=preferred||'';
   }
-  if(step.tokenOpen){
-    $(kind+'-token-open').hidden=true;
-    $(kind+'-key-wrap').hidden=false;
-  }
-  updateModelProgress(kind);
-}
-function revealToken(kind){
-  const step=steps[kind];
-  step.tokenOpen=true;
+  // The initial discovery button and its status vanish after a completed
+  // model lookup. The model selector/manual input and Token field appear
+  // together; the selector's refresh icon remains available.
+  $(kind+'-discovery').hidden=true;
+  $(kind+'-model-count').textContent='';
   $(kind+'-token-stage').hidden=false;
-  $(kind+'-token-open').hidden=true;
   $(kind+'-key-wrap').hidden=false;
-  $(kind+'-actions').hidden=!(step.ready&&!!selectedModel(kind)&&canUseToken(kind));
+  updateModelProgress(kind);
 }
 async function loadConfig(){
   const res=await fetch('/api/bootstrap');
@@ -269,7 +266,8 @@ async function discoverModels(kind){
   if(publicMode)return;
   const url=$(kind+'-url').value.trim();
   const key=$(kind+'-key').value;
-  const feedback=$(kind+'-model-count');
+  const discovery=$(kind+'-discovery');
+  const feedback=discovery.hidden ? $(kind+'-feedback') : $(kind+'-model-count');
   if(!url){feedback.textContent='请先填写 API 地址';return;}
   const step=steps[kind], generation=++step.generation;
   const list=$(kind+'-list'),refresh=$(kind+'-refresh');
@@ -288,7 +286,8 @@ async function discoverModels(kind){
     if(!Array.isArray(body.models))throw new Error('INVALID_MODEL_LIST');
     const ids=body.models.filter(id=>typeof id==='string');
     setModelChoices(kind,ids);
-    feedback.textContent=ids.length?'已获取 '+ids.length+' 个模型，请从下拉框选择':'没有可用模型，请手动输入模型 ID';
+    // No extra fetch button/status text once the choice and Token fields show.
+    feedback.textContent='';
   }catch(e){
     if(generation!==step.generation || $(kind+'-url').value.trim()!==url || $(kind+'-key').value!==key)return;
     const message=String(e.message||e);
@@ -296,12 +295,14 @@ async function discoverModels(kind){
       // Some providers require the Token before revealing their model list.
       step.ready=false; step.mode=null;
       $(kind+'-model-stage').hidden=true;
+      discovery.hidden=false;
       $(kind+'-token-stage').hidden=false;
+      $(kind+'-key-wrap').hidden=false;
       $(kind+'-actions').hidden=true;
       feedback.textContent='该 API 要求先填写 Token，填写后再次点击“获取可用模型”';
     } else if(/MODEL_HTTP_(404|405|501)|MODEL_LIST_UNAVAILABLE|INVALID_MODEL_LIST/.test(message)){
       setModelChoices(kind,[]);
-      feedback.textContent='此 API 未提供可读取的模型列表，请手动输入模型 ID';
+      feedback.textContent='';
     } else {
       // Network/timeouts are failures, not an assertion that no models exist.
       feedback.textContent='检索失败：'+message+'；请检查 API 地址或 Token 后重试';
@@ -317,8 +318,8 @@ async function modelAction(kind,operation){
   if(publicMode)return;
   const step=steps[kind],feedback=$(kind+'-feedback');
   const model=selectedModel(kind);
-  if(!step.ready || !step.tokenOpen || !model || !canUseToken(kind)){
-    feedback.textContent='请先获取模型、选择模型并打开 Token 输入';
+  if(!step.ready || !model || !canUseToken(kind)){
+    feedback.textContent='请先获取模型、选择模型并填写 Token';
     return;
   }
   feedback.textContent=operation==='save'?'正在保存配置…':'正在测试连接…';
@@ -349,7 +350,6 @@ for(const kind of profiles){
   $(kind+'-test').onclick=()=>void modelAction(kind,'test');
   $(kind+'-list').onclick=()=>void discoverModels(kind);
   $(kind+'-refresh').onclick=()=>void discoverModels(kind);
-  $(kind+'-token-open').onclick=()=>revealToken(kind);
   $(kind+'-model-select').onchange=()=>updateModelProgress(kind);
   $(kind+'-model').oninput=()=>updateModelProgress(kind);
   $(kind+'-key').oninput=()=>updateModelProgress(kind);
