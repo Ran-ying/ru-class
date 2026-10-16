@@ -6,7 +6,7 @@ const kinds=['speech','image','text'];
 let profiles={speech:null,image:null,text:null};
 const stages=Object.fromEntries(kinds.map(kind=>[kind,{revision:0,ready:false,manual:false}]));
 let running=false,stopping=false,stream,context,source,capture,asr,lessonId='',sampleCount=0,chunkIndex=0;
-let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve();
+let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve(),evidenceWarning='';
 let stable='',draft='',hasTranscript=false,marks=[];
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function buttons(){
@@ -38,7 +38,8 @@ function showTranscript(update){
     };
     evidenceWrites=evidenceWrites.then(()=>saveHypothesis(id,entry))
       .catch(e=>{
-        $('error').textContent='原始识别窗口在此浏览器保存失败：'+errorMessage(e);
+        evidenceWarning='原始识别窗口在此浏览器保存失败：'+errorMessage(e);
+        $('error').textContent=evidenceWarning;
       });
   }
   const point=marks.find(m=>m.end>=update.window_end_sample);
@@ -84,7 +85,7 @@ async function start(){
     return;
   }
   lessonId=crypto.randomUUID();startedAt=Date.now();
-  sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();
+  sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
   stable='';draft='';hasTranscript=false;
   $('ru').textContent='';
   $('duration').textContent='00:00';$('error').textContent='';$('latency').textContent='—';
@@ -137,7 +138,9 @@ async function stop(){
     // evidenceWrites promise only after its completion.
     await Promise.all([writing,evidenceWrites]);
     await finishLesson('completed');
-    $('error').textContent='';
+    // A successful microphone stop must not clear a failed evidence-write
+    // warning: the raw ASR history might be incomplete despite a saved WAV.
+    $('error').textContent=evidenceWarning;
   }catch(e){
     asr?.cancel();$('error').textContent='停止或保存失败：'+errorMessage(e);
   }finally{
