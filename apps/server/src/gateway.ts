@@ -6,7 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Session } from './session.js';
 import { OpenAICompatibleAsr, type AsrOptions } from './inference.js';
 import { Continuity, decodeAudio, event, parseEvent } from './protocol.js';
-import { createModelStore, normalizeAccount, probeAccount, publicAccount, validKind, envSpeechOverride, listAvailableModels, type Accounts } from './model-settings.js';
+import { createModelStore, normalizeAccount, probeAccount, publicAccount, validKind, envSpeechOverride, listAvailableModels, discoveryAccount, type Accounts } from './model-settings.js';
 
 type Config = {clientToken: string; workerToken: string; publicOrigin?: string; webRoot?: string; asr?:AsrOptions; localBootstrap?:boolean; configPath?:string; modelSettings?:Pick<Accounts,'image'|'text'>};
 export function createGateway(config: Config) {
@@ -49,10 +49,7 @@ export function createGateway(config: Config) {
         let body='';for await(const part of req){body+=part;if(body.length>8192)throw new Error('MODEL_REQUEST_TOO_LARGE');}
         const input=JSON.parse(body);
         // Discovery only requires endpoint/key; model selection comes AFTER this call.
-        const account=normalizeAccount(operation==='list'?{
-          baseUrl:input?.baseUrl, model:modelStore.models[kind].model||'lookup',
-          apiKey:input?.apiKey
-        }:input,modelStore.models[kind]);
+        const account=operation==='list'?discoveryAccount(input,modelStore.models[kind]):normalizeAccount(input,modelStore.models[kind]);
         if(operation==='list'){
           const models=await listAvailableModels(account);
           res.end(JSON.stringify({ok:true,models}));

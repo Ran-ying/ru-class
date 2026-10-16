@@ -78,10 +78,25 @@ export function createModelStore(path:string, initial:Accounts) {
  * Only the authenticated local settings API may call this function. An API's
  * model listing can contain other modalities; it is not proof of inference.
  */
+export function discoveryAccount(input: unknown, previous: ModelAccount): ModelAccount {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('INVALID_MODEL_CONFIG');
+  const body=input as Record<string, unknown>;
+  if(typeof body.baseUrl!=='string'||typeof body.apiKey!=='string')throw new Error('INVALID_MODEL_CONFIG');
+  const baseUrl=body.baseUrl.trim();
+  const apiKey=body.apiKey;
+  if(!baseUrl||baseUrl.length>1024||apiKey.length>1024||/[\r\n]/.test(apiKey))throw new Error('INVALID_MODEL_CONFIG');
+  let url:URL;
+  try{url=new URL(baseUrl);}catch{throw new Error('INVALID_MODEL_URL');}
+  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw new Error('INVALID_MODEL_URL');
+  if(url.protocol==='http:'&&!['127.0.0.1','localhost','[::1]'].includes(url.hostname))throw new Error('MODEL_REMOTE_REQUIRES_HTTPS');
+  const normalized=baseUrl.replace(/\/+$/,'');
+  // A new provider may expose public /models without requiring credentials.
+  // An empty key never reuses a secret from any different provider.
+  return {baseUrl:normalized, model:'lookup',apiKey:apiKey||(normalized===previous.baseUrl?previous.apiKey:'')};
+}
 export async function listAvailableModels(account: ModelAccount):Promise<string[]> {
-  if(!account.apiKey) throw new Error('MODEL_API_KEY_REQUIRED');
   const response=await fetch(account.baseUrl.replace(/\/+$/,'')+'/models',{
-    headers:{Authorization:'Bearer '+account.apiKey,Accept:'application/json'},
+    headers:{...(account.apiKey?{Authorization:'Bearer '+account.apiKey}:{}),Accept:'application/json'},
     signal:AbortSignal.timeout(10000),redirect:'error'
   });
   if(!response.ok) throw new Error('MODEL_HTTP_'+response.status);

@@ -6,7 +6,7 @@ let sent = [], stopTimer, startTimer, flushResolve;
 let stableRussian = '', provisionalRussian = '', transcriptRevision = 0;
 const errors = {WORKER_OFFLINE:'语音识别 API 未就绪，请在设置中检查地址、key 和模型。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
-function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list'])$(id).disabled=active; }
+function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh','speech-token-open'])$(id).disabled=active; }
 function setConnected(online) { $('connection-state').hidden = online || hasTranscript; $('ru').hidden = !online && !hasTranscript; }
 function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待语音识别 API'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
 async function cleanup() {
@@ -124,31 +124,16 @@ $('record').onclick = async () => {
 window.addEventListener('pagehide', () => { stream?.getTracks().forEach(t => t.stop()); ws?.close(); });
 
 const profiles=['speech','image','text'];
-const customModel='__manual__';
-function syncModelField(kind) {
-  const select=$(kind+'-model-select'), manual=select.value===customModel;
-  $(kind+'-model-manual-wrap').hidden=!manual;
-  $(kind+'-model').required=manual;
-  if(!manual)$(kind+'-model').value=select.value;
-}
-function renderModelOptions(kind, models=[], preferred='') {
-  const select=$(kind+'-model-select');
-  const options=[{id:customModel,name:'手动输入模型 ID'},...models.map(id=>({id,name:id}))];
-  const nodes=options.map(({id,name})=>{
-    const option=document.createElement('option');
-    option.value=id;option.textContent=name;
-    return option;
-  });
-  select.replaceChildren(...nodes);
-  // An existing model not advertised by this provider is kept editable.
-  select.value=models.includes(preferred) ? preferred : preferred ? customModel : models[0]||customModel;
-  syncModelField(kind);
-}
-let savedProfiles={speech:{baseUrl:'',model:'',keyConfigured:false},image:{baseUrl:'',model:'',keyConfigured:false},text:{baseUrl:'',model:'',keyConfigured:false}};
+let savedProfiles={
+  speech:{baseUrl:'',model:'',keyConfigured:false},
+  image:{baseUrl:'',model:'',keyConfigured:false},
+  text:{baseUrl:'',model:'',keyConfigured:false}
+};
+const steps=Object.fromEntries(profiles.map(kind=>[kind,{generation:0,ready:false,mode:null,tokenOpen:false}]));
 function selectTab(page){
   const models=page==='models';
   $('panel-models').hidden=!models; $('panel-access').hidden=models;
-  for (const name of ['models','access']){
+  for(const name of ['models','access']){
     const tab=$('tab-'+name);
     tab.setAttribute?.('aria-selected',String(name===page));
     tab.tabIndex=name===page?0:-1;
@@ -157,22 +142,97 @@ function selectTab(page){
 $('tab-models').onclick=()=>selectTab('models');
 $('tab-access').onclick=()=>selectTab('access');
 
+/* Reset one provider's form whenever its API address changes. */
+function resetModelFlow(kind,{clearToken=true}={}){
+  const step=steps[kind];
+  step.generation++;
+  step.ready=false;
+  step.mode=null;
+  step.tokenOpen=false;
+  $(kind+'-model-stage').hidden=true;
+  $(kind+'-model-choice').hidden=true;
+  $(kind+'-model-manual-wrap').hidden=true;
+  $(kind+'-model').value='';
+  $(kind+'-model').required=false;
+  $(kind+'-model-select').required=false;
+  $(kind+'-model-select').replaceChildren();
+  $(kind+'-token-stage').hidden=true;
+  $(kind+'-token-open').hidden=false;
+  $(kind+'-key-wrap').hidden=true;
+  $(kind+'-actions').hidden=true;
+  if(clearToken)$(kind+'-key').value='';
+  $(kind+'-model-count').textContent='';
+  $(kind+'-feedback').textContent='';
+}
 function displayProfiles(data){
-  if(!data)return;
   for(const kind of profiles){
-    const profile=data[kind]||{};
+    const profile=data?.[kind]||{};
     savedProfiles[kind]=profile;
     $(kind+'-url').value=profile.baseUrl||'';
-    $(kind+'-model').value=profile.model||'';
-    renderModelOptions(kind, [], profile.model||'');
-    $(kind+'-model-count').textContent='';
-    $(kind+'-key').value='';
-    $(kind+'-key').placeholder=profile.keyConfigured?'已保存密钥；留空继续使用':'输入 API Key';
+    resetModelFlow(kind);
+    $(kind+'-key').placeholder=profile.keyConfigured?'已保存 Token；留空沿用':'输入 API Token';
   }
 }
-async function loadConfig() {
+function selectedModel(kind){
+  if(steps[kind].mode==='select')return $(kind+'-model-select').value;
+  if(steps[kind].mode==='manual')return $(kind+'-model').value.trim();
+  return '';
+}
+function canUseToken(kind){
+  const previous=savedProfiles[kind]||{};
+  return !!$(kind+'-key').value || (!!previous.keyConfigured && previous.baseUrl===$(kind+'-url').value.trim());
+}
+function updateModelProgress(kind){
+  const step=steps[kind];
+  if(!step.ready)return;
+  const hasModel=!!selectedModel(kind);
+  $(kind+'-token-stage').hidden=!hasModel;
+  $(kind+'-actions').hidden=!(hasModel&&step.tokenOpen&&canUseToken(kind));
+}
+function setModelChoices(kind,ids){
+  const step=steps[kind];
+  const previousChoice=step.ready?selectedModel(kind):'';
+  step.ready=true;
+  step.mode=ids.length?'select':'manual';
+  $(kind+'-model-stage').hidden=false;
+  $(kind+'-model-choice').hidden=!ids.length;
+  $(kind+'-model-manual-wrap').hidden=!!ids.length;
+  $(kind+'-model-select').required=!!ids.length;
+  $(kind+'-model').required=!ids.length;
+  const stored=savedProfiles[kind]?.baseUrl===$(kind+'-url').value.trim()?savedProfiles[kind]?.model:'';
+  const preferred=previousChoice||stored||'';
+  if(ids.length){
+    // Only IDs returned by the provider can be chosen; no manual option.
+    const options=ids.map(id=>{
+      const option=document.createElement('option');
+      option.value=id; option.textContent=id;
+      return option;
+    });
+    const placeholder=document.createElement('option');
+    placeholder.value='';placeholder.textContent='请选择模型';
+    const select=$(kind+'-model-select');
+    select.replaceChildren(placeholder,...options);
+    select.value=ids.includes(preferred)?preferred:'';
+  } else {
+    $(kind+'-model').value=preferred||'';
+  }
+  if(step.tokenOpen){
+    $(kind+'-token-open').hidden=true;
+    $(kind+'-key-wrap').hidden=false;
+  }
+  updateModelProgress(kind);
+}
+function revealToken(kind){
+  const step=steps[kind];
+  step.tokenOpen=true;
+  $(kind+'-token-stage').hidden=false;
+  $(kind+'-token-open').hidden=true;
+  $(kind+'-key-wrap').hidden=false;
+  $(kind+'-actions').hidden=!(step.ready&&!!selectedModel(kind)&&canUseToken(kind));
+}
+async function loadConfig(){
   const res=await fetch('/api/bootstrap');
-  if(res.status===403) {
+  if(res.status===403){
     publicMode=true;
     $('models-unavailable').hidden=false; $('model-cards').hidden=true;
     $('site-auth').hidden=false; $('local-access-help').hidden=true;
@@ -200,62 +260,84 @@ $('site-auth').onsubmit=event=>{
   const token=$('site-token').value.trim();
   if(token.length<24){$('site-feedback').textContent='访问令牌至少需要 24 个字符。';return;}
   clientToken=token;
-  sessionStorage.setItem('ru-class-site-token', token);
+  sessionStorage.setItem('ru-class-site-token',token);
   $('site-token').value='';
   $('site-feedback').textContent='令牌已保存到本标签页会话中。';
   $('settings').close();
 };
 async function discoverModels(kind){
   if(publicMode)return;
+  const url=$(kind+'-url').value.trim();
+  const key=$(kind+'-key').value;
   const feedback=$(kind+'-model-count');
-  const button=$(kind+'-list');
-  const baseUrl=$(kind+'-url').value.trim();
-  const apiKey=$(kind+'-key').value;
-  const oldModel=$(kind+'-model').value.trim();
-  const previous=button.disabled;
-  button.disabled=true;feedback.textContent='正在获取模型列表…';
+  if(!url){feedback.textContent='请先填写 API 地址';return;}
+  const step=steps[kind], generation=++step.generation;
+  const list=$(kind+'-list'),refresh=$(kind+'-refresh');
+  list.disabled=true;refresh.disabled=true;
+  feedback.textContent='正在获取可用模型…';
   try{
     if(!clientToken)await loadConfig();
     const res=await fetch('/api/models/'+kind+'/list',{
       method:'POST',
-      headers:{'Content-Type':'application/json',Authorization:`Bearer ${clientToken}`},
-      body:JSON.stringify({baseUrl,apiKey})
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+clientToken},
+      body:JSON.stringify({baseUrl:url,apiKey:key})
     });
     const body=await res.json();
-    if(!res.ok)throw new Error(body.error||'模型列表不可用');
-    if(!Array.isArray(body.models))throw new Error('模型列表响应格式不正确');
-    // A response to an older endpoint must never replace the current dropdown.
-    if($(kind+'-url').value.trim()!==baseUrl || $(kind+'-key').value!==apiKey)return;
-    renderModelOptions(kind,body.models,oldModel);
-    feedback.textContent=body.models.length?`已获取 ${body.models.length} 个模型，可在下拉框中选择`:'该 API 未列出模型，可以手动输入模型 ID';
+    if(generation!==step.generation || $(kind+'-url').value.trim()!==url || $(kind+'-key').value!==key)return;
+    if(!res.ok)throw new Error(body.error||'MODEL_LIST_UNAVAILABLE');
+    if(!Array.isArray(body.models))throw new Error('INVALID_MODEL_LIST');
+    const ids=body.models.filter(id=>typeof id==='string');
+    setModelChoices(kind,ids);
+    feedback.textContent=ids.length?'已获取 '+ids.length+' 个模型，请从下拉框选择':'没有可用模型，请手动输入模型 ID';
   }catch(e){
-    if($(kind+'-url').value.trim()===baseUrl && $(kind+'-key').value===apiKey){
-      renderModelOptions(kind,[],oldModel);
-      feedback.textContent='获取失败：'+e.message+'；仍可手动输入模型 ID';
+    if(generation!==step.generation || $(kind+'-url').value.trim()!==url || $(kind+'-key').value!==key)return;
+    const message=String(e.message||e);
+    if(/MODEL_HTTP_40[13]/.test(message)){
+      // Some providers require the Token before revealing their model list.
+      step.ready=false; step.mode=null;
+      $(kind+'-model-stage').hidden=true;
+      $(kind+'-token-stage').hidden=false;
+      $(kind+'-actions').hidden=true;
+      feedback.textContent='该 API 要求先填写 Token，填写后再次点击“获取可用模型”';
+    } else if(/MODEL_HTTP_(404|405|501)|MODEL_LIST_UNAVAILABLE|INVALID_MODEL_LIST/.test(message)){
+      setModelChoices(kind,[]);
+      feedback.textContent='此 API 未提供可读取的模型列表，请手动输入模型 ID';
+    } else {
+      // Network/timeouts are failures, not an assertion that no models exist.
+      feedback.textContent='检索失败：'+message+'；请检查 API 地址或 Token 后重试';
     }
-  }finally{button.disabled=previous||(kind==='speech'&&(running||stopping));}
+  }finally{
+    if(generation===step.generation){
+      list.disabled=kind==='speech'&&(running||stopping);
+      refresh.disabled=kind==='speech'&&(running||stopping);
+    }
+  }
 }
 async function modelAction(kind,operation){
   if(publicMode)return;
-  const feedback=$(kind+'-feedback');
-  feedback.textContent=operation==='save'?'正在保存配置…':'正在测试模型列表接口…';
+  const step=steps[kind],feedback=$(kind+'-feedback');
+  const model=selectedModel(kind);
+  if(!step.ready || !step.tokenOpen || !model || !canUseToken(kind)){
+    feedback.textContent='请先获取模型、选择模型并打开 Token 输入';
+    return;
+  }
+  feedback.textContent=operation==='save'?'正在保存配置…':'正在测试连接…';
   $(kind+'-save').disabled=true;$(kind+'-test').disabled=true;
   try{
     if(!clientToken)await loadConfig();
     const res=await fetch('/api/models/'+kind+'/'+operation,{
-      method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${clientToken}`},
-      body:JSON.stringify({baseUrl:$(kind+'-url').value.trim(),model:$(kind+'-model').value.trim(),apiKey:$(kind+'-key').value})
+      method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+clientToken},
+      body:JSON.stringify({baseUrl:$(kind+'-url').value.trim(),model,apiKey:$(kind+'-key').value})
     });
     const result=await res.json();
     if(!res.ok)throw new Error(result.error||'请求失败');
     if(operation==='save'){
       savedProfiles[kind]=result.profile;
       $(kind+'-key').value='';
-      $(kind+'-key').placeholder='已保存密钥；留空继续使用';
-      feedback.textContent='已独立保存到服务器 config.json；尚未测试连接。';
-    } else {
-      feedback.textContent='测试成功：可访问模型列表并找到该模型；尚未验证实际推理。';
-    }
+      $(kind+'-key').placeholder='已保存 Token；留空沿用';
+      updateModelProgress(kind);
+      feedback.textContent='配置已保存；连接测试需单独点击。';
+    }else feedback.textContent='连接成功：模型列表包含该模型（未验证实际推理）';
   }catch(e){feedback.textContent='操作失败：'+e.message;}
   finally{
     $(kind+'-save').disabled=kind==='speech'&&(running||stopping);
@@ -266,12 +348,10 @@ for(const kind of profiles){
   $('model-'+kind).onsubmit=e=>{e.preventDefault();void modelAction(kind,'save');};
   $(kind+'-test').onclick=()=>void modelAction(kind,'test');
   $(kind+'-list').onclick=()=>void discoverModels(kind);
-  $(kind+'-model-select').onchange=()=>syncModelField(kind);
-  const invalidate=()=>{
-    // URL/credentials changed: never show a model list from another provider.
-    renderModelOptions(kind, [], $(kind+'-model').value);
-    $(kind+'-model-count').textContent='';
-  };
-  $(kind+'-url').oninput=invalidate;
-  $(kind+'-key').oninput=invalidate;
+  $(kind+'-refresh').onclick=()=>void discoverModels(kind);
+  $(kind+'-token-open').onclick=()=>revealToken(kind);
+  $(kind+'-model-select').onchange=()=>updateModelProgress(kind);
+  $(kind+'-model').oninput=()=>updateModelProgress(kind);
+  $(kind+'-key').oninput=()=>updateModelProgress(kind);
+  $(kind+'-url').oninput=()=>resetModelFlow(kind);
 }
