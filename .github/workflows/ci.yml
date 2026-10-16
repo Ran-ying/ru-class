@@ -1,0 +1,36 @@
+name: Node checks
+on:
+  push:
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main application
+        uses: actions/checkout@v4
+        with:
+          path: ru-class
+      - name: Check out compatible ASR contract tests
+        uses: actions/checkout@v4
+        with:
+          repository: Ran-ying/ru-class-asr
+          path: ru-class-asr
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            ru-class/package-lock.json
+            ru-class-asr/package-lock.json
+      - run: npm ci
+        working-directory: ru-class-asr
+      - run: npm ci
+        working-directory: ru-class
+      - run: npm test
+        working-directory: ru-class
+        env:
+          ASR_REPO: ../ru-class-asr
+      - run: npm run typecheck
+        working-directory: ru-class
+      - run: npm run build
+        working-directory: ru-class

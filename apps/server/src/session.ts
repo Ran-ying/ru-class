@@ -20,6 +20,23 @@ export class Session {
   }
   async stop() { this.stopping = true; void this.pump(); return this.stopped; }
   cancel() { this.cancelled = true; this.controller.abort(); this.finish?.(); }
+  private async inferWithBusyRetry(pcm: Buffer): Promise<string> {
+    // Another client may briefly occupy the independent ASR API.
+    // Keep the current capture session alive while retrying bounded 429 responses.
+    for (let retry = 0; ; retry++) {
+      try { return await this.adapter.infer(pcm, this.controller.signal); }
+      catch (e) {
+        if (this.cancelled || !(e instanceof Error) || e.message !== 'ASR_HTTP_429' || retry >= 3) throw e;
+        await new Promise<void>((resolve, reject) => {
+          const signal = this.controller.signal;
+          const onAbort = () => { clearTimeout(timer); reject(new Error('SESSION_CANCELLED')); };
+          const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, 400 * 2 ** retry);
+          if (signal.aborted) onAbort();
+          else signal.addEventListener('abort', onAbort, {once: true});
+        });
+      }
+    }
+  }
   private async pump() {
     if (this.running || this.cancelled) return;
     const snapshot = this.audio.snapshot();
@@ -28,7 +45,7 @@ export class Session {
     this.running = true; this.lastEnd = snapshot.end;
     const start = performance.now();
     try {
-      const text = await this.adapter.infer(snapshot.pcm, this.controller.signal);
+      const text = await this.inferWithBusyRetry(snapshot.pcm);
       if (!this.cancelled) this.onResult({text, window_start_sample:snapshot.start, window_end_sample:snapshot.end, sample_rate:RATE, inference_ms:performance.now()-start, queue_audio_ms:(this.audio.continuity.sample-snapshot.end)/RATE*1000, alignment_quality:'window_only', final:this.stopping && this.audio.continuity.sample === snapshot.end});
     } catch {
       if (!this.cancelled) { this.cancelled = true; this.onError(); this.finish?.(); }

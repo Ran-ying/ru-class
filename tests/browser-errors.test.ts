@@ -37,9 +37,10 @@ test('shipped browser lifecycle sends indexed audio and stops capture before fin
   for(let i=0;i<5;i++)worklet.port.onmessage({data:{type:'audio',samples:new Float32Array(3200),sourceRate:48000}});
   const frames=socket.sent.filter((m:any)=>m instanceof ArrayBuffer);assert.equal(frames.length,5);assert.equal(get('duration').textContent,'00:01');
   const {decodeAudio}=await import('../apps/server/src/protocol.js');const last=decodeAudio(Buffer.from(frames.at(-1)));assert.equal(last.header.payload.start_sample,12800);assert.equal(last.header.session_id,id);
+  await socket.onmessage({data:JSON.stringify({protocol_version:'0.1',type:'asr.partial',session_id:id,payload:{text:'Сегодня мы рассматриваем безопасность.',window_start_sample:0,window_end_sample:16000,inference_ms:15}})});
   await get('record').onclick();assert.equal(track.stopped,true);assert.equal(JSON.parse(socket.sent.at(-1)).type,'session.stop');
   await socket.onmessage({data:JSON.stringify({protocol_version:'0.1',type:'session.stopped',session_id:id,payload:{}})});
-  assert.match(get('status').textContent,/尾部识别完成/);assert.equal(get('record').disabled,false);assert.equal(get('record').textContent,'开始录音');assert.equal(get('ru').hidden,true);assert.equal(get('connection-state').hidden,false);
+  assert.match(get('status').textContent,/尾部识别完成/);assert.equal(get('record').disabled,false);assert.equal(get('record').textContent,'开始录音');assert.equal(get('ru').hidden,false);assert.match(get('ru').textContent,/Сегодня/);assert.equal(get('connection-state').hidden,false);
 });
 test('gateway disconnection and Worker failure visibly stop browser capture',async()=>{
   captureEnvironment();await readySession();socket.onclose({code:1006});await new Promise(r=>setImmediate(r));assert.equal(track.stopped,true);assert.match(get('error').textContent,/网关连接已断开/);
@@ -47,4 +48,20 @@ test('gateway disconnection and Worker failure visibly stop browser capture',asy
 });
 test('muted microphone is surfaced as interruption, never fake continued recording',async()=>{
   captureEnvironment();await readySession();track.onmute();await new Promise(r=>setImmediate(r));assert.equal(track.stopped,true);assert.match(get('error').textContent,/麦克风输入暂停/);assert.equal(get('record').disabled,false);
+});
+
+test('public mode requires a site token and hides local-only ASR editing',async()=>{
+  const previousFetch=(globalThis as any).fetch;
+  const entries=new Map<string,string>();
+  (globalThis as any).sessionStorage={getItem:(k:string)=>entries.get(k)||null,setItem:(k:string,v:string)=>entries.set(k,v),removeItem:(k:string)=>entries.delete(k)};
+  get('settings').showModal=()=>{get('settings').open=true;};
+  get('settings').close=()=>{get('settings').open=false;};
+  (globalThis as any).fetch=async()=>({ok:false,status:403});
+  try {
+    await get('settings-open').onclick();
+    assert.equal(get('site-auth').hidden,false);assert.equal(get('asr-settings').hidden,true);
+    get('site-token').value='long-public-site-test-token-32-chars';
+    get('site-auth').onsubmit({preventDefault(){}});
+    assert.equal(entries.get('ru-class-site-token'),'long-public-site-test-token-32-chars');
+  }finally{(globalThis as any).fetch=previousFetch;}
 });

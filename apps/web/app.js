@@ -1,13 +1,12 @@
 import { encodeFrame } from './audio.js';
 const $ = id => document.getElementById(id);
 let ws, stream, context, capture, source, sessionId, seq = 0, samples = 0, running = false, stopping = false;
-let clientToken='';
+let clientToken='', publicMode = false, hasTranscript = false;
 let sent = [], stopTimer, startTimer, flushResolve;
-$('settings-open').onclick = () => $('settings').showModal();
 const errors = {WORKER_OFFLINE:'语音识别 API 未就绪，请在设置中检查地址、key 和模型。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
 function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['asr-url','asr-model','asr-key','asr-save'])$(id).disabled=active; }
-function setConnected(online) { $('connection-state').hidden = online; $('ru').hidden = !online; }
+function setConnected(online) { $('connection-state').hidden = online; $('ru').hidden = !online && !hasTranscript; }
 function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待语音识别 API'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
 async function cleanup() {
   running = false; clearTimeout(stopTimer); clearTimeout(startTimer); stream?.getTracks().forEach(t => t.stop());
@@ -24,12 +23,16 @@ async function startRecording() {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) { await fail('录音需要 HTTPS（或 localhost）以及支持 AudioWorklet 的浏览器。'); return; }
 
   controls(true); $('error').textContent = ''; $('status').textContent = '请求麦克风权限…';
-  sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false;
+  sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false; hasTranscript = false;
   $('duration').textContent = '00:00'; $('ru').textContent = '开始录音后，俄语字幕将在这里更新。'; $('latency').textContent = '等待第一条识别结果…';
   try {
     // Resume inside the user gesture before waiting for network events (Safari requirement).
     context = new AudioContext(); await context.resume();
     if(!clientToken)await loadConfig();
+    if(!clientToken) {
+      if(!$('settings').open) $('settings').showModal();
+      throw new Error('请先在设置中输入站点访问令牌。');
+    }
     stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     await context.audioWorklet.addModule('/capture-worklet.js');
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/client`);
@@ -63,6 +66,7 @@ async function startRecording() {
           $('status').textContent = '录音中 · 俄语识别'; controls(true);
         } else if (m.type === 'asr.partial' && m.session_id === sessionId) {
           $('ru').textContent = m.payload.text || '当前窗口未识别到语音';
+          if(m.payload.text?.trim()) hasTranscript = true;
           const anchor = sent.find(x => x.end >= m.payload.window_end_sample);
           const displayMs = anchor ? performance.now() - anchor.at : null;
           $('latency').textContent = `窗口 ${((m.payload.window_end_sample-m.payload.window_start_sample)/16000).toFixed(1)} s · 推理 ${m.payload.inference_ms.toFixed(0)} ms · 音频末端至显示 ${displayMs === null ? '—' : displayMs.toFixed(0)+' ms'}`;
@@ -72,7 +76,11 @@ async function startRecording() {
         else if(m.type === 'connection.status') updateWorker(m.payload.worker_online, m.payload.worker);
       } catch(e) { await fail(e.message || '无法处理服务端消息'); }
     };
-    ws.onclose = event => { if(ws === socket && (running || stopping || context)) void fail(event.code === 1008 ? '认证失败，请检查访问令牌。' : '网关连接已断开，录音已停止。v0.1 不支持断网续传。'); };
+    ws.onclose = event => {
+      if(ws !== socket || !(running || stopping || context))return;
+      if(event.code === 1008 && publicMode) { sessionStorage.removeItem('ru-class-site-token'); clientToken = ''; }
+      void fail(event.code === 1008 ? '站点认证失败，请在设置中检查访问令牌。' : '网关连接已断开，录音已停止。v0.1 不支持断网续传。');
+    };
     ws.onerror = () => { if(ws === socket) void fail('无法连接网关，请检查网络与 HTTPS/WSS 配置。'); };
   } catch(e) { await fail(e.name === 'NotAllowedError' ? '麦克风权限被拒绝，请在浏览器设置中允许访问后重试。' : `无法开始录音：${e.message}`); }
 }
@@ -91,16 +99,40 @@ $('record').onclick = async () => {
 };
 window.addEventListener('pagehide', () => { stream?.getTracks().forEach(t => t.stop()); ws?.close(); });
 
-async function loadConfig(){
-  const res=await fetch('/api/bootstrap');if(!res.ok)throw new Error('本地访问认证失败，请通过 localhost 打开页面。');
+async function loadConfig() {
+  const res=await fetch('/api/bootstrap');
+  if(res.status===403) {
+    publicMode=true;
+    $('site-auth').hidden=false; $('asr-settings').hidden=true;
+    if(!clientToken)clientToken=sessionStorage.getItem('ru-class-site-token')||'';
+    $('worker-detail').textContent='公网访问模式：ASR 地址、模型及密钥在服务器 config.json 中配置。';
+    return;
+  }
+  if(!res.ok)throw new Error('无法读取本地配置。');
+  publicMode=false; $('site-auth').hidden=true; $('asr-settings').hidden=false;
   const config=await res.json();clientToken=config.clientToken;
   $('asr-url').value=config.asr.baseUrl;$('asr-model').value=config.asr.model;
   $('asr-key').placeholder=config.asr.keyConfigured?'已配置；留空保持不变':'输入 ASR API key';
   $('worker-detail').textContent=config.ready?'语音识别 API 已连接':'语音识别 API 未就绪，请保存并测试连接';
 }
-$('settings-open').onclick=async()=>{$('settings').showModal();try{await loadConfig();}catch(e){$('asr-feedback').textContent=e.message;}};
+$('settings-open').onclick=async()=>{
+  if(!$('settings').open)$('settings').showModal();
+  try{await loadConfig();}catch(e){$('asr-feedback').textContent=e.message;}
+};
+$('site-auth').onsubmit=event=>{
+  event.preventDefault();
+  const token=$('site-token').value.trim();
+  if(token.length<24){$('site-feedback').textContent='访问令牌至少需要 24 个字符。';return;}
+  clientToken=token;
+  sessionStorage.setItem('ru-class-site-token', token);
+  $('site-token').value='';
+  $('site-feedback').textContent='令牌已保存到本标签页会话中。';
+  $('settings').close();
+};
 $('asr-settings').onsubmit=async event=>{
-  event.preventDefault();$('asr-save').disabled=true;$('asr-feedback').textContent='正在测试连接…';
+  event.preventDefault();
+  if(publicMode)return;
+  $('asr-save').disabled=true;$('asr-feedback').textContent='正在测试连接…';
   try{if(!clientToken)await loadConfig();
     const res=await fetch('/api/asr',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${clientToken}`},body:JSON.stringify({baseUrl:$('asr-url').value,model:$('asr-model').value,apiKey:$('asr-key').value})});
     const body=await res.json();if(!res.ok)throw new Error(body.error||'连接失败');
