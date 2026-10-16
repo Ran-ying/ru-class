@@ -90,6 +90,7 @@ export async function lessonHypotheses(lessonId){
 }
 export async function lessonHypothesesJson(lessonId){
   const windows=await lessonHypotheses(lessonId);
+  if(!windows.length)throw Error('此课程没有原始 ASR 窗口记录（可能是升级前的课程）。');
   return new Blob([JSON.stringify({
     format:'ru-class-asr-windows-v1',
     sample_rate:16000,
