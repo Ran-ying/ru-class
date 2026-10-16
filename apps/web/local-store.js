@@ -71,9 +71,19 @@ export async function saveHypothesis(lessonId,hypothesis){
     text:hypothesis.text,final:hypothesis.final===true,
     inferenceMs:Number.isFinite(hypothesis.inferenceMs)?Math.max(0,hypothesis.inferenceMs):null
   };
-  // Store by actual sample position instead of receipt time; duplicate
-  // completions of the same audio position do not add a second utterance.
-  await withStore('hypotheses','readwrite',s=>s.put(entry));
+  // Store by the audio position, not receipt order. The first provider
+  // response is immutable evidence: do not silently overwrite it with a
+  // second decoding for the same endSample. Identical retry is idempotent.
+  const key=[lessonId,entry.endSample];
+  const existing=await withStore('hypotheses','readonly',s=>s.get(key));
+  if(existing){
+    if(existing.startSample===entry.startSample && existing.text===entry.text &&
+       existing.final===entry.final)return;
+    throw Error('ASR_WINDOW_CONFLICT');
+  }
+  // add() rather than put(): atomically refuses an unexpected concurrent
+  // conflicting write from another tab instead of erasing first evidence.
+  await withStore('hypotheses','readwrite',s=>s.add(entry));
 }
 export async function lessonHypotheses(lessonId){
   if(typeof lessonId!=='string'||!lessonId)throw Error('INVALID_LESSON_ID');
