@@ -1,0 +1,38 @@
+{
+  "kind": "REALTIME_REPLAY_REQUIRES_MANUAL_HARDWARE_AND_LANGUAGE_REVIEW",
+  "date_utc": "2026-10-16T08:11:14.832Z",
+  "node": "v25.9.0",
+  "os": "darwin/arm64",
+  "cpu": "Apple M1",
+  "source_sha256": "44e2d02d06a8b8eacf3107b4c9f77aa577fd25cdc4725d31e92f9631496f06ce",
+  "audio_seconds": 101.164625,
+  "replayed_seconds": 102.62197375000001,
+  "frames": 506,
+  "results": 101,
+  "captions_before_stop": true,
+  "configured_model": "small",
+  "actual_backend": "UNVERIFIED_CHECK_ENGINE_LOGS",
+  "inference_ms": {
+    "count": 101,
+    "mean": 763.247072633663,
+    "p50": 773.7803330000024,
+    "p95": 852.8664580000041,
+    "max": 975.3623329999973
+  },
+  "audio_end_to_result_ms": {
+    "count": 101,
+    "mean": 771.9174963267327,
+    "p50": 775.735458000001,
+    "p95": 863.916750000004,
+    "max": 1433.6549999999988
+  },
+  "window_span_ms": {
+    "count": 101,
+    "mean": 7792.079207920792,
+    "p50": 8000,
+    "p95": 8000,
+    "max": 8000
+  },
+  "maximum_consecutive_equal_text_results": 2,
+  "notes": "No transcript, token, host, source filename or audio is stored here. Check Russian accuracy, UI responsiveness, repetition and engine backend manually. This network estimate excludes capture buffering."
+}

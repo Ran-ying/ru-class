@@ -1,6 +1,6 @@
 # Independent v0.1 hardware acceptance
 
-Status: **PENDING_HARDWARE_VALIDATION**. Automated test fixtures are not Russian ASR quality or real hardware proof. The implementation environment is an Apple M1 / 8 GB MacBook Air, not the required Mac mini M4. No whisper-server, multilingual small model or five-minute Russian recording was available to this run. Do not mark M4/Metal, microphone, Safari or iPad acceptance passed based on Node tests.
+Status: **M4 PENDING_HARDWARE_VALIDATION, deferred by the user**. Current development uses Apple M1 / 8 GB. Real M1 small/Metal integration and a 101.16-second synthetic Russian paced replay passed; see `m1-development.md`. The following formal workflow is for the later M4 stage. M1 results, automated mocks and responsive emulation do not prove M4, physical microphone, Safari or iPad acceptance.
 
 1. On the Mac mini M4, record macOS version, CPU/RAM, Node version and exact whisper.cpp commit (`git rev-parse HEAD`). Build and start the external resident whisper-server as in README. Capture local startup logs proving the loaded multilingual model and actual Metal backend. Keep raw logs private; include only redacted evidence in a public report. Worker status alone is a configured label.
 2. Start the independent gateway, then Worker. Use a five-minute-or-longer Russian classroom recording you have permission to process, or speak through a real browser microphone. Keep the original audio outside Git. To replay, convert locally: `ffmpeg -i source.wav -ar 16000 -ac 1 -c:a pcm_s16le ru-16k.wav`.

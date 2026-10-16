@@ -2,22 +2,25 @@
 > ru-class@0.1.0 test
 > node --import tsx --test tests/*.test.ts
 
-✔ 44.1/48 kHz streaming resampling preserves duration across arbitrary blocks (80.731917ms)
-✔ resampling filters out frequencies above target Nyquist (33.5185ms)
-✔ browser PCM encoding, clamping and original sample mapping round-trip (4.63675ms)
-✔ protocol rejects malformed envelopes, oversized/truncated/mismatched audio and discontinuities (0.6305ms)
-✔ microphone permission refusal is visible and closes AudioContext (1.888417ms)
-✔ insecure context reports the HTTPS requirement before recording (0.096458ms)
+✔ 44.1/48 kHz streaming resampling preserves duration across arbitrary blocks (74.203292ms)
+✔ resampling filters out frequencies above target Nyquist (30.745ms)
+✔ browser PCM encoding, clamping and original sample mapping round-trip (4.149375ms)
+✔ protocol rejects malformed envelopes, oversized/truncated/mismatched audio and discontinuities (0.664417ms)
+✔ microphone permission refusal is visible and closes AudioContext (3.006792ms)
+✔ insecure context reports the HTTPS requirement before recording (0.123875ms)
+✔ shipped browser lifecycle sends indexed audio and stops capture before final completion (6.8595ms)
+✔ gateway disconnection and Worker failure visibly stop browser capture (6.08475ms)
+✔ muted microphone is surfaced as interruption, never fake continued recording (0.46ms)
 {"event":"worker.ready","model":"SIMULATED_TEST","os":"darwin/arm64","backend":"unverified:mock","ready":true}
-✔ cross-repository HTTP adapter → Worker → gateway → client; early captions and final flush (2520.545667ms)
+✔ cross-repository HTTP adapter → Worker → gateway → client; early captions and final flush (2445.9945ms)
 {"event":"worker.disconnected","code":1006}
-✔ authenticated routing, unknown session, continuity, stop and Worker disconnect (28.255209ms)
-✔ bad authentication, origin and required distinct secrets are rejected (4.605875ms)
-ℹ tests 9
+✔ authenticated routing, unknown session, continuity, stop and Worker disconnect (26.670042ms)
+✔ bad authentication, origin and required distinct secrets are rejected (4.371792ms)
+ℹ tests 12
 ℹ suites 0
-ℹ pass 9
+ℹ pass 12
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 3595.431416
+ℹ duration_ms 2676.573208

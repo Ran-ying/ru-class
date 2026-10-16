@@ -2,7 +2,7 @@
 
 俄语课堂实时字幕原型。左侧 2/3 预留笔记区，右下显示真实 Whisper 滚动窗口字幕、录音时间和延迟指标；双语历史和中文翻译标注为后续版本。**v0.1 不保存完整录音，不适合作为重要课堂的唯一录音。**
 
-浏览器 AudioWorklet → Node.js 网关 → 主动出站连接的 Node.js Worker → 常驻 whisper.cpp `whisper-server`。跨平台架构，Mac mini M4 为作者首个目标验收平台；当前验收事实见 [报告](docs/acceptance-v0.1.md)。其他操作系统尚未由作者验证，欢迎自行部署并反馈。
+浏览器 AudioWorklet → Node.js 网关 → 主动出站连接的 Node.js Worker → 常驻 whisper.cpp `whisper-server`。跨平台架构，当前在 M1 / 8 GB 上开发，small/Metal 的真实联调已通过；Mac mini M4 留待后期正式验收。当前验证事实见 [报告](docs/acceptance-v0.1.md)。其他操作系统尚未由作者验证，欢迎自行部署并反馈。
 
 ## 本地运行
 
@@ -45,3 +45,5 @@ npm run build
 模块关系见 [architecture](docs/architecture.md)，完整自动化输出见 [test results](docs/test-results-v0.1.txt)。
 
 ![v0.1 桌面页面；未连接 Worker](docs/screenshots/desktop-v0.1.jpg)
+
+M1 实测方法、模型版本和延迟数据见 [M1 development](docs/m1-development.md)，M4 后期流程见 [hardware validation](docs/hardware-validation.md)。

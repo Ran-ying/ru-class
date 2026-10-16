@@ -1,0 +1,9 @@
+M1 development evidence, 2026-10-16. Selected startup lines only; raw paths and logs omitted.
+whisper.cpp commit: 0c7be696371069e0baa2515ed7aa08d5a5473aa6
+Model: multilingual small
+Model SHA-256: 1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b
+
+whisper_init_with_params_no_state: use gpu    = 1
+whisper_model_load: model size    =  487.01 MB
+whisper_backend_init_gpu: using MTL0 backend
+ggml_metal_init: found device: Apple M1
