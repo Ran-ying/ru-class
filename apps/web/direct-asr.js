@@ -135,7 +135,7 @@ export class BrowserAsrSession {
     if(!response.ok)throw Error('ASR_HTTP_'+response.status);
     const result=await response.json();
     if(typeof result?.text!=='string'||result.text.length>20000)throw Error('INVALID_ASR_RESPONSE');
-    return result.text.trim();
+    return result.text;
   }
   async run(final=false){
     if(this.inFlight)return this.inFlight;
