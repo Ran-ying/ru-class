@@ -59,9 +59,9 @@ const fakeDb={
   bound:(lower:any,upper:any)=>({lower,upper})
 };
 // @ts-ignore Browser JS intentionally lacks TS declarations.
+const storage = await import('../apps/web/local-store.js');
 const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
-  saveProfile,loadProfiles,saveLesson,listLessons,clearBrowserData}=
-  await import('../apps/web/local-store.js');
+  saveProfile,loadProfiles,saveLesson,listLessons,clearBrowserData}=storage;
 
 test('IndexedDB v2 adds hypothesis store without erasing old v1 stores',async()=>{
   const oldProfile={baseUrl:'https://example.test/v1',model:'small',apiKey:'private-secret'};
