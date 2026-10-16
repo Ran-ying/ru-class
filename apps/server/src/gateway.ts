@@ -6,14 +6,14 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Session } from './session.js';
 import { OpenAICompatibleAsr, type AsrOptions } from './inference.js';
 import { Continuity, decodeAudio, event, parseEvent } from './protocol.js';
-import { createModelStore, normalizeAccount, probeAccount, publicAccount, validKind, envSpeechOverride, listAvailableModels, discoveryAccount, type Accounts } from './model-settings.js';
+import { createModelStore, normalizeAccount, probeAccount, publicAccount, validKind, listAvailableModels, discoveryAccount, type Accounts } from './model-settings.js';
 
 type Config = {clientToken: string; workerToken: string; publicOrigin?: string; webRoot?: string; asr?:AsrOptions; localBootstrap?:boolean; configPath?:string; modelSettings?:Pick<Accounts,'image'|'text'>};
 export function createGateway(config: Config) {
   if (config.clientToken.length < 24 || config.workerToken.length < 24 || config.clientToken === config.workerToken) throw new Error('Configure distinct CLIENT_TOKEN and WORKER_TOKEN (at least 24 characters)');
   let directAdapter=config.asr ? new OpenAICompatibleAsr(config.asr) : undefined;
   let directReady=false;
-  const modelStore=createModelStore(config.configPath||'config.json', {
+  const modelStore=createModelStore(config.configPath||'data/local-models.json', {
     speech: config.asr?{...config.asr}:{baseUrl:'',model:'',apiKey:''},
     image: config.modelSettings?.image||{baseUrl:'',model:'',apiKey:''},
     text: config.modelSettings?.text||{baseUrl:'',model:'',apiKey:''}
@@ -35,7 +35,7 @@ export function createGateway(config: Config) {
     const local=config.localBootstrap && ['localhost','127.0.0.1','[::1]'].includes(host) && ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress||'') && !config.publicOrigin;
     if(apiPath==='/api/bootstrap') {
       if(req.method!=='GET'||!local||(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)){res.writeHead(403).end();return;}
-      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({clientToken:config.clientToken,asr:{baseUrl:directAdapter?.options.baseUrl||'',model:directAdapter?.options.model||'small',keyConfigured:!!directAdapter?.options.apiKey},ready:directReady,models:Object.fromEntries((['speech','image','text'] as const).map(k=>[k,publicAccount(modelStore.models[k])]))}));return;
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({clientToken:config.clientToken,asr:{baseUrl:directAdapter?.options.baseUrl||'',model:directAdapter?.options.model||'',keyConfigured:!!directAdapter?.options.apiKey},ready:directReady,models:Object.fromEntries((['speech','image','text'] as const).map(k=>[k,publicAccount(modelStore.models[k])]))}));return;
     }
     const profileRoute=/^\/api\/models\/(speech|image|text)\/(save|test|list)$/.exec(apiPath);
     if(profileRoute){
@@ -44,7 +44,6 @@ export function createGateway(config: Config) {
       res.setHeader('Content-Type','application/json');
       if(!validKind(kind)){res.writeHead(400).end(JSON.stringify({error:'INVALID_MODEL_KIND'}));return;}
       if(operation==='save' && kind==='speech' && active){res.writeHead(409).end(JSON.stringify({error:'录音进行中，不能更换语音模型'}));return;}
-      if(operation==='save' && kind==='speech' && envSpeechOverride()){res.writeHead(409).end(JSON.stringify({error:'语音模型由环境变量配置，请先移除 ASR_* 环境变量覆盖'}));return;}
       try{
         let body='';for await(const part of req){body+=part;if(body.length>8192)throw new Error('MODEL_REQUEST_TOO_LARGE');}
         const input=JSON.parse(body);
