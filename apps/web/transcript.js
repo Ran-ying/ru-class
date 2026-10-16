@@ -31,7 +31,11 @@ function overlap(oldWords, newWords, minLength = 2) {
       const length = curr[j] = prev[j - 1] + 1;
       if (length < minLength) continue;
       const oldEnd = offset + i;
-      const score = length * 100 - (oldWords.length - oldEnd) * 3 - (newWords.length - j);
+      // When the latest hypothesis contains the same short phrase twice,
+      // match its FIRST occurrence to the previous tail. Anchoring to the
+      // last occurrence incorrectly erases a genuinely repeated statement
+      // (e.g. "где вы платили ... когда вы платили").
+      const score = length * 100 - (oldWords.length - oldEnd) * 3 - (j - length) * 2;
       if (score > bestScore) {
         bestScore = score;
         best = {old: oldEnd - length, next: j - length, length};
