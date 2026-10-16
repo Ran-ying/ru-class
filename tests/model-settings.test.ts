@@ -12,7 +12,7 @@ test('three profiles persist independently without tests or leaking keys',async(
   const dir=await mkdtemp(join(tmpdir(),'ru-class-models-'));const file=join(dir,'config.json');
   const provider=http.createServer((req,res)=>{
     if(req.url!=='/v1/models'||req.headers.authorization!=='Bearer vision-secret'){res.writeHead(401).end();return;}
-    res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:[{id:'vision-model'}]}));
+    res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:[{id:'vision-model'},{id:'vision-model'},{id:'alpha-vision'},{id:'bad model'}]}));
   });
   provider.listen(0,'127.0.0.1');await new Promise<void>(r=>provider.once('listening',r));
   const port=(provider.address() as any).port;
@@ -25,6 +25,14 @@ test('three profiles persist independently without tests or leaking keys',async(
   const post=(kind:string,action:string,data:any)=>fetch(origin+'/api/models/'+kind+'/'+action,{method:'POST',headers,body:JSON.stringify(data)});
   try {
     const image={baseUrl:'http://127.0.0.1:'+port+'/v1',model:'vision-model',apiKey:'vision-secret'};
+    // Model discovery accepts an UNSAVED endpoint/key and never persists it.
+    let discovery=await post('image','list',{baseUrl:image.baseUrl,apiKey:image.apiKey});
+    assert.equal(discovery.status,200);
+    assert.deepEqual((await discovery.json()).models,['alpha-vision','vision-model']);
+    let before=JSON.parse(await readFile(file,'utf8'));
+    assert.equal(before.models,undefined);
+    assert.equal((await post('text','list',{baseUrl:image.baseUrl,apiKey:''})).status,400);
+    assert.equal((await post('image','list',{baseUrl:image.baseUrl,apiKey:'wrong'})).status,400); // Provider rejected authentication.
     const save=await post('image','save',image);
     assert.equal(save.status,200);
     assert.equal((await save.json()).profile.keyConfigured,true);
@@ -37,6 +45,9 @@ test('three profiles persist independently without tests or leaking keys',async(
     assert.equal(bootstrap.models.image.keyConfigured,true);
     assert.ok(!JSON.stringify(bootstrap).includes('vision-secret'));
     assert.equal((await post('image','test',{...image,apiKey:''})).status,200);
+    discovery=await post('image','list',{baseUrl:image.baseUrl,apiKey:''});
+    assert.equal(discovery.status,200); // Same URL reuses the saved key, no key leaves the backend.
+    assert.deepEqual((await discovery.json()).models,['alpha-vision','vision-model']);
     const bad=await post('image','test',{...image,baseUrl:'http://localhost:9/v1',apiKey:''});
     assert.equal(bad.status,400); // Blank keys cannot move to a different endpoint.
     assert.equal((await post('text','save',{baseUrl:'https://text.example.test/v1',model:'text-model',apiKey:'text-secret'})).status,200);

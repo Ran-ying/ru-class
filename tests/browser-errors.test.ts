@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const elements=new Map<string,any>();
-const get=(id:string)=>{if(!elements.has(id))elements.set(id,{textContent:'',value:'local-test-access-token',disabled:false});return elements.get(id);};
+const get=(id:string)=>{if(!elements.has(id))elements.set(id,{
+  textContent:'',value:'local-test-access-token',disabled:false,
+  replaceChildren(...options:any[]){this.options=options;this.value=options[0]?.value||'';},
+  setAttribute(name:string,value:string){this[name]=value;}
+});return elements.get(id);};
 (globalThis as any).fetch=async()=>({ok:true,json:async()=>({clientToken:'SIMULATED_BROWSER_TOKEN',asr:{baseUrl:'http://localhost/v1',model:'SIMULATED_TEST',keyConfigured:true},ready:true})});
-(globalThis as any).document={getElementById:get};
+(globalThis as any).document={getElementById:get,createElement:()=>({value:'',textContent:''})};
 (globalThis as any).window={isSecureContext:true,AudioWorkletNode:function(){},addEventListener:()=>{}};
 let closed=0;
 (globalThis as any).AudioContext=class{state='running';async resume(){}async close(){closed++;this.state='closed';}};
@@ -127,4 +131,50 @@ test('settings pill tabs and per-kind save/test actions stay independent',async(
     await new Promise(r=>setImmediate(r));
     assert.equal(saves,2);assert.equal(probes,1);
   }finally{(globalThis as any).fetch=before;}
+});
+
+test('model discovery fills dropdown, supports manual fallback and ignores stale provider lists',async()=>{
+  const prior=(globalThis as any).fetch;
+  const sent:any[]=[];
+  (globalThis as any).fetch=async(url:string,opts:any)=>{
+    if(url==='/api/bootstrap')return {ok:true,status:200,json:async()=>({clientToken:'SIMULATED_BROWSER_TOKEN',ready:true,models:{
+      speech:{baseUrl:'http://127.0.0.1:8090/v1',model:'small',keyConfigured:true},
+      image:{baseUrl:'',model:'',keyConfigured:false},
+      text:{baseUrl:'',model:'',keyConfigured:false}
+    }})};
+    assert.equal(url,'/api/models/image/list');
+    sent.push(JSON.parse(opts.body));
+    return {ok:true,status:200,json:async()=>({models:['vision-b','vision-a','vision-c']})};
+  };
+  try{
+    await get('settings-open').onclick();
+    get('image-url').value='https://vision.example/v1';
+    get('image-model').value='';
+    get('image-key').value='input-key-secret';
+    await get('image-list').onclick();
+    await new Promise(r=>setImmediate(r));
+    assert.deepEqual(sent,[{baseUrl:'https://vision.example/v1',apiKey:'input-key-secret'}]);
+    assert.equal(get('image-model-select').options.length,4);
+    assert.equal(get('image-model-select').value,'vision-b');
+    assert.equal(get('image-model-manual-wrap').hidden,true);
+    assert.equal(get('image-model').value,'vision-b');
+    get('image-model-select').value='vision-c';
+    get('image-model-select').onchange();
+    assert.equal(get('image-model').value,'vision-c');
+    get('image-model-select').value='__manual__';
+    get('image-model-select').onchange();
+    assert.equal(get('image-model-manual-wrap').hidden,false);
+    get('image-model').value='custom-model';
+    get('image-url').value='https://changed.example/v1';
+    get('image-url').oninput();
+    assert.equal(get('image-model-select').options.length,1);
+    assert.equal(get('image-model').value,'custom-model');
+    // A failed listing still allows manual entry.
+    (globalThis as any).fetch=async(url:string)=>{
+      if(url==='/api/models/image/list')return {ok:false,status:502,json:async()=>({error:'MODEL_HTTP_404'})};
+      throw Error('Unexpected URL '+url);
+    };
+    await get('image-list').onclick();await new Promise(r=>setImmediate(r));
+    assert.match(get('image-model-count').textContent,/仍可手动输入模型 ID/);
+  }finally{(globalThis as any).fetch=prior;}
 });

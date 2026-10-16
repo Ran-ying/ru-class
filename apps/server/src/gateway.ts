@@ -6,7 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Session } from './session.js';
 import { OpenAICompatibleAsr, type AsrOptions } from './inference.js';
 import { Continuity, decodeAudio, event, parseEvent } from './protocol.js';
-import { createModelStore, normalizeAccount, probeAccount, publicAccount, validKind, envSpeechOverride, type Accounts } from './model-settings.js';
+import { createModelStore, normalizeAccount, probeAccount, publicAccount, validKind, envSpeechOverride, listAvailableModels, type Accounts } from './model-settings.js';
 
 type Config = {clientToken: string; workerToken: string; publicOrigin?: string; webRoot?: string; asr?:AsrOptions; localBootstrap?:boolean; configPath?:string; modelSettings?:Pick<Accounts,'image'|'text'>};
 export function createGateway(config: Config) {
@@ -37,7 +37,7 @@ export function createGateway(config: Config) {
       if(req.method!=='GET'||!local||(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)){res.writeHead(403).end();return;}
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify({clientToken:config.clientToken,asr:{baseUrl:directAdapter?.options.baseUrl||'',model:directAdapter?.options.model||'small',keyConfigured:!!directAdapter?.options.apiKey},ready:directReady,models:Object.fromEntries((['speech','image','text'] as const).map(k=>[k,publicAccount(modelStore.models[k])]))}));return;
     }
-    const profileRoute=/^\/api\/models\/(speech|image|text)\/(save|test)$/.exec(apiPath);
+    const profileRoute=/^\/api\/models\/(speech|image|text)\/(save|test|list)$/.exec(apiPath);
     if(profileRoute){
       const kind=profileRoute[1],operation=profileRoute[2];
       if(req.method!=='POST'||!local||req.headers.origin!==`http://${req.headers.host}`||req.headers.authorization!==`Bearer ${config.clientToken}`){res.writeHead(403).end();return;}
@@ -47,7 +47,17 @@ export function createGateway(config: Config) {
       if(operation==='save' && kind==='speech' && envSpeechOverride()){res.writeHead(409).end(JSON.stringify({error:'语音模型由环境变量配置，请先移除 ASR_* 环境变量覆盖'}));return;}
       try{
         let body='';for await(const part of req){body+=part;if(body.length>8192)throw new Error('MODEL_REQUEST_TOO_LARGE');}
-        const account=normalizeAccount(JSON.parse(body),modelStore.models[kind]);
+        const input=JSON.parse(body);
+        // Discovery only requires endpoint/key; model selection comes AFTER this call.
+        const account=normalizeAccount(operation==='list'?{
+          baseUrl:input?.baseUrl, model:modelStore.models[kind].model||'lookup',
+          apiKey:input?.apiKey
+        }:input,modelStore.models[kind]);
+        if(operation==='list'){
+          const models=await listAvailableModels(account);
+          res.end(JSON.stringify({ok:true,models}));
+          return;
+        }
         if(operation==='test'){
           await probeAccount(account);
           if(kind==='speech' && account.baseUrl===modelStore.models.speech.baseUrl && account.model===modelStore.models.speech.model && account.apiKey===modelStore.models.speech.apiKey) {

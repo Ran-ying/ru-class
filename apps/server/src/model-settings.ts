@@ -72,3 +72,45 @@ export function createModelStore(path:string, initial:Accounts) {
   }
   return {models,persist};
 }
+
+/**
+ * Discover models without persisting configuration or changing the active ASR.
+ * Only the authenticated local settings API may call this function. An API's
+ * model listing can contain other modalities; it is not proof of inference.
+ */
+export async function listAvailableModels(account: ModelAccount):Promise<string[]> {
+  if(!account.apiKey) throw new Error('MODEL_API_KEY_REQUIRED');
+  const response=await fetch(account.baseUrl.replace(/\/+$/,'')+'/models',{
+    headers:{Authorization:'Bearer '+account.apiKey,Accept:'application/json'},
+    signal:AbortSignal.timeout(10000),redirect:'error'
+  });
+  if(!response.ok) throw new Error('MODEL_HTTP_'+response.status);
+  const reader=response.body?.getReader();
+  if(!reader) throw new Error('MODEL_LIST_UNAVAILABLE');
+  const chunks:Uint8Array[]=[];
+  let total=0;
+  try {
+    for(;;){
+      const part=await reader.read();
+      if(part.done)break;
+      total+=part.value.byteLength;
+      if(total>1024*1024)throw new Error('MODEL_LIST_TOO_LARGE');
+      chunks.push(part.value);
+    }
+  } finally {await reader.cancel().catch(()=>{});}
+  let value:unknown;
+  try{
+    const buffer=Buffer.concat(chunks.map(c=>Buffer.from(c)));
+    value=JSON.parse(buffer.toString('utf8'));
+  }catch{throw new Error('INVALID_MODEL_LIST');}
+  if(!value||typeof value!=='object'||!Array.isArray((value as {data?:unknown}).data))throw new Error('INVALID_MODEL_LIST');
+  const entries=(value as {data:unknown[]}).data;
+  if(entries.length>5000)throw new Error('MODEL_LIST_TOO_LARGE');
+  const ids=new Set<string>();
+  for(const entry of entries){
+    if(!entry||typeof entry!=='object')continue;
+    const id=(entry as {id?:unknown}).id;
+    if(typeof id==='string'&&id.length<=100&&/^[a-zA-Z0-9._/-]+$/.test(id))ids.add(id);
+  }
+  return [...ids].sort((a,b)=>a.localeCompare(b));
+}
