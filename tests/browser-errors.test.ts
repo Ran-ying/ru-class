@@ -75,7 +75,7 @@ test('direct API calls support CORS-compatible model discovery and real WAV mult
       assert.equal(file.name,'window.wav');
       const bytes=new Uint8Array(await file.arrayBuffer());
       assert.equal(new TextDecoder().decode(bytes.slice(0,4)),'RIFF');
-      return new Response(JSON.stringify({text:'Сегодня мы обсуждаем методы защиты'}),{status:200});
+      return new Response(JSON.stringify({text:'  Сегодня мы обсуждаем методы защиты  '}),{status:200});
     }
     throw Error('Unexpected request: '+url);
   }) as any;
@@ -90,7 +90,8 @@ test('direct API calls support CORS-compatible model discovery and real WAV mult
     assert.ok(results.some(x=>x.stable_delta.includes('Сегодня')));
     assert.equal(results.at(-1).partial_text,'');
     assert.equal(results.at(-1).final,true);
-    assert.equal(results[0].raw_hypothesis_text,'Сегодня мы обсуждаем методы защиты');
+    assert.equal(results[0].raw_hypothesis_text,'  Сегодня мы обсуждаем методы защиты  ',
+      'Evidence preserves exact provider text including whitespace');
     assert.equal(results[0].window_start_sample,0);
     assert.equal(results[0].window_end_sample,32000);
     assert.equal(results.at(-1).raw_hypothesis_text,undefined,
