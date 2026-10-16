@@ -4,12 +4,15 @@ const DB_NAME='ru-class-local-v1';
 function openDatabase(){
   if(!globalThis.indexedDB)throw new Error('当前浏览器不支持 IndexedDB，不能保存私人数据。');
   return new Promise((resolve,reject)=>{
-    const request=indexedDB.open(DB_NAME,1);
+    const request=indexedDB.open(DB_NAME,2);
     request.onupgradeneeded=()=>{
       const db=request.result;
       if(!db.objectStoreNames.contains('profiles'))db.createObjectStore('profiles',{keyPath:'kind'});
       if(!db.objectStoreNames.contains('lessons'))db.createObjectStore('lessons',{keyPath:'id'});
       if(!db.objectStoreNames.contains('audio'))db.createObjectStore('audio',{keyPath:['lessonId','index']});
+      // v2: private, append-only raw ASR-window evidence. This is deliberately
+      // independent of the lossy stable/partial subtitle projection.
+      if(!db.objectStoreNames.contains('hypotheses'))db.createObjectStore('hypotheses',{keyPath:['lessonId','endSample']});
     };
     request.onsuccess=()=>resolve(request.result);
     request.onerror=()=>reject(request.error||new Error('LOCAL_DATABASE_UNAVAILABLE'));
@@ -53,6 +56,46 @@ export async function listLessons(){
   const rows=await withStore('lessons','readonly',s=>s.getAll());
   return rows.sort((a,b)=>b.startedAt-a.startedAt);
 }
+/**
+ * Original Whisper hypotheses are retained so an imperfect rolling-text
+ * assembler cannot be the only surviving record of a classroom's content.
+ * They never leave the user's browser except via explicit local download.
+ */
+export async function saveHypothesis(lessonId,hypothesis){
+  if(typeof lessonId!=='string'||!lessonId||typeof hypothesis?.text!=='string'||
+     hypothesis.text.length>20000||!Number.isSafeInteger(hypothesis.startSample)||
+     !Number.isSafeInteger(hypothesis.endSample)||hypothesis.startSample<0||
+     hypothesis.endSample<=hypothesis.startSample)throw Error('INVALID_ASR_HYPOTHESIS');
+  const entry={
+    lessonId,startSample:hypothesis.startSample,endSample:hypothesis.endSample,
+    text:hypothesis.text,final:hypothesis.final===true,
+    inferenceMs:Number.isFinite(hypothesis.inferenceMs)?Math.max(0,hypothesis.inferenceMs):null
+  };
+  // Store by actual sample position instead of receipt time; duplicate
+  // completions of the same audio position do not add a second utterance.
+  await withStore('hypotheses','readwrite',s=>s.put(entry));
+}
+export async function lessonHypotheses(lessonId){
+  if(typeof lessonId!=='string'||!lessonId)throw Error('INVALID_LESSON_ID');
+  const rows=await withStore('hypotheses','readonly',s=>s.getAll(
+    IDBKeyRange.bound([lessonId,0],[lessonId,Number.MAX_SAFE_INTEGER])
+  ));
+  rows.sort((a,b)=>a.endSample-b.endSample);
+  // Exclude the IndexedDB key and credentials from portable private evidence.
+  return rows.map(x=>({
+    text:x.text,window_start_sample:x.startSample,
+    window_end_sample:x.endSample,final:x.final,
+    inference_ms:x.inferenceMs
+  }));
+}
+export async function lessonHypothesesJson(lessonId){
+  const windows=await lessonHypotheses(lessonId);
+  return new Blob([JSON.stringify({
+    format:'ru-class-asr-windows-v1',
+    sample_rate:16000,
+    windows
+  },null,2)],{type:'application/json'});
+}
 export function pcm16(samples){
   const bytes=new Uint8Array(samples.length*2);
   const view=new DataView(bytes.buffer);
@@ -85,7 +128,7 @@ export async function recordingWav(lessonId){
 }
 export async function clearBrowserData(){
   const db=await connection();
-  for(const table of ['profiles','lessons','audio']){
+  for(const table of ['profiles','lessons','audio','hypotheses']){
     await new Promise((resolve,reject)=>{
       const tx=db.transaction(table,'readwrite');
       tx.objectStore(table).clear();
