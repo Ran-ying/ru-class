@@ -85,3 +85,46 @@ test('browser app appends only stable deltas and replaces mutable Russian tail',
   await socket.onmessage({data:JSON.stringify({protocol_version:'0.1',type:'session.stopped',session_id:id,payload:{}})});
   assert.equal(get('ru').hidden,false);assert.equal(get('ru').textContent,'Сегодня мы обсуждаем методы защиты');
 });
+
+test('settings pill tabs and per-kind save/test actions stay independent',async()=>{
+  let saves=0, probes=0;
+  const before=(globalThis as any).fetch;
+  (globalThis as any).fetch=async(url:string,init:any)=>{
+    if(url==='/api/bootstrap')return {ok:true,status:200,json:async()=>({
+      clientToken:'SIMULATED_BROWSER_TOKEN',ready:true,models:{
+        speech:{baseUrl:'http://127.0.0.1:8090/v1',model:'small',keyConfigured:true},
+        image:{baseUrl:'',model:'',keyConfigured:false},text:{baseUrl:'',model:'',keyConfigured:false}
+      }
+    })};
+    assert.match(url,/^\/api\/models\/(image|text)\/(save|test)$/);
+    const body=JSON.parse(init.body);
+    if(url.endsWith('/save')){
+      saves++;return {ok:true,json:async()=>({ok:true,profile:{baseUrl:body.baseUrl,model:body.model,keyConfigured:true}})};
+    }
+    probes++;return {ok:true,json:async()=>({ok:true})};
+  };
+  try{
+    await get('settings-open').onclick();
+    assert.equal(get('panel-models').hidden,false);
+    await get('tab-access').onclick();
+    assert.equal(get('panel-models').hidden,true);
+    await get('tab-models').onclick();
+    assert.equal(get('panel-access').hidden,true);
+    get('image-url').value='https://vision.example/v1';
+    get('image-model').value='vision-test';
+    get('image-key').value='image-secret';
+    get('model-image').onsubmit({preventDefault(){}});
+    await new Promise(r=>setImmediate(r));
+    assert.equal(saves,1);assert.equal(probes,0);
+    assert.match(get('image-feedback').textContent,/已独立保存/);
+    get('image-test').onclick();
+    await new Promise(r=>setImmediate(r));
+    assert.equal(saves,1);assert.equal(probes,1);
+    get('text-url').value='https://text.example/v1';
+    get('text-model').value='text-test';
+    get('text-key').value='text-secret';
+    get('model-text').onsubmit({preventDefault(){}});
+    await new Promise(r=>setImmediate(r));
+    assert.equal(saves,2);assert.equal(probes,1);
+  }finally{(globalThis as any).fetch=before;}
+});
