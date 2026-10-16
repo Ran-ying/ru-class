@@ -1,3 +1,11 @@
+> **HISTORICAL REVERSE PROXY CONFIGURATION (2026-10-17)**. Do not use
+> `/ws/client`, server ASR credentials or legacy website access-token
+> routing in the active v0.2.2 product. Serve `apps/web/` as static HTTPS
+> assets, and separately expose any privately owned ASR through its own HTTPS
+> endpoint if the user's browser needs remote access. See
+> [current status](current-status.md) and
+> [browser-direct architecture](browser-direct-byok.md).
+
 # v0.2.0：RU-Class 不需要 API 反向代理
 
 RU-Class 的网页与用户 API 的请求链路是**分离的**：部署 RU-Class 只需托管 `apps/web` 静态文件到 HTTPS 站点。用户浏览器直连自己的 ASR/文字/图像 API。**不要配置到 Node 的 `/ws/client` 或 `/api/asr` 的代理；这些属于旧版历史代码。**
