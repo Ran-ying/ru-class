@@ -92,6 +92,10 @@ export class TranscriptBuffer {
     // An identical hypothesis from a moving, overlapping 8-second window
     // does not establish an additional spoken occurrence. Nonoverlapping
     // windows are NOT deduplicated: a teacher may truly repeat a phrase.
+    // A fresh, nonempty window interrupts a silence streak even when its
+    // words are identical to the preceding nonempty hypothesis. Otherwise
+    // [speech, silence, unchanged speech, silence] erroneously flushes.
+    if (next.length) this.emptyWindows = 0;
     if (unchanged) return final ? this.flush() : this.state();
     if (!next.length) {
       this.emptyWindows++;
@@ -169,15 +173,34 @@ export class TranscriptBuffer {
     if (final) return this.flush();
     return this.state();
   }
-  flush() {
-    this.stable.push(...this.pending);
-    this.pending = [];
-    if (this.unanchored) {
-      const last = this.stable.slice(-12);
-      const m = overlap(last, this.unanchored);
-      this.stable.push(...(m ? this.unanchored.slice(m.next + m.length) : this.unanchored));
-      this.unanchored = undefined;
+  /**
+   * Resolve the visible draft once, identically for rendering and stop.
+   * An unanchored hypothesis is an alternative interpretation of audio
+   * already represented by pending, not automatically another sentence.
+   * This deliberately does not mutate stable/pending during UI rendering.
+   */
+  effectiveDraft() {
+    const draft = [...this.pending];
+    if (!this.unanchored) return draft;
+    const match = overlap(draft, this.unanchored);
+    if (match && match.old + match.length >= draft.length - 2) {
+      return [...draft.slice(0, match.old), ...this.unanchored.slice(match.next)];
     }
+    if (!draft.length) {
+      // If there is no pending text, a tentative hypothesis may overlap the
+      // already committed stable tail. Display and flush must both remove
+      // that same old prefix instead of treating it as fresh speech.
+      const tail = overlap(this.stable.slice(-12), this.unanchored);
+      return tail ? this.unanchored.slice(tail.next + tail.length) : [...this.unanchored];
+    }
+    return [...draft, ...this.unanchored];
+  }
+  flush() {
+    // Commit exactly the draft the user was seeing before stop. In
+    // particular, never resurrect words replaced by the unanchored draft.
+    this.stable.push(...this.effectiveDraft());
+    this.pending = [];
+    this.unanchored = undefined;
     this.emptyWindows = 0;
     return this.state();
   }
@@ -186,19 +209,7 @@ export class TranscriptBuffer {
   state(forcePartial) {
     const stable_delta = joined(this.stable.slice(this.sentStable));
     this.sentStable = this.stable.length;
-    // unanchored is a tentative interpretation of overlapping audio, not
-    // necessarily an independent sentence. Collapse a lexical draft-tail
-    // overlap for display; NEVER append both interpretations verbatim.
-    let pending = [...this.pending];
-    if (forcePartial === undefined && this.unanchored) {
-      const match = overlap(pending, this.unanchored);
-      if (match && match.old + match.length >= pending.length - 2) {
-        pending = [...pending.slice(0, match.old), ...this.unanchored.slice(match.next)];
-      } else {
-        pending.push(...this.unanchored);
-      }
-    }
-    if (forcePartial !== undefined) pending = [];
+    const pending = forcePartial === undefined ? this.effectiveDraft() : [];
     return {stable_delta, partial_text: joined(pending), revision: ++this.revision};
   }
 }
