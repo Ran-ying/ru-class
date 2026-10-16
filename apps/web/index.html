@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.1.7</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.2.0</title><link rel="stylesheet" href="/style.css"></head>
 <body>
 <main><section class="notes"><div class="workspace-top"><label>课程名称<input id="lesson" maxlength="120" placeholder="例如：信息安全导论"></label></div><div class="notes-placeholder"><span class="eyebrow">课堂工作区</span><h1>留给思考的空间。</h1><p>笔记区域预留</p><small>当前版本提供右侧俄语实时字幕。</small></div></section>
 <section class="transcription" aria-label="课堂转写">
@@ -10,13 +10,13 @@
     <h2 id="settings-title">设置</h2>
     <div class="settings-tabs" role="tablist" aria-label="设置分类">
       <button type="button" class="settings-tab" id="tab-models" role="tab" aria-selected="true" aria-controls="panel-models">模型</button>
-      <button type="button" class="settings-tab" id="tab-access" role="tab" aria-selected="false" aria-controls="panel-access" tabindex="-1">访问</button>
+      <button type="button" class="settings-tab" id="tab-access" role="tab" aria-selected="false" aria-controls="panel-access" tabindex="-1">本地数据</button>
     </div>
     <form method="dialog"><button class="close-button" aria-label="关闭设置" title="关闭设置">×</button></form>
   </div>
   <div class="settings-body">
   <section id="panel-models" role="tabpanel" aria-labelledby="tab-models">
-    <p id="models-unavailable" hidden class="settings-help">公开多用户的独立模型配置仍在开发中。当前请先在内网测试，暂不要开放此服务。</p>
+    
     <div id="model-cards">
       <form class="model-card" id="model-speech">
         <h3>语音</h3><p class="model-purpose">俄语实时识别 · 当前可用</p>
@@ -67,11 +67,14 @@
         <p id="text-feedback" class="model-feedback" role="status"></p>
       </form>
     </div>
-    <p id="worker-detail" class="settings-help">使用前需要自行填写语音 API、模型和 Token；RU-Class 不提供默认模型。</p>
+    <p class="settings-help">这里保存的 Token 只存放在当前浏览器中；直接请求 API 时会发送给你选择的供应商。</p>
   </section>
   <section id="panel-access" role="tabpanel" aria-labelledby="tab-access" hidden>
-    <p id="local-access-help" class="settings-help">当前为本机模式。浏览器身份验证自动处理，无需输入站点令牌。</p>
-    <form id="site-auth" hidden><label>站点访问令牌<input id="site-token" type="password" autocomplete="off" minlength="24" placeholder="请输入服务器设置的访问令牌" required></label><p class="settings-help">公网模式使用 HTTPS/WSS。站点令牌只保存在当前标签页；模型 API Key 只在服务器端保存。</p><button type="submit">保存访问令牌</button><p id="site-feedback" role="status"></p></form>
+    <p class="settings-help">你的模型 API 地址和 Token、课堂记录和录音都只存储在当前浏览器。RU-Class 网站服务器不保存这些数据，换设备或清除网站数据不会自动恢复。</p>
+    <h3>本地课堂记录</h3>
+    <div id="local-lessons" aria-live="polite"></div>
+    <button type="button" class="secondary" id="clear-local">清空此浏览器的全部数据</button>
+    <p id="local-feedback" role="status"></p>
   </section>
   </div>
 </dialog><script type="module" src="/app.js"></script></body></html>
