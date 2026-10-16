@@ -11,6 +11,20 @@ const keyParts=(store:string,value:any)=>{
   const path=schemas.get(store)!;
   return Array.isArray(path)?path.map(part=>value[part]):value[path];
 };
+// Simulate real pre-existing v1 data BEFORE the v2 open/upgrade event.
+for(const [name,path] of [
+  ['profiles','kind'],['lessons','id'],['audio',['lessonId','index']]
+] as [string,string|string[]][]){
+  schemas.set(name,path);stores.set(name,new Map());
+}
+const oldProfile={kind:'speech',baseUrl:'https://v1.example.test/v1',model:'small',apiKey:'v1-private-key'};
+const oldLesson={id:'v1-course',startedAt:100,title:'Previous class'};
+const oldAudio={lessonId:'v1-course',index:0,data:new Uint8Array([1,2,3,4])};
+for(const [name,value] of [
+  ['profiles',oldProfile],['lessons',oldLesson],['audio',oldAudio]
+] as [string,any][]){
+  stores.get(name)!.set(key(keyParts(name,value)),structuredClone(value));
+}
 const fakeDb={
   objectStoreNames:{contains:(name:string)=>stores.has(name)},
   createObjectStore(name:string,args:{keyPath:string|string[]}){
@@ -29,6 +43,13 @@ const fakeDb={
       return r;
     };
     tx.objectStore=()=>({
+      get:(id:any)=>request(()=>structuredClone(table.get(key(id)))),
+      add:(value:any)=>request(()=>{
+        const k=key(keyParts(name,value));
+        if(table.has(k))throw Error('ConstraintError');
+        table.set(k,structuredClone(value));
+        return keyParts(name,value);
+      }),
       put:(value:any)=>request(()=>{
         table.set(key(keyParts(name,value)),structuredClone(value));
         return keyParts(name,value);
@@ -63,12 +84,15 @@ const storage = await import('../apps/web/local-store.js');
 const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
   saveProfile,loadProfiles,saveLesson,listLessons,clearBrowserData}=storage;
 
-test('IndexedDB v2 adds hypothesis store without erasing old v1 stores',async()=>{
-  const oldProfile={baseUrl:'https://example.test/v1',model:'small',apiKey:'private-secret'};
-  await saveProfile('speech',oldProfile);
+test('IndexedDB v2 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
+  const previous=await loadProfiles();
   assert.deepEqual(requestedVersions,[2]);
   assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses']);
-  assert.equal((await loadProfiles()).speech.apiKey,oldProfile.apiKey);
+  assert.equal(previous.speech.apiKey,oldProfile.apiKey);
+  assert.equal((await listLessons())[0].title,oldLesson.title);
+  assert.deepEqual([...stores.get('audio')!.values()][0].data,oldAudio.data);
+  await saveProfile('speech',{baseUrl:'https://example.test/v1',model:'small',apiKey:'private-secret'});
+  assert.equal((await loadProfiles()).speech.apiKey,'private-secret');
   await saveLesson({id:'course-a',startedAt:12345,title:'Local class'});
   assert.equal((await listLessons())[0].title,'Local class');
 });
@@ -102,6 +126,15 @@ test('raw ASR hypotheses survive caption rewrites and are exported as private po
   });
   assert.equal((await lessonHypotheses('course-a')).length,2,
     'Retrying same audio endpoint cannot create a second hypothesis');
+  await assert.rejects(saveHypothesis('course-a',{
+    text:'A new incompatible transcription cannot overwrite old evidence',
+    startSample:0,endSample:32000
+  }),/ASR_WINDOW_CONFLICT/);
+  assert.equal((await lessonHypotheses('course-a'))[0].text,'Первая предварительная фраза');
+  await assert.rejects(saveHypothesis('course-a',{
+    text:'Первая предварительная фраза',
+    startSample:1000,endSample:32000
+  }),/ASR_WINDOW_CONFLICT/);
 });
 
 test('empty evidence export is reported clearly for recordings created before schema v2',async()=>{
