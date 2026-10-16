@@ -1,11 +1,8 @@
-import { createGateway } from './gateway.js';
-import { loadConfig } from './config.js';
-
-const config = loadConfig();
-const app = createGateway(config);
-await app.probe();
-app.server.listen(config.port, config.host, () => console.log(JSON.stringify({
-  service: 'ru-class', version: '0.1.7', host: config.host, port: config.port,
-  mode: config.publicOrigin ? 'reverse-proxy' : 'local', transport: 'openai-compatible-asr'
+import {createSite,loadSiteConfig} from './site.js';
+const config=loadSiteConfig();
+const server=createSite();
+server.listen(config.port,config.host,()=>console.log(JSON.stringify({
+  service:'ru-class',version:'0.2.0-browser-byok',host:config.host,port:config.port,
+  mode:'static-browser-direct',publicOrigin:config.publicOrigin||undefined
 })));
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => void app.close().then(() => process.exit(0)));
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(()=>process.exit(0)));
