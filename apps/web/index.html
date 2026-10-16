@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.1.5</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.1.6</title><link rel="stylesheet" href="/style.css"></head>
 <body>
 <main><section class="notes"><div class="workspace-top"><label>课程名称<input id="lesson" maxlength="120" placeholder="例如：信息安全导论"></label></div><div class="notes-placeholder"><span class="eyebrow">课堂工作区</span><h1>留给思考的空间。</h1><p>笔记区域预留</p><small>当前版本提供右侧俄语实时字幕。</small></div></section>
 <section class="transcription" aria-label="课堂转写">
@@ -21,16 +21,15 @@
       <form class="model-card" id="model-speech">
         <h3>语音</h3><p class="model-purpose">俄语实时识别 · 当前可用</p>
         <label>API 地址<input id="speech-url" type="url" required placeholder="http://127.0.0.1:8090/v1"></label>
-        <div class="model-discovery"><button type="button" class="secondary" id="speech-list">获取可用模型</button><span id="speech-model-count" role="status"></span></div>
+        <div class="model-discovery" id="speech-discovery"><button type="button" class="secondary" id="speech-list">获取可用模型</button><span id="speech-model-count" role="status"></span></div>
         <div id="speech-model-stage" hidden>
-          <label id="speech-model-choice" hidden>模型
-            <span class="model-select-row"><select id="speech-model-select" aria-label="语音可用模型" required><option value="">请选择模型</option></select><button type="button" class="model-refresh" id="speech-refresh" title="刷新可用模型" aria-label="刷新语音可用模型">↻</button></span>
-          </label>
+          <div id="speech-model-choice" hidden><label for="speech-model-select">模型</label>
+            <span class="model-select-row"><span class="model-select-control"><select id="speech-model-select" aria-label="语音可用模型" required><option value="">请选择模型</option></select><svg class="model-icon model-chevron-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><button type="button" class="model-refresh" id="speech-refresh" title="刷新可用模型" aria-label="刷新语音可用模型"><svg class="model-icon model-refresh-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.9 3.9L21 14"/><path d="M21 20v-6h-6"/></svg></button></span>
+          </div>
           <label id="speech-model-manual-wrap" hidden>模型名称<input id="speech-model" placeholder="手动输入模型 ID"></label>
         </div>
         <div id="speech-token-stage" hidden>
-          <button type="button" class="token-toggle secondary" id="speech-token-open">填写 Token</button>
-          <label id="speech-key-wrap" hidden>API Token<input id="speech-key" type="password" autocomplete="off" placeholder="输入 Token（已保存的可留空）"></label>
+          <label id="speech-key-wrap">API Token<input id="speech-key" type="password" autocomplete="off" placeholder="输入 Token（已保存的可留空）"></label>
           <div class="model-actions" id="speech-actions" hidden><button type="submit" id="speech-save">保存配置</button><button type="button" class="secondary" id="speech-test">测试连接</button></div>
         </div>
         <p id="speech-feedback" class="model-feedback" role="status"></p>
@@ -38,16 +37,15 @@
       <form class="model-card" id="model-image">
         <h3>图像</h3><p class="model-purpose">未来课堂图片处理 · 本版仅保存与检查接口</p>
         <label>API 地址<input id="image-url" type="url" required placeholder="https://provider.example.com/v1"></label>
-        <div class="model-discovery"><button type="button" class="secondary" id="image-list">获取可用模型</button><span id="image-model-count" role="status"></span></div>
+        <div class="model-discovery" id="image-discovery"><button type="button" class="secondary" id="image-list">获取可用模型</button><span id="image-model-count" role="status"></span></div>
         <div id="image-model-stage" hidden>
-          <label id="image-model-choice" hidden>模型
-            <span class="model-select-row"><select id="image-model-select" aria-label="图像可用模型" required><option value="">请选择模型</option></select><button type="button" class="model-refresh" id="image-refresh" title="刷新可用模型" aria-label="刷新图像可用模型">↻</button></span>
-          </label>
+          <div id="image-model-choice" hidden><label for="image-model-select">模型</label>
+            <span class="model-select-row"><span class="model-select-control"><select id="image-model-select" aria-label="图像可用模型" required><option value="">请选择模型</option></select><svg class="model-icon model-chevron-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><button type="button" class="model-refresh" id="image-refresh" title="刷新可用模型" aria-label="刷新图像可用模型"><svg class="model-icon model-refresh-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.9 3.9L21 14"/><path d="M21 20v-6h-6"/></svg></button></span>
+          </div>
           <label id="image-model-manual-wrap" hidden>模型名称<input id="image-model" placeholder="手动输入模型 ID"></label>
         </div>
         <div id="image-token-stage" hidden>
-          <button type="button" class="token-toggle secondary" id="image-token-open">填写 Token</button>
-          <label id="image-key-wrap" hidden>API Token<input id="image-key" type="password" autocomplete="off" placeholder="输入 Token（已保存的可留空）"></label>
+          <label id="image-key-wrap">API Token<input id="image-key" type="password" autocomplete="off" placeholder="输入 Token（已保存的可留空）"></label>
           <div class="model-actions" id="image-actions" hidden><button type="submit" id="image-save">保存配置</button><button type="button" class="secondary" id="image-test">测试连接</button></div>
         </div>
         <p id="image-feedback" class="model-feedback" role="status"></p>
@@ -55,16 +53,15 @@
       <form class="model-card" id="model-text">
         <h3>文字</h3><p class="model-purpose">未来 DeepSeek 断句与翻译 · 本版仅保存与检查接口</p>
         <label>API 地址<input id="text-url" type="url" required placeholder="https://provider.example.com/v1"></label>
-        <div class="model-discovery"><button type="button" class="secondary" id="text-list">获取可用模型</button><span id="text-model-count" role="status"></span></div>
+        <div class="model-discovery" id="text-discovery"><button type="button" class="secondary" id="text-list">获取可用模型</button><span id="text-model-count" role="status"></span></div>
         <div id="text-model-stage" hidden>
-          <label id="text-model-choice" hidden>模型
-            <span class="model-select-row"><select id="text-model-select" aria-label="文字可用模型" required><option value="">请选择模型</option></select><button type="button" class="model-refresh" id="text-refresh" title="刷新可用模型" aria-label="刷新文字可用模型">↻</button></span>
-          </label>
+          <div id="text-model-choice" hidden><label for="text-model-select">模型</label>
+            <span class="model-select-row"><span class="model-select-control"><select id="text-model-select" aria-label="文字可用模型" required><option value="">请选择模型</option></select><svg class="model-icon model-chevron-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><button type="button" class="model-refresh" id="text-refresh" title="刷新可用模型" aria-label="刷新文字可用模型"><svg class="model-icon model-refresh-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.9 3.9L21 14"/><path d="M21 20v-6h-6"/></svg></button></span>
+          </div>
           <label id="text-model-manual-wrap" hidden>模型名称<input id="text-model" placeholder="手动输入模型 ID"></label>
         </div>
         <div id="text-token-stage" hidden>
-          <button type="button" class="token-toggle secondary" id="text-token-open">填写 Token</button>
-          <label id="text-key-wrap" hidden>API Token<input id="text-key" type="password" autocomplete="off" placeholder="输入 Token（已保存的可留空）"></label>
+          <label id="text-key-wrap">API Token<input id="text-key" type="password" autocomplete="off" placeholder="输入 Token（已保存的可留空）"></label>
           <div class="model-actions" id="text-actions" hidden><button type="submit" id="text-save">保存配置</button><button type="button" class="secondary" id="text-test">测试连接</button></div>
         </div>
         <p id="text-feedback" class="model-feedback" role="status"></p>
