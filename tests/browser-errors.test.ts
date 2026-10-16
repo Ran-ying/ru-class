@@ -90,9 +90,10 @@ test('browser app appends only stable deltas and replaces mutable Russian tail',
   assert.equal(get('ru').hidden,false);assert.equal(get('ru').textContent,'Сегодня мы обсуждаем методы защиты');
 });
 
-test('settings pill tabs and per-kind save/test actions stay independent',async()=>{
-  let saves=0, probes=0;
+
+test('tab navigation and model setup require explicit discovery, Token reveal, save and test',async()=>{
   const before=(globalThis as any).fetch;
+  const calls:any[]=[];
   (globalThis as any).fetch=async(url:string,init:any)=>{
     if(url==='/api/bootstrap')return {ok:true,status:200,json:async()=>({
       clientToken:'SIMULATED_BROWSER_TOKEN',ready:true,models:{
@@ -100,81 +101,121 @@ test('settings pill tabs and per-kind save/test actions stay independent',async(
         image:{baseUrl:'',model:'',keyConfigured:false},text:{baseUrl:'',model:'',keyConfigured:false}
       }
     })};
-    assert.match(url,/^\/api\/models\/(image|text)\/(save|test)$/);
-    const body=JSON.parse(init.body);
-    if(url.endsWith('/save')){
-      saves++;return {ok:true,json:async()=>({ok:true,profile:{baseUrl:body.baseUrl,model:body.model,keyConfigured:true}})};
-    }
-    probes++;return {ok:true,json:async()=>({ok:true})};
+    const body=JSON.parse(init.body);calls.push({url,body});
+    if(url.endsWith('/list'))return {ok:true,status:200,json:async()=>({models:['vision-a','vision-b']})};
+    if(url.endsWith('/save'))return {ok:true,status:200,json:async()=>({profile:{baseUrl:body.baseUrl,model:body.model,keyConfigured:true}})};
+    if(url.endsWith('/test'))return {ok:true,status:200,json:async()=>({ok:true})};
+    throw Error('Unexpected URL '+url);
   };
-  try{
+  try {
     await get('settings-open').onclick();
     assert.equal(get('panel-models').hidden,false);
-    await get('tab-access').onclick();
-    assert.equal(get('panel-models').hidden,true);
-    await get('tab-models').onclick();
-    assert.equal(get('panel-access').hidden,true);
+    get('tab-access').onclick();assert.equal(get('panel-models').hidden,true);
+    get('tab-models').onclick();assert.equal(get('panel-access').hidden,true);
+    assert.equal(get('image-model-stage').hidden,true);
+    assert.equal(get('image-token-stage').hidden,true);
+    assert.equal(get('image-actions').hidden,true);
     get('image-url').value='https://vision.example/v1';
-    get('image-model').value='vision-test';
-    get('image-key').value='image-secret';
+    get('image-url').oninput();
+    await get('image-list').onclick();await new Promise(r=>setImmediate(r));
+    assert.equal(get('image-model-stage').hidden,false);
+    assert.equal(get('image-model-manual-wrap').hidden,true);
+    assert.equal(get('image-model-select').options.length,2);
+    assert.equal(get('image-actions').hidden,true);
+    assert.equal(calls.length,1);
+    get('image-token-open').onclick();
+    assert.equal(get('image-key-wrap').hidden,false);
+    assert.equal(get('image-actions').hidden,false);
+    get('image-key').value='vision-secret';
     get('model-image').onsubmit({preventDefault(){}});
     await new Promise(r=>setImmediate(r));
-    assert.equal(saves,1);assert.equal(probes,0);
-    assert.match(get('image-feedback').textContent,/已独立保存/);
-    get('image-test').onclick();
-    await new Promise(r=>setImmediate(r));
-    assert.equal(saves,1);assert.equal(probes,1);
-    get('text-url').value='https://text.example/v1';
-    get('text-model').value='text-test';
-    get('text-key').value='text-secret';
-    get('model-text').onsubmit({preventDefault(){}});
-    await new Promise(r=>setImmediate(r));
-    assert.equal(saves,2);assert.equal(probes,1);
+    assert.equal(calls.filter(x=>x.url.endsWith('/save')).length,1);
+    assert.equal(calls.filter(x=>x.url.endsWith('/test')).length,0);
+    assert.equal(calls.at(-1).body.model,'vision-a');
+    get('image-test').onclick();await new Promise(r=>setImmediate(r));
+    assert.equal(calls.filter(x=>x.url.endsWith('/test')).length,1);
+    // Other model settings are untouched by saving or testing image.
+    assert.equal(get('text-model-stage').hidden,true);
+    assert.equal(get('text-token-stage').hidden,true);
   }finally{(globalThis as any).fetch=before;}
 });
 
-test('model discovery fills dropdown, supports manual fallback and ignores stale provider lists',async()=>{
-  const prior=(globalThis as any).fetch;
-  const sent:any[]=[];
-  (globalThis as any).fetch=async(url:string,opts:any)=>{
-    if(url==='/api/bootstrap')return {ok:true,status:200,json:async()=>({clientToken:'SIMULATED_BROWSER_TOKEN',ready:true,models:{
-      speech:{baseUrl:'http://127.0.0.1:8090/v1',model:'small',keyConfigured:true},
-      image:{baseUrl:'',model:'',keyConfigured:false},
-      text:{baseUrl:'',model:'',keyConfigured:false}
-    }})};
+test('model list refresh, empty/manual fallback and changing API address reset the workflow',async()=>{
+  const before=(globalThis as any).fetch;
+  let listing=['vision-a','vision-b'];
+  const seen:any[]=[];
+  (globalThis as any).fetch=async(url:string,init:any)=>{
+    if(url==='/api/bootstrap')return {ok:true,status:200,json:async()=>({
+      clientToken:'SIMULATED_BROWSER_TOKEN',ready:true,models:{
+        speech:{baseUrl:'http://127.0.0.1:8090/v1',model:'small',keyConfigured:true},
+        image:{baseUrl:'',model:'',keyConfigured:false},text:{baseUrl:'',model:'',keyConfigured:false}
+      }
+    })};
     assert.equal(url,'/api/models/image/list');
-    sent.push(JSON.parse(opts.body));
-    return {ok:true,status:200,json:async()=>({models:['vision-b','vision-a','vision-c']})};
+    seen.push(JSON.parse(init.body));
+    return {ok:true,status:200,json:async()=>({models:listing})};
   };
   try{
     await get('settings-open').onclick();
     get('image-url').value='https://vision.example/v1';
-    get('image-model').value='';
-    get('image-key').value='input-key-secret';
-    await get('image-list').onclick();
-    await new Promise(r=>setImmediate(r));
-    assert.deepEqual(sent,[{baseUrl:'https://vision.example/v1',apiKey:'input-key-secret'}]);
-    assert.equal(get('image-model-select').options.length,4);
-    assert.equal(get('image-model-select').value,'vision-b');
+    get('image-url').oninput();
+    await get('image-list').onclick();await new Promise(r=>setImmediate(r));
+    assert.equal(get('image-model-select').options.length,2);
+    assert.equal(get('image-model-select').value,'vision-a');
     assert.equal(get('image-model-manual-wrap').hidden,true);
-    assert.equal(get('image-model').value,'vision-b');
-    get('image-model-select').value='vision-c';
-    get('image-model-select').onchange();
-    assert.equal(get('image-model').value,'vision-c');
-    get('image-model-select').value='__manual__';
-    get('image-model-select').onchange();
+    assert.equal(get('image-model').required,false);
+    assert.equal(get('image-model-choice').hidden,false); // Refresh button belongs to visible select row.
+    get('image-model-select').value='vision-b';
+    listing=['vision-b','vision-c'];
+    await get('image-refresh').onclick();await new Promise(r=>setImmediate(r));
+    assert.equal(get('image-model-select').options.length,2);
+    assert.equal(get('image-model-select').value,'vision-b');
+    listing=[];
+    await get('image-refresh').onclick();await new Promise(r=>setImmediate(r));
+    assert.equal(get('image-model-choice').hidden,true);
     assert.equal(get('image-model-manual-wrap').hidden,false);
     get('image-model').value='custom-model';
+    get('image-token-open').onclick();
+    assert.equal(get('image-actions').hidden,false);
     get('image-url').value='https://changed.example/v1';
     get('image-url').oninput();
-    assert.equal(get('image-model-select').options.length,1);
-    assert.equal(get('image-model').value,'custom-model');
-    // A failed listing still allows manual entry.
-    (globalThis as any).fetch=async(url:string)=>{
-      if(url==='/api/models/image/list')return {ok:false,status:502,json:async()=>({error:'MODEL_HTTP_404'})};
-      throw Error('Unexpected URL '+url);
-    };
-    await get('image-list').onclick();await new Promise(r=>setImmediate(r));
-    assert.match(get('image-model-count').textContent,/仍可手动输入模型 ID/);
-  }finally{(globalThis as any).fetch=prior;}
+    assert.equal(get('image-model-stage').hidden,true);
+    assert.equal(get('image-token-stage').hidden,true);
+    assert.equal(get('image-actions').hidden,true);
+    assert.equal(get('image-key').value,'');
+    assert.equal(get('image-model').value,'');
+    assert.equal(seen.length,3);
+  }finally{(globalThis as any).fetch=before;}
+});
+
+test('401 model discovery asks for Token before proceeding without opening save actions',async()=>{
+  const before=(globalThis as any).fetch;
+  let requests=0;
+  (globalThis as any).fetch=async(url:string,init:any)=>{
+    if(url==='/api/bootstrap')return {ok:true,status:200,json:async()=>({
+      clientToken:'SIMULATED_BROWSER_TOKEN',ready:true,models:{speech:{},image:{},text:{}}
+    })};
+    requests++;assert.equal(url,'/api/models/text/list');
+    const {apiKey}=JSON.parse(init.body);
+    return apiKey ? {ok:true,status:200,json:async()=>({models:['text-model']})} :
+      {ok:false,status:400,json:async()=>({error:'MODEL_HTTP_401'})};
+  };
+  try{
+    await get('settings-open').onclick();
+    get('text-url').value='https://restricted.example/v1';
+    get('text-url').oninput();
+    await get('text-list').onclick();await new Promise(r=>setImmediate(r));
+    assert.equal(get('text-model-stage').hidden,true);
+    assert.equal(get('text-token-stage').hidden,false);
+    assert.equal(get('text-actions').hidden,true);
+    assert.match(get('text-model-count').textContent,/先填写 Token/);
+    get('text-token-open').onclick();
+    assert.equal(get('text-key-wrap').hidden,false);
+    assert.equal(get('text-actions').hidden,true);
+    get('text-key').value='secret-token';
+    await get('text-list').onclick();await new Promise(r=>setImmediate(r));
+    assert.equal(get('text-model-select').value,'text-model');
+    assert.equal(get('text-actions').hidden,false);
+    assert.equal(requests,2);
+  }finally{(globalThis as any).fetch=before;}
 });
