@@ -132,6 +132,37 @@ test('real final ASR call preserves the provider text and exact window range',as
   }finally{globalThis.fetch=previous;}
 });
 
+test('provider evidence is saved before subtitle projection, even when projection throws',async()=>{
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=(async()=>new Response(
+    JSON.stringify({text:'  Оригинальная распознанная фраза.  '}),{status:200}
+  )) as any;
+  try{
+    const sequence:string[]=[];
+    const saved:any[]=[];
+    const session=new BrowserAsrSession(
+      {baseUrl:'https://private-asr.example/v1',model:'small',apiKey:'own-key'},
+      ()=>sequence.push('subtitle'),
+      (e:any)=>{sequence.push('error: '+String(e));},
+      async(raw:any)=>{
+        await Promise.resolve();
+        saved.push(raw);
+        sequence.push('evidence');
+      }
+    );
+    session.transcript.update=()=>{throw Error('PROJECTION_FAILURE');};
+    session.ring.push(new Float32Array(2*16000));
+    await assert.rejects(session.run(),/PROJECTION_FAILURE/);
+    assert.deepEqual(sequence,['evidence'],'No subtitle callback may precede raw evidence');
+    assert.equal(saved.length,1);
+    assert.equal(saved[0].text,'  Оригинальная распознанная фраза.  ');
+    assert.equal(saved[0].startSample,0);
+    assert.equal(saved[0].endSample,32000);
+    assert.equal(saved[0].final,false);
+    session.cancel();
+  }finally{globalThis.fetch=originalFetch;}
+});
+
 test('unsupported models endpoint is manual-only; API without CORS is rejected rather than proxied',async()=>{
   const previous=globalThis.fetch;
   try{
