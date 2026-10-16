@@ -14,9 +14,25 @@ function openDatabase(){
       // independent of the lossy stable/partial subtitle projection.
       if(!db.objectStoreNames.contains('hypotheses'))db.createObjectStore('hypotheses',{keyPath:['lessonId','endSample']});
     };
-    request.onsuccess=()=>resolve(request.result);
+    // Another tab may request an upgrade while this tab holds an open handle.
+    // Release the old handle rather than blocking the schema migration.
+    let blocked=false;
+    request.onsuccess=()=>{
+      const db=request.result;
+      // A request can succeed AFTER onblocked already rejected its promise.
+      // Do not leak that late connection or let it replace the rejected state.
+      if(blocked){db.close();return;}
+      db.onversionchange=()=>{
+        db.close();
+        dbPromise=null; // The next operation must obtain a fresh connection.
+      };
+      resolve(db);
+    };
     request.onerror=()=>reject(request.error||new Error('LOCAL_DATABASE_UNAVAILABLE'));
-    request.onblocked=()=>reject(new Error('请关闭其他正在升级 RU-Class 的标签页后重试。'));
+    request.onblocked=()=>{
+      blocked=true;
+      reject(new Error('请关闭其他正在升级 RU-Class 的标签页后重试。'));
+    };
   });
 }
 let dbPromise;
