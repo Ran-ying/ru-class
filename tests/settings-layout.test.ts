@@ -52,10 +52,10 @@ test('wide desktop settings align all three compact model cards in a row and wra
   const css=readFileSync('apps/web/style.css','utf8');
   const html=readFileSync('apps/web/index.html','utf8');
   const js=readFileSync('apps/web/app.js','utf8');
-  assert.match(css,/#settings\{width:min\(1120px,calc\(100% - 32px\)\);padding:0\}/);
-  assert.match(css,/#model-cards\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-  assert.match(css,/@media\(max-width:960px\)\{[\s\S]*?#model-cards\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(css,/@media\(max-width:650px\)\{[\s\S]*?#model-cards\{grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css,/#settings\{width:min\(1020px,calc\(100% - 32px\)\);padding:0\}/);
+  assert.match(css,/#model-cards\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\);gap:12px;align-items:start;max-width:900px;margin-inline:auto\}/);
+  assert.match(css,/@media\(max-width:960px\)\{[\s\S]*?#model-cards\{max-width:650px;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css,/@media\(max-width:650px\)\{[\s\S]*?#model-cards\{max-width:380px;grid-template-columns:minmax\(0,1fr\)/);
   for(const kind of ['speech','image','text']){
     assert.match(html,new RegExp('<form class="model-card" id="model-'+kind+'">'));
   }
