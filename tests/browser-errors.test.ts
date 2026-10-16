@@ -102,6 +102,36 @@ test('direct API calls support CORS-compatible model discovery and real WAV mult
   }finally{globalThis.fetch=previous;}
 });
 
+test('real final ASR call preserves the provider text and exact window range',async()=>{
+  const previous=globalThis.fetch;
+  let count=0;
+  globalThis.fetch=(async()=>{
+    count++;
+    return new Response(JSON.stringify({text:'  Карточка отслеживается.  '}),{status:200});
+  }) as any;
+  try{
+    const events:any[]=[];
+    const session=new BrowserAsrSession(
+      {baseUrl:'https://private-asr.example/v1',model:'small',apiKey:'own-key'},
+      (x:any)=>events.push(x),(e:any)=>assert.fail(String(e))
+    );
+    session.ring.push(new Float32Array(2*16000));
+    await session.run();
+    session.ring.push(new Float32Array(16000));
+    await session.stop();
+    assert.equal(count,2);
+    assert.equal(events.length,2);
+    assert.equal(events[0].final,false);
+    assert.equal(events[0].window_end_sample,32000);
+    assert.equal(events[1].final,true);
+    assert.equal(events[1].window_start_sample,0);
+    assert.equal(events[1].window_end_sample,48000);
+    assert.equal(events[1].raw_hypothesis_text,'  Карточка отслеживается.  ',
+      'The original provider response must not be replaced with trimmed live captions');
+    assert.equal(events[1].partial_text,'');
+  }finally{globalThis.fetch=previous;}
+});
+
 test('unsupported models endpoint is manual-only; API without CORS is rejected rather than proxied',async()=>{
   const previous=globalThis.fetch;
   try{
