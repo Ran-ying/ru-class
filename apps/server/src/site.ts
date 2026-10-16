@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {readFileSync} from 'node:fs';
 
-const files={
+const files:Record<string,[string,string]>={
   '/':['index.html','text/html; charset=utf-8'],
   '/index.html':['index.html','text/html; charset=utf-8'],
   '/app.js':['app.js','text/javascript; charset=utf-8'],
@@ -14,12 +14,13 @@ const files={
   '/local-store.js':['local-store.js','text/javascript; charset=utf-8'],
   '/style.css':['style.css','text/css; charset=utf-8']
 };
+type SiteConfig={listen?:{host?:string;port?:number};site?:{publicOrigin?:string}};
 export function loadSiteConfig(path=process.env.RU_CLASS_CONFIG||'config.json'){
-  let config={};
+  let config:SiteConfig={};
   try{
     config=JSON.parse(readFileSync(resolve(path),'utf8'));
     if(!config||typeof config!=='object'||Array.isArray(config))throw Error('INVALID_DEPLOYMENT_CONFIG');
-  }catch(e){if(e.code!=='ENOENT')throw e;}
+  }catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
   const host=process.env.HOST||config.listen?.host||'127.0.0.1';
   const port=Number(process.env.PORT||config.listen?.port||3000);
   if(!Number.isInteger(port)||port<1||port>65535)throw Error('INVALID_PORT');
