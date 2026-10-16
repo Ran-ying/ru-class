@@ -93,3 +93,19 @@ main{grid-template-rows:minmax(0,1fr)}
 #settings .model-card [id$="-key-wrap"]{margin:14px 0}
 #settings .model-card [id$="-actions"]{margin-top:13px}
 #settings .model-card [id$="-model-stage"]{margin:14px 0}
+
+/* v0.1.6: equal-sized select/refresh icons, accessible select affordance. */
+#settings .model-card [hidden]{display:none!important}
+#settings .model-select-control{display:block;position:relative;flex:1;min-width:0}
+#settings .model-select-control select{
+  width:100%;min-width:0;margin-top:0;
+  -webkit-appearance:none;appearance:none;
+  padding-right:44px;
+}
+#settings .model-icon{display:block;width:20px;height:20px;flex:none}
+#settings .model-chevron-icon{
+  position:absolute;right:13px;top:50%;transform:translateY(-50%);
+  pointer-events:none;color:#245946;
+}
+#settings .model-refresh{min-width:38px;width:38px;height:38px;font-size:inherit}
+#settings .model-refresh-icon{width:20px;height:20px}
