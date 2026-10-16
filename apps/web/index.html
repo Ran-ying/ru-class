@@ -21,7 +21,7 @@
       <form class="model-card" id="model-speech">
         <h3>语音</h3><p class="model-purpose">俄语实时识别 · 当前可用</p>
         <label>API 地址<input id="speech-url" type="url" required placeholder="http://127.0.0.1:8090/v1"></label>
-        <div class="model-discovery"><button type="button" class="secondary" id="speech-list">获取可用模型</button><span id="speech-model-count" role="status"></span></div>
+        <div class="model-discovery" id="speech-discovery"><button type="button" class="secondary" id="speech-list">获取可用模型</button><span id="speech-model-count" role="status"></span></div>
         <div id="speech-model-stage" hidden>
           <div id="speech-model-choice" hidden><label for="speech-model-select">模型</label>
             <span class="model-select-row"><span class="model-select-control"><select id="speech-model-select" aria-label="语音可用模型" required><option value="">请选择模型</option></select><svg class="model-icon model-chevron-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><button type="button" class="model-refresh" id="speech-refresh" title="刷新可用模型" aria-label="刷新语音可用模型"><svg class="model-icon model-refresh-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.9 3.9L21 14"/><path d="M21 20v-6h-6"/></svg></button></span>
@@ -37,7 +37,7 @@
       <form class="model-card" id="model-image">
         <h3>图像</h3><p class="model-purpose">未来课堂图片处理 · 本版仅保存与检查接口</p>
         <label>API 地址<input id="image-url" type="url" required placeholder="https://provider.example.com/v1"></label>
-        <div class="model-discovery"><button type="button" class="secondary" id="image-list">获取可用模型</button><span id="image-model-count" role="status"></span></div>
+        <div class="model-discovery" id="image-discovery"><button type="button" class="secondary" id="image-list">获取可用模型</button><span id="image-model-count" role="status"></span></div>
         <div id="image-model-stage" hidden>
           <div id="image-model-choice" hidden><label for="image-model-select">模型</label>
             <span class="model-select-row"><span class="model-select-control"><select id="image-model-select" aria-label="图像可用模型" required><option value="">请选择模型</option></select><svg class="model-icon model-chevron-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><button type="button" class="model-refresh" id="image-refresh" title="刷新可用模型" aria-label="刷新图像可用模型"><svg class="model-icon model-refresh-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.9 3.9L21 14"/><path d="M21 20v-6h-6"/></svg></button></span>
@@ -53,7 +53,7 @@
       <form class="model-card" id="model-text">
         <h3>文字</h3><p class="model-purpose">未来 DeepSeek 断句与翻译 · 本版仅保存与检查接口</p>
         <label>API 地址<input id="text-url" type="url" required placeholder="https://provider.example.com/v1"></label>
-        <div class="model-discovery"><button type="button" class="secondary" id="text-list">获取可用模型</button><span id="text-model-count" role="status"></span></div>
+        <div class="model-discovery" id="text-discovery"><button type="button" class="secondary" id="text-list">获取可用模型</button><span id="text-model-count" role="status"></span></div>
         <div id="text-model-stage" hidden>
           <div id="text-model-choice" hidden><label for="text-model-select">模型</label>
             <span class="model-select-row"><span class="model-select-control"><select id="text-model-select" aria-label="文字可用模型" required><option value="">请选择模型</option></select><svg class="model-icon model-chevron-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><button type="button" class="model-refresh" id="text-refresh" title="刷新可用模型" aria-label="刷新文字可用模型"><svg class="model-icon model-refresh-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.9 3.9L21 14"/><path d="M21 20v-6h-6"/></svg></button></span>
