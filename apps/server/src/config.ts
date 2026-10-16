@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
+import { type Accounts, emptyAccount } from './model-settings.js';
 
-type Settings = {listen?: {host?: string; port?: number}; site?: {publicOrigin?: string; accessToken?: string}; asr?: {baseUrl?: string; model?: string; apiKey?: string}};
+type Settings = {listen?: {host?: string; port?: number}; site?: {publicOrigin?: string; accessToken?: string}; asr?: {baseUrl?: string; model?: string; apiKey?: string}; models?: Partial<Accounts>};
 function readSettings(path: string): Settings {
   try {
     const value: unknown = JSON.parse(readFileSync(resolve(path), 'utf8'));
@@ -20,6 +21,9 @@ function stringValue(value: unknown, name: string, fallback = ''): string {
 }
 export function loadConfig(path = process.env.RU_CLASS_CONFIG || 'config.json') {
   const json = readSettings(path);
+  const speech=json.models?.speech||json.asr;
+  const image=json.models?.image;
+  const text=json.models?.text;
   const host = stringValue(process.env.HOST ?? json.listen?.host, 'listen.host', '127.0.0.1');
   const port = Number(process.env.PORT ?? json.listen?.port ?? 3000);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('listen.port must be between 1 and 65535');
@@ -37,10 +41,15 @@ export function loadConfig(path = process.env.RU_CLASS_CONFIG || 'config.json') 
     host, port, publicOrigin: publicOrigin || undefined, clientToken,
     workerToken: randomBytes(32).toString('hex'),
     localBootstrap: !publicOrigin,
+    configPath:resolve(path),
+    modelSettings: {
+      image:{baseUrl:stringValue(image?.baseUrl,'models.image.baseUrl'),model:stringValue(image?.model,'models.image.model'),apiKey:stringValue(image?.apiKey,'models.image.apiKey')},
+      text:{baseUrl:stringValue(text?.baseUrl,'models.text.baseUrl'),model:stringValue(text?.model,'models.text.model'),apiKey:stringValue(text?.apiKey,'models.text.apiKey')}
+    },
     asr: {
-      baseUrl: stringValue(process.env.ASR_BASE_URL ?? json.asr?.baseUrl, 'asr.baseUrl', 'http://127.0.0.1:8090/v1'),
-      model: stringValue(process.env.ASR_MODEL ?? json.asr?.model, 'asr.model', 'small'),
-      apiKey: stringValue(process.env.ASR_API_KEY ?? json.asr?.apiKey, 'asr.apiKey')
+      baseUrl: stringValue(process.env.ASR_BASE_URL ?? speech?.baseUrl, 'asr.baseUrl', 'http://127.0.0.1:8090/v1'),
+      model: stringValue(process.env.ASR_MODEL ?? speech?.model, 'asr.model', 'small'),
+      apiKey: stringValue(process.env.ASR_API_KEY ?? speech?.apiKey, 'asr.apiKey')
     }
   };
 }
