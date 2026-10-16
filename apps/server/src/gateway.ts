@@ -24,8 +24,9 @@ export function createGateway(config: Config) {
     res.setHeader('Permissions-Policy', 'microphone=(self)');
     res.setHeader('Cache-Control', 'no-store');
     const apiPath=new URL(req.url??'/','http://localhost').pathname;
-    const host=req.headers.host?.split(':')[0];
-    const local=config.localBootstrap && ['localhost','127.0.0.1'].includes(host||'') && ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress||'') && !config.publicOrigin;
+    let host = '';
+    try { host = new URL('http://' + (req.headers.host || '')).hostname; } catch { /* Invalid host is never local. */ }
+    const local=config.localBootstrap && ['localhost','127.0.0.1','[::1]'].includes(host) && ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress||'') && !config.publicOrigin;
     if(apiPath==='/api/bootstrap') {
       if(req.method!=='GET'||!local||(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)){res.writeHead(403).end();return;}
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify({clientToken:config.clientToken,asr:{baseUrl:directAdapter?.options.baseUrl||'',model:directAdapter?.options.model||'small',keyConfigured:!!directAdapter?.options.apiKey},ready:directReady}));return;
