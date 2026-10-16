@@ -72,7 +72,7 @@ export class TranscriptBuffer {
       // A single silent window may be a transient ASR miss.  Two successive
       // empty windows (or an explicit stop) retire the old draft only once.
       if (this.emptyWindows >= 2 || final) return this.flush();
-      return this.state('');
+      return this.state();
     }
     this.emptyWindows = 0;
     const old = [...this.stable, ...this.pending];
