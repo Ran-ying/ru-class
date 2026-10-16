@@ -45,3 +45,32 @@ This is directly usable as `{windows:[...]}` input in the existing `scripts/repl
 - The JSON contains **private classroom speech**, sometimes repeated across overlapping windows; never publish it or send it to a public repository.
 - This is **not** PR #13 validation, formal v0.1 acceptance, proof of correct live subtitles, 5-minute physical classroom testing or an M4 test.
 - A future projection redesign should derive captions from an append-only sample-window evidence timeline and compare it against the same private C1/C2 fixtures. Without word timestamps, preserve ambiguity rather than destructively removing historical speech based on identical words alone.
+
+## Review and physical-browser admission gate (2026-10-17)
+
+Automated test coverage checks the v1 → v2 record-preserving migration,
+duplicate-position idempotence, conflicting-response rejection, privacy-safe
+export, explicit clear, and connections released on `versionchange`.
+A delayed `onsuccess` after a blocked open must be closed; the user receives
+a retryable error rather than a silently owned handle.
+
+**These simulated tests are not a Safari or iPad acceptance.** Before merging:
+
+1. In real macOS Safari create a **v1** database containing a speech
+   profile, an existing lesson and audio samples. Upgrade to this PR;
+   verify each original record remains intact. Never commit its token.
+2. Open two tabs, trigger a schema upgrade / `versionchange`, confirm
+   the old connection is released. If another tab blocks migration, confirm
+   a visible error, close the old tab, retry, and verify data persistence.
+3. Run real microphone + configured ASR and export one course's JSON.
+   Inspect the exported `windows` locally: actual ASR response text and
+   integer sample positions must match the private network trace; no
+   synthetic `flush`, other course, provider key, or original WAV in JSON.
+4. Induce a local evidence-store failure: UI must visibly warn even after
+   normal stop, and must not claim that the exported history is complete.
+5. Re-run C1 (121 windows), C2 (106 windows), 45 exact-range replays and all
+   227 stop-prefix checks with unchanged main subtitle projection.
+
+**Decision:** keep PR #14 unmerged until browser storage and recovery are
+verified. Even after merging, treat its journal as a recoverability feature,
+not validation of Russian caption accuracy.
