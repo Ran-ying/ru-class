@@ -58,20 +58,30 @@ export class TranscriptBuffer {
   private revision = 0;
   private lastWindowStart = -1;
   private lastWindowEnd = -1;
+  private lastHypothesis: Word[] = [];
 
   /** Apply the next ordered hypothesis for this session's audio time range. */
   update(text: string, windowStart: number, windowEnd: number, final = false): TranscriptUpdate {
     if (!Number.isSafeInteger(windowStart) || !Number.isSafeInteger(windowEnd) || windowStart < 0 || windowEnd <= windowStart || windowEnd < this.lastWindowEnd) {
       throw new Error('TRANSCRIPT_WINDOW_ORDER');
     }
+    // A lexical match from 30 seconds ago is not evidence that the *current*
+    // overlapping audio contains that same phrase. Gate old-text matching on
+    // the immediately preceding raw Whisper window and actual audio overlap.
+    const consecutive = this.lastWindowEnd < 0 || windowStart < this.lastWindowEnd;
+    const next = words(text);
+    const recentOverlap = consecutive ? overlap(this.lastHypothesis, next) : undefined;
     this.lastWindowStart = windowStart;
     this.lastWindowEnd = windowEnd;
-    const next = words(text);
+    if (next.length) this.lastHypothesis = next;
     if (!next.length) {
       this.emptyWindows++;
       // A single silent window may be a transient ASR miss.  Two successive
       // empty windows (or an explicit stop) retire the old draft only once.
-      if (this.emptyWindows >= 2 || final) return this.flush();
+      if (this.emptyWindows >= 2 || final) {
+        this.lastHypothesis = [];
+        return this.flush();
+      }
       return this.state();
     }
     this.emptyWindows = 0;
@@ -80,7 +90,7 @@ export class TranscriptBuffer {
       this.pending = next;
       this.unanchored = undefined;
     } else {
-      const anchor = overlap(old, next);
+      const anchor = recentOverlap ? overlap(old, next) : undefined;
       if (anchor) {
         this.unanchored = undefined;
         // The matched part is already represented on the left, while newer
