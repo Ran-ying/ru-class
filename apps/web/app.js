@@ -25,27 +25,23 @@ function showTranscript(update){
   panel.textContent=text;
   if(text)hasTranscript=true;
   if(follow)panel.scrollTop=panel.scrollHeight;
-  if(lessonId && typeof update.raw_hypothesis_text==='string'){
-    // The original ASR text is retained independently of the mutable
-    // subtitle projection. A later bad alignment cannot destroy this evidence.
-    const id=lessonId;
-    const entry={
-      text:update.raw_hypothesis_text,
-      startSample:update.window_start_sample,
-      endSample:update.window_end_sample,
-      inferenceMs:update.inference_ms,
-      final:update.final
-    };
-    evidenceWrites=evidenceWrites.then(()=>saveHypothesis(id,entry))
-      .catch(e=>{
-        evidenceWarning='原始识别窗口在此浏览器保存失败：'+errorMessage(e);
-        $('error').textContent=evidenceWarning;
-      });
-  }
   const point=marks.find(m=>m.end>=update.window_end_sample);
   const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
   $('latency').textContent='窗口 '+((update.window_end_sample-update.window_start_sample)/16000).toFixed(1)+' s · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
   if(lessonId)void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
+}
+function archiveRawHypothesis(entry){
+  if(!lessonId)return Promise.resolve();
+  // Save provider evidence BEFORE the lossy TranscriptBuffer changes state.
+  // Keep writes ordered; a failed write is visible, but does not destroy
+  // access to the rest of the lesson or terminate the audio recording.
+  const id=lessonId;
+  evidenceWrites=evidenceWrites.then(()=>saveHypothesis(id,entry))
+    .catch(e=>{
+      evidenceWarning='原始识别窗口在此浏览器保存失败：'+errorMessage(e);
+      $('error').textContent=evidenceWarning;
+    });
+  return evidenceWrites;
 }
 async function cleanupMicrophone(){
   running=false;
@@ -97,7 +93,7 @@ async function start(){
     await context.audioWorklet.addModule('/capture-worklet.js');
     source=context.createMediaStreamSource(stream);
     capture=new AudioWorkletNode(context,'ru-capture');
-    asr=new BrowserAsrSession(p,showTranscript,e=>void onFailure(e));
+    asr=new BrowserAsrSession(p,showTranscript,e=>void onFailure(e),archiveRawHypothesis);
     capture.port.onmessage=({data})=>{
       if(data?.type==='flushed'){flushResolve?.();flushResolve=null;return;}
       if(data?.type!=='audio'||!running)return;
