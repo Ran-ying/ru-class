@@ -35,6 +35,21 @@ Each repository's full successful automated output is retained in [test-results-
 
 Automated DOM stubs and `SIMULATED_TEST` HTTP fixtures prove logic only. Accelerated five-minute synthetic frame input is not a five-minute hardware run. The M1 real engine run uses explicitly synthetic speech and lasts 101.16 seconds; it is not the required M4/natural classroom acceptance.
 
+## PR #12 合并后：移动窗口跨区间重复固化专项修复（待 Mac 真实缓存复验）
+
+针对 PR #12 合并后的剩余问题：真实课堂缓存中，C1 (121 窗口) 最终至少 5 词重复候选跨度为 **36**、稳定提交候选 **30**，C2 (106 窗口) 为 **32 / 25**。这些是词面筛查候选，不能全部等同老师未说过的内容；用户真实重复发言必须保留。原 45 个同采样范围重投、16/11 个首次停止前缀复发已在上轮由本机 Codex 验证为 0。
+
+本分支的**有限范围、待验收**变化：
+
+- `overlap()` 选择同长度词面匹配时，优先将新窗口中**较早出现的**锚点与旧窗口尾部对齐，避免把第二次相同短语误当作旧内容吸收。
+- `unanchored` 连续窗口被证实时，如果显示层 `effectiveDraft()` 已用新版本覆盖旧 `pending`，就基于**可见有效草稿**延续新尾部，不把被取代的草稿再次提交为稳定词。
+- 添加俄语重复短语、稳定尾部锚点、多窗口文本变化、真正不相交音频重复和所有中途停止前缀的合成测试。
+- **未添加词级时间戳，不会推断真实说话时刻**；窗口交叠且两次发言分别落在不交叠的声音区间时，仅凭 Whisper 整窗文本仍无法可靠区分，不得夸大修复范围。
+
+**Mac 私有缓存必做复验：**沿用 Codex 已建立的 `classroom-benchmark-20261016/private` C1/C2 缓存与 `pr12-second-round` 严格回放流程，在 PR 新分支分别对比 main 与候选版本，至少列出最终稳定提交重复、临时重复、词数、全部 227 个首次 stop 前缀和原 45 个重投反例。任何新漏句、真实重复被吞或停止增字都应阻止合并。保留用户原始音频与识别文本在本地，不上传公开仓库。
+
+**整体 v0.1 仍未验收完成**：独立人工听校真值、5 分钟真实录音、真实浏览器麦克风到屏幕延迟及 M4 后期验收均待完成。
+
 ## PR #12 第二轮修复：针对私有真实缓存复审 FAIL 的整改（2026-10-16）
 
 用户的 Codex 在私有真实录音窗口缓存上复审 PR #12，结果为 **FAIL / 暂不合并**。已经**验证**原 45/120 个同区间重投显示增长反例为 0；C1/C2 重投均不产生新 stable_delta，也不影响正常回放结果。首次修复并未消除主要最终重复：C1 重复候选跨度 36→36，稳定重复 30→30；C2 33→32，稳定重复 26→25。
