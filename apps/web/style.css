@@ -119,3 +119,38 @@ main{grid-template-rows:minmax(0,1fr)}
 .saved-transcript{font-size:12px;color:#6c8074;line-height:1.55;margin:0 0 9px;white-space:pre-wrap}
 #clear-local{margin:20px 0 10px;background:#eee8e4;color:#875143;border:1px solid #e2cfca}
 #local-feedback{font-size:12px;white-space:pre-wrap}
+
+/* v0.2.2: three compact model profiles in a wider, scrollable settings dialog. */
+#settings{width:min(1120px,calc(100% - 32px));padding:0}
+#settings .settings-heading{grid-template-columns:minmax(72px,1fr) minmax(160px,260px) minmax(72px,1fr)}
+#model-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+#settings .model-card{min-width:0;margin:0;padding:15px 14px}
+#settings .model-purpose{min-height:33px;margin-bottom:12px}
+#settings .model-card [id$="-key-wrap"]{margin:9px 0 12px}
+#settings .model-actions{gap:7px}
+#settings .model-actions button{min-width:0;padding:9px 7px;font-size:12px}
+#settings .model-discovery{gap:7px}
+@media(max-width:960px){
+ #settings{width:min(780px,calc(100% - 24px))}
+ #model-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:650px){
+ #settings{width:min(520px,calc(100% - 20px));padding:0}
+ #model-cards{grid-template-columns:minmax(0,1fr);gap:12px}
+ #settings .settings-heading{grid-template-columns:minmax(56px,1fr) minmax(140px,1.5fr) minmax(40px,1fr)}
+ #settings .model-purpose{min-height:0}
+}
+
+/* Reserve the same RU/ZH panel height while idle, capturing and stopping.
+   Neither connection-status elements nor subtitle placeholders change layout. */
+.live{flex:0 0 clamp(190px,36dvh,370px);max-height:60%}
+.live .ru{flex:1;min-height:0;display:flex;flex-direction:column}
+.live .ru #ru{
+ flex:1;min-height:0;max-height:none;margin:8px 0 16px;
+ overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap;
+ font-size:20px;line-height:1.6
+}
+@media(max-height:600px){
+ .live{flex-basis:36dvh}
+ .live .ru #ru{font-size:18px;margin:4px 0 10px}
+}
