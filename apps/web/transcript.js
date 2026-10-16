@@ -15,6 +15,16 @@ function words(text) {
   }));
 }
 function equal(a, b) { return !!a.key && a.key === b.key; }
+// Lexical matching deliberately excludes punctuation-only tokens, but an
+// unchanged "-" is still an unchanged token for array equality and stable
+// prefix agreement. These are different operations.
+function sameSequence(a, b) {
+  return a.length === b.length && a.every((token, i) =>
+    token === b[i] || (token.display === b[i].display && token.key === b[i].key));
+}
+function agreementToken(a, b) {
+  return equal(a, b) || (!a.key && !b.key && a.display === b.display);
+}
 function joined(tokens) { return tokens.map(w => w.display).join(' '); }
 
 /** Prefer a long, contiguous lexical anchor near the end of the old text. */
@@ -47,7 +57,7 @@ function overlap(oldWords, newWords, minLength = 2) {
 }
 function commonPrefix(a, b) {
   let i = 0;
-  while (i < a.length && i < b.length && equal(a[i], b[i])) i++;
+  while (i < a.length && i < b.length && agreementToken(a[i], b[i])) i++;
   return i;
 }
 
@@ -60,6 +70,20 @@ export class TranscriptBuffer {
   lastWindowStart = -1;
   lastWindowEnd = -1;
   lastHypothesis = [];
+
+  // Without per-word timestamps, no old 8-second window can authoritatively
+  // revise arbitrarily long history. Limit the uncommitted visible suffix to
+  // a conservative 96 words (far more than typical 8 seconds of Russian
+  // classroom speech). This is a fail-safe, not a word-timing claim.
+  maxMutableWords = 96;
+  commitOldDraft() {
+    const visible = this.effectiveDraft();
+    if (visible.length <= this.maxMutableWords) return;
+    const n = visible.length - this.maxMutableWords;
+    this.stable.push(...visible.slice(0, n));
+    this.pending = visible.slice(n);
+    this.unanchored = undefined;
+  }
 
   /**
    * A repeated result for the very same sample range is a transport/replay
@@ -100,7 +124,10 @@ export class TranscriptBuffer {
     // words are identical to the preceding nonempty hypothesis. Otherwise
     // [speech, silence, unchanged speech, silence] erroneously flushes.
     if (next.length) this.emptyWindows = 0;
-    if (unchanged) return final ? this.flush() : this.state();
+    if (unchanged) {
+      this.commitOldDraft();
+      return final ? this.flush() : this.state();
+    }
     if (!next.length) {
       this.emptyWindows++;
       // A single silent window may be a transient ASR miss.  Two successive
@@ -153,8 +180,10 @@ export class TranscriptBuffer {
         const fresh = overlap(this.unanchored, next);
         const visibleDraft = this.effectiveDraft();
         const concatenated = [...this.pending, ...this.unanchored];
-        const replacedDraft = visibleDraft.length !== concatenated.length ||
-          commonPrefix(visibleDraft, concatenated) !== visibleDraft.length;
+        // Full representation equality is NOT lexical anchor matching:
+        // punctuation-only words have key="" and cannot serve as anchors,
+        // yet identical "-" tokens must not imply "the draft was replaced".
+        const replacedDraft = !sameSequence(visibleDraft, concatenated);
         if (replacedDraft) {
           // The transcript that was visible is the only eligible draft:
           // preserve its prefix and append just the new confirmed tail.
@@ -185,6 +214,7 @@ export class TranscriptBuffer {
         this.unanchored = next;
       }
     }
+    this.commitOldDraft();
     if (final) return this.flush();
     return this.state();
   }
