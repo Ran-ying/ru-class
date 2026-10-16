@@ -62,3 +62,14 @@ The audio range is `[window_start_sample, window_end_sample)` in the single cour
 ## Current API topology revision (2026-10-16)
 
 Current entry points use browser-to-main WS only. worker.ready and related fields below describe the retained historical Worker transport/tests; an outbound Worker is not started. Main owns window scheduling and calls the independent ASR HTTP API with a Bearer key. The public compatibility boundary is GET /v1/models and multipart POST /v1/audio/transcriptions (file/model/language/response_format → text). See api-integration-v0.1.md for the current subset and authentication. Browser envelope version stays 0.1; worker-shaped status fields are internal compatibility names.
+
+## v0.1.2 incremental transcript extension (current direct HTTP API mode)
+
+In the **current** topology, the main project schedules overlapping Whisper HTTP windows. Each `asr.partial` event still carries `text`, the **raw current-window hypothesis**. It additionally provides optional fields (legacy outbound Workers may omit them):
+
+- `stable_delta: string` — only newly confirmed, append-only Russian text since the previous event in that session; a client must append it exactly once.
+- `partial_text: string` — the complete mutable **unconfirmed suffix** for this event, replacing the previous suffix. It is **not** the raw full-window hypothesis.
+- `revision: number` — strictly increasing per session; discard lower/equal revisions to avoid stale UI updates.
+- `final: boolean` — on the terminal update, `partial_text` is empty; the remainder is included in `stable_delta`. A normal stop may send a final event even without a new audio frame.
+
+The browser builds visible RU text as `all_appended_stable_deltas + latest_partial_text`. The confirmed buffer exists for the whole in-memory session and **is not consumed in v0.1.2**; only the provisional suffix is rewritten. The old 8-second PCM ring buffer is unchanged. One empty hypothesis does not erase the provisional suffix; successive quiet results may finalize it. These fields are not word-level alignment, guaranteed verbatim transcription, disk storage, nor DeepSeek sentence processing. Text-only temporal alignment remains heuristic, particularly for corrections and identical phrases. Translation and historical sentences are reserved for later versions.
