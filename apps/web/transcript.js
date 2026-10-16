@@ -106,7 +106,7 @@ export class TranscriptBuffer {
       } else if (this.unanchored && overlap(this.unanchored, next)) {
         // The previous unanchored hypothesis is an independent new utterance.
         // Prefer confirming it over matching common terminology in old history.
-        const fresh = overlap(this.unanchored, next)!;
+        const fresh = overlap(this.unanchored, next);
         this.stable.push(...this.pending);
         this.pending = [...this.unanchored.slice(0, fresh.old), ...next.slice(fresh.next)];
         this.unanchored = undefined;
