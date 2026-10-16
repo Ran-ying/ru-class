@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createSite,loadSiteConfig} from '../apps/server/src/site.js';
+// @ts-ignore Browser runtime JavaScript intentionally has no TypeScript declarations.
 import {AudioRing,BrowserAsrSession,discoverModels,endpoint,wavBlob,testConnection} from '../apps/web/direct-asr.js';
+// @ts-ignore Browser runtime JavaScript intentionally has no TypeScript declarations.
 import {TranscriptBuffer} from '../apps/web/transcript.js';
+// @ts-ignore Browser runtime JavaScript intentionally has no TypeScript declarations.
 import {wavHeader,pcm16} from '../apps/web/local-store.js';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -80,7 +83,7 @@ test('direct API calls support CORS-compatible model discovery and real WAV mult
     assert.deepEqual((await discoverModels('https://my-asr.example/v1','own-key')).models,['small','tiny']);
     assert.equal(await testConnection({baseUrl:'https://my-asr.example/v1',model:'small',apiKey:'own-key'}),true);
     const results:any[]=[];
-    const session=new BrowserAsrSession({baseUrl:'https://my-asr.example/v1',model:'small',apiKey:'own-key'},x=>results.push(x),e=>assert.fail(String(e)));
+    const session=new BrowserAsrSession({baseUrl:'https://my-asr.example/v1',model:'small',apiKey:'own-key'},(x:any)=>results.push(x),(e:any)=>assert.fail(String(e)));
     session.ring.push(new Float32Array(16000*2));
     await session.run();
     await session.stop();
