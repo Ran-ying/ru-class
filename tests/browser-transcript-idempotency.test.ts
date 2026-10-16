@@ -324,3 +324,62 @@ test('local A/B cache comparer uses exact Git modules and emits metrics without 
   assert.equal(data.files[0].candidate.doubleFlushSafe,true);
   assert.doesNotMatch(run.stdout,/Сегодня|кошельке|защиты|банка/,'No transcript content should leave local runner');
 });
+
+
+test('isolated punctuation does not block confirmation of a new independent topic',()=>{
+  const r=new Recorder();
+  r.update('- Начало занятия',0,2*S);
+  r.update('Банкомат читает номера купюр',S,3*S);
+  const third=r.update('читает номера купюр на банкнотах',2*S,4*S);
+  assert.equal(third.stable_delta,'- Начало занятия');
+  assert.equal(third.display,'- Начало занятия Банкомат читает номера купюр на банкнотах');
+  assert.equal(r.flush().display,third.display);
+});
+
+test('punctuation equality respects empty keys without using punctuation as an audio anchor',()=>{
+  const r=new Recorder();
+  const norm=(display:string)=>({
+    display,key:display.normalize('NFKC').toLowerCase()
+      .replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$/gu,'')
+  });
+  r.buffer.pending=['-','Учебная','тема'].map(norm);
+  r.buffer.unanchored=['Сейчас','про','банкомат'].map(norm);
+  const result=r.buffer.state();
+  assert.equal(result.partial_text,'- Учебная тема Сейчас про банкомат');
+  assert.equal(r.buffer.effectiveDraft().length,6);
+  // A literal dash with no lexical key is still *identical to itself*;
+  // changed drafts must be judged by exact representation, not overlap().
+  const seen=r.current();
+  assert.equal(r.flush().partial_text,'');
+  assert.ok(r.buffer.stable.length===6);
+});
+
+test('a long lecture with changing short ASR windows must emit stable text before final stop',()=>{
+  const r=new Recorder();
+  let emitted=0,oldStable='';
+  for(let i=0;i<40;i++){
+    const text='Отдельная часть лекции номер '+i+
+      ' подробно описывает различные особенности банковских систем и платежей';
+    const row=r.update(text,Math.max(0,i-7)*S,(i+1)*S);
+    if(row.stable_delta)emitted++;
+    assert.ok(r.stable.startsWith(oldStable),'stable prefix must never shrink or change');
+    oldStable=r.stable;
+  }
+  assert.ok(emitted>0,'A live lecture cannot postpone all stable text until the final flush');
+  assert.ok(r.buffer.pending.length<=r.buffer.maxMutableWords);
+  const first=r.current();
+  assert.equal(r.flush().display,first,'Stop must preserve all visible text');
+});
+
+test('a much later 8-second hypothesis cannot erase the committed earlier lecture',()=>{
+  const r=new Recorder();
+  for(let i=0;i<40;i++){
+    const text='Тема '+i+' включает важные сведения о финансовой системе и электронных деньгах';
+    r.update(text,Math.max(0,i-7)*S,(i+1)*S);
+  }
+  const committed=r.stable;
+  assert.ok(committed.length>0,'Long history should have a committed stable prefix');
+  r.update('Теперь рассматриваем банкоматы и номера купюр',33*S,41*S);
+  assert.ok(r.current().startsWith(committed),'Earlier stable history must survive later rewrites');
+  assert.equal(r.flush().partial_text,'');
+});
