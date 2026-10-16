@@ -82,3 +82,27 @@ test('stop flushes even without new audio after the last inference; no repeated 
   assert.equal(emitted.at(-1).partial_text,'');
   assert.ok(emitted.at(-1).revision>emitted[0].revision);
 });
+
+test('a later utterance repeating old technical terms is not dropped or mistaken for old history',()=>{
+  const t=new TranscriptBuffer();const rows=[];
+  rows.push(t.update('Мы подробно рассмотрим методы защиты информации',0,32000));
+  rows.push(t.update('подробно рассмотрим методы защиты информации',16000,48000));
+  rows.push(t.update('',32000,64000));
+  rows.push(t.update('',48000,80000));
+  // No overlap with earlier audio; a new sentence repeats three technical words.
+  rows.push(t.update('Теперь повторим методы защиты информации ещё раз',320000,448000));
+  rows.push(t.update('повторим методы защиты информации ещё раз',336000,464000));
+  rows.push(t.flush());
+  const accumulated=rows.map(x=>x.stable_delta).filter(Boolean).join(' ');
+  assert.equal(accumulated,'Мы подробно рассмотрим методы защиты информации Теперь повторим методы защиты информации ещё раз');
+});
+
+test('adjacent hypothesis can correct uncertain word endings without rewriting stable prefix',()=>{
+  const t=new TranscriptBuffer();const rows=[
+    t.update('Сегодня мы рассмотрим способы защита информации',0,64000),
+    t.update('мы рассмотрим способы защиты информации',16000,80000),
+    t.update('рассмотрим способы защиты информации в школе',32000,96000),
+    t.flush()
+  ];
+  assert.equal(rows.map(x=>x.stable_delta).filter(Boolean).join(' '),'Сегодня мы рассмотрим способы защиты информации в школе');
+});
