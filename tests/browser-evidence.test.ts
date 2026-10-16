@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 const stores=new Map<string,Map<string,any>>();
 const schemas=new Map<string,string|string[]>();
 const requestedVersions:number[]=[];
+let closeCount=0;
+let simulateBlockedOpen=false;
 const key=(value:any)=>JSON.stringify(value);
 const keyParts=(store:string,value:any)=>{
   const path=schemas.get(store)!;
@@ -26,6 +28,8 @@ for(const [name,value] of [
   stores.get(name)!.set(key(keyParts(name,value)),structuredClone(value));
 }
 const fakeDb={
+  close(){closeCount++;},
+  onversionchange:undefined as undefined|(()=>void),
   objectStoreNames:{contains:(name:string)=>stores.has(name)},
   createObjectStore(name:string,args:{keyPath:string|string[]}){
     stores.set(name,new Map());schemas.set(name,args.keyPath);
@@ -72,7 +76,16 @@ const fakeDb={
   open:(_name:string,version:number)=>{
     requestedVersions.push(version);
     const req:any={result:fakeDb,error:null};
-    queueMicrotask(()=>{req.onupgradeneeded?.();req.onsuccess?.();});
+    queueMicrotask(()=>{
+      if(simulateBlockedOpen){
+        simulateBlockedOpen=false;
+        req.onblocked?.();
+        req.onsuccess?.(); // Another tab eventually closes after the rejection.
+      }else{
+        req.onupgradeneeded?.();
+        req.onsuccess?.();
+      }
+    });
     return req;
   }
 };
@@ -139,6 +152,28 @@ test('raw ASR hypotheses survive caption rewrites and are exported as private po
 
 test('empty evidence export is reported clearly for recordings created before schema v2',async()=>{
   await assert.rejects(lessonHypothesesJson('older-lesson'),/没有原始 ASR 窗口记录/);
+});
+
+
+test('a versionchange releases the old handle and the next operation reopens it',async()=>{
+  const firstOpen=requestedVersions.length;
+  assert.equal(typeof fakeDb.onversionchange,'function');
+  fakeDb.onversionchange!();
+  assert.equal(closeCount,1);
+  assert.ok((await listLessons()).some((x:any)=>x.id==='course-a'));
+  assert.equal(requestedVersions.length,firstOpen+1);
+});
+
+test('a blocked upgrade rejects clearly and closes any subsequent late success',async()=>{
+  // Move the current fake connection out of service so the next open is blocked.
+  fakeDb.onversionchange!();
+  const before=closeCount;
+  simulateBlockedOpen=true;
+  await assert.rejects(listLessons(),/请关闭其他正在升级/);
+  await Promise.resolve();
+  assert.equal(closeCount,before+1,'Late successful open must close an unowned handle');
+  assert.ok((await listLessons()).some((x:any)=>x.id==='course-a'),
+    'A later, unblocked attempt should recover without losing v1 data');
 });
 
 test('validate hypotheses before writing and clear private evidence with browser data',async()=>{
