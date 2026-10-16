@@ -40,6 +40,8 @@ $('start').onclick = async () => {
         else if (m.type === 'session.ready' && m.session_id === sessionId) {
           clearTimeout(startTimer);
           $('worker').textContent = workerLabel(m.payload.worker);
+          const track = stream.getAudioTracks()[0];
+          if(!track || track.readyState !== 'live') throw new Error('麦克风已中断，请重新开始。');
           source = context.createMediaStreamSource(stream); capture = new AudioWorkletNode(context, 'ru-capture');
           capture.port.onmessage = ({data: audio}) => {
             if (audio.type === 'flushed') { flushResolve?.(); return; }
@@ -51,7 +53,8 @@ $('start').onclick = async () => {
           };
           running = true; source.connect(capture); capture.connect(context.destination);
           context.onstatechange = () => { if(running && !stopping && context?.state === 'suspended') void fail('浏览器暂停了音频采集，请保持页面在前台并重新开始。'); };
-          stream.getAudioTracks()[0].onended = () => { if(running && !stopping) void fail('麦克风采集中断，请重新开始。'); };
+          track.onended = () => { if(running && !stopping) void fail('麦克风采集中断，请重新开始。'); };
+          track.onmute = () => { if(running && !stopping) void fail('麦克风输入暂停，录音已停止，请检查设备后重新开始。'); };
           $('status').textContent = '录音中 · 俄语识别'; controls(true);
         } else if (m.type === 'asr.partial' && m.session_id === sessionId) {
           $('ru').textContent = m.payload.text || '当前窗口未识别到语音';

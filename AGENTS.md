@@ -6,3 +6,5 @@
 - Gateway code is cross-platform Node.js/TypeScript. Browser code uses standard Web APIs. No production VPS changes without explicit deployment authorization.
 - Run npm test, npm run typecheck and npm run build. Joint tests use ASR_REPO=../ru-class-asr npm test. Synchronize protocol.ts and docs/protocol.md with ru-class-asr; do not create a third repository.
 - Simulated tests must remain labeled. Required M4/Metal + five-minute Russian/browser validation is independent and stays pending until measured.
+
+- User clarification, 2026-10-16: M1 is the current development/integration machine. M4 formal hardware acceptance is deferred to a later stage; do not block current development on M4 availability or mislabel M1 measurements as M4.
