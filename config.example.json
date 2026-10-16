@@ -1,0 +1,1 @@
+{"listen":{"host":"127.0.0.1","port":3000},"site":{"publicOrigin":"","accessToken":""},"asr":{"baseUrl":"http://127.0.0.1:8090/v1","model":"small","apiKey":""}}
