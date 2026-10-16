@@ -90,6 +90,11 @@ test('direct API calls support CORS-compatible model discovery and real WAV mult
     assert.ok(results.some(x=>x.stable_delta.includes('Сегодня')));
     assert.equal(results.at(-1).partial_text,'');
     assert.equal(results.at(-1).final,true);
+    assert.equal(results[0].raw_hypothesis_text,'Сегодня мы обсуждаем методы защиты');
+    assert.equal(results[0].window_start_sample,0);
+    assert.equal(results[0].window_end_sample,32000);
+    assert.equal(results.at(-1).raw_hypothesis_text,undefined,
+      'A pure flush must never manufacture or duplicate a provider hypothesis');
     assert.equal(seen.filter(x=>String(x.url).includes('/audio/transcriptions')).length,1);
     assert.ok(seen.every(x=>String(x.url).startsWith('https://my-asr.example/v1/')));
     assert.equal(seen.at(-1).options.credentials,'omit');
