@@ -178,6 +178,17 @@ function selectedModel(kind){
   if(steps[kind].mode==='manual')return $(kind+'-model').value.trim();
   return '';
 }
+function canUseToken(kind){
+  const previous=savedProfiles[kind]||{};
+  return !!$(kind+'-key').value || (!!previous.keyConfigured && previous.baseUrl===$(kind+'-url').value.trim());
+}
+function updateModelProgress(kind){
+  const step=steps[kind];
+  if(!step.ready)return;
+  const hasModel=!!selectedModel(kind);
+  $(kind+'-token-stage').hidden=!hasModel;
+  $(kind+'-actions').hidden=!(hasModel&&step.tokenOpen&&canUseToken(kind));
+}
 function setModelChoices(kind,ids){
   const step=steps[kind];
   step.ready=true;
@@ -195,18 +206,19 @@ function setModelChoices(kind,ids){
       option.value=id; option.textContent=id;
       return option;
     });
+    const placeholder=document.createElement('option');
+    placeholder.value='';placeholder.textContent='请选择模型';
     const select=$(kind+'-model-select');
-    select.replaceChildren(...options);
-    select.value=ids.includes(preferred)?preferred:ids[0];
+    select.replaceChildren(placeholder,...options);
+    select.value=ids.includes(preferred)?preferred:'';
   } else {
     $(kind+'-model').value=preferred||'';
   }
-  $(kind+'-token-stage').hidden=false;
   if(step.tokenOpen){
     $(kind+'-token-open').hidden=true;
     $(kind+'-key-wrap').hidden=false;
-    $(kind+'-actions').hidden=false;
   }
+  updateModelProgress(kind);
 }
 function revealToken(kind){
   const step=steps[kind];
@@ -214,7 +226,7 @@ function revealToken(kind){
   $(kind+'-token-stage').hidden=false;
   $(kind+'-token-open').hidden=true;
   $(kind+'-key-wrap').hidden=false;
-  $(kind+'-actions').hidden=!step.ready;
+  $(kind+'-actions').hidden=!(step.ready&&!!selectedModel(kind)&&canUseToken(kind));
 }
 async function loadConfig(){
   const res=await fetch('/api/bootstrap');
@@ -303,7 +315,7 @@ async function modelAction(kind,operation){
   if(publicMode)return;
   const step=steps[kind],feedback=$(kind+'-feedback');
   const model=selectedModel(kind);
-  if(!step.ready || !step.tokenOpen || !model){
+  if(!step.ready || !step.tokenOpen || !model || !canUseToken(kind)){
     feedback.textContent='请先获取模型、选择模型并打开 Token 输入';
     return;
   }
@@ -321,6 +333,7 @@ async function modelAction(kind,operation){
       savedProfiles[kind]=result.profile;
       $(kind+'-key').value='';
       $(kind+'-key').placeholder='已保存 Token；留空沿用';
+      updateModelProgress(kind);
       feedback.textContent='配置已保存；连接测试需单独点击。';
     }else feedback.textContent='连接成功：模型列表包含该模型（未验证实际推理）';
   }catch(e){feedback.textContent='操作失败：'+e.message;}
@@ -335,5 +348,8 @@ for(const kind of profiles){
   $(kind+'-list').onclick=()=>void discoverModels(kind);
   $(kind+'-refresh').onclick=()=>void discoverModels(kind);
   $(kind+'-token-open').onclick=()=>revealToken(kind);
+  $(kind+'-model-select').onchange=()=>updateModelProgress(kind);
+  $(kind+'-model').oninput=()=>updateModelProgress(kind);
+  $(kind+'-key').oninput=()=>updateModelProgress(kind);
   $(kind+'-url').oninput=()=>resetModelFlow(kind);
 }
