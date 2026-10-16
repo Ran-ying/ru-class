@@ -58,20 +58,30 @@ export class TranscriptBuffer {
   private revision = 0;
   private lastWindowStart = -1;
   private lastWindowEnd = -1;
+  private lastHypothesis: Word[] = [];
 
   /** Apply the next ordered hypothesis for this session's audio time range. */
   update(text: string, windowStart: number, windowEnd: number, final = false): TranscriptUpdate {
     if (!Number.isSafeInteger(windowStart) || !Number.isSafeInteger(windowEnd) || windowStart < 0 || windowEnd <= windowStart || windowEnd < this.lastWindowEnd) {
       throw new Error('TRANSCRIPT_WINDOW_ORDER');
     }
+    // A lexical match from 30 seconds ago is not evidence that the *current*
+    // overlapping audio contains that same phrase. Gate old-text matching on
+    // the immediately preceding raw Whisper window and actual audio overlap.
+    const consecutive = this.lastWindowEnd < 0 || windowStart < this.lastWindowEnd;
+    const next = words(text);
+    const recentOverlap = consecutive ? overlap(this.lastHypothesis, next) : undefined;
     this.lastWindowStart = windowStart;
     this.lastWindowEnd = windowEnd;
-    const next = words(text);
+    if (next.length) this.lastHypothesis = next;
     if (!next.length) {
       this.emptyWindows++;
       // A single silent window may be a transient ASR miss.  Two successive
       // empty windows (or an explicit stop) retire the old draft only once.
-      if (this.emptyWindows >= 2 || final) return this.flush();
+      if (this.emptyWindows >= 2 || final) {
+        this.lastHypothesis = [];
+        return this.flush();
+      }
       return this.state();
     }
     this.emptyWindows = 0;
@@ -80,37 +90,32 @@ export class TranscriptBuffer {
       this.pending = next;
       this.unanchored = undefined;
     } else {
-      const anchor = overlap(old, next);
+      const possible = recentOverlap && !this.unanchored ? overlap(old, next) : undefined;
+      let candidate = possible ? [...old.slice(0, possible.old), ...next.slice(possible.next)] : [];
+      if (possible && !this.stable.length && possible.old === 0 && possible.next > 0) {
+        // Whisper can prepend words to the *first* hypothesis.
+        candidate = next;
+      }
+      const anchor = possible && commonPrefix(this.stable, candidate) === this.stable.length ? possible : undefined;
       if (anchor) {
         this.unanchored = undefined;
-        // The matched part is already represented on the left, while newer
-        // hypotheses may rewrite the right edge of the previous window.
-        let candidate = [...old.slice(0, anchor.old), ...next.slice(anchor.next)];
-        if (!this.stable.length && anchor.old === 0 && anchor.next > 0) {
-          // Early recognitions can add words before the first anchor.
-          candidate = next;
-        }
-        if (commonPrefix(this.stable, candidate) === this.stable.length) {
-          const agreed = commonPrefix(old, candidate);
-          const advanceTo = Math.max(this.stable.length, Math.min(agreed, candidate.length - 3));
-          if (advanceTo > this.stable.length) this.stable.push(...old.slice(this.stable.length, advanceTo));
-          this.pending = candidate.slice(this.stable.length);
-        } else {
-          // Never silently rewrite words already confirmed.
-          this.pending = old.slice(this.stable.length);
-        }
+        const agreed = commonPrefix(old, candidate);
+        const advanceTo = Math.max(this.stable.length, Math.min(agreed, candidate.length - 3));
+        if (advanceTo > this.stable.length) this.stable.push(...old.slice(this.stable.length, advanceTo));
+        this.pending = candidate.slice(this.stable.length);
       } else if (next.length === old.length && commonPrefix(next, old) === next.length) {
         // One-word/very short identical windows are not new utterances.
         this.unanchored = undefined;
-      } else if (!this.pending.length && overlap(this.stable.slice(-12), next, 1)) {
-        // Await another hypothesis; repeated one-word anchors are ambiguous.
-        this.unanchored = next;
       } else if (this.unanchored && overlap(this.unanchored, next)) {
-        // Two consecutive hypotheses of a new phrase agree; preserve the old
-        // speech before moving on, even if it has left the 8-second window.
+        // The previous unanchored hypothesis is an independent new utterance.
+        // Prefer confirming it over matching common terminology in old history.
+        const fresh = overlap(this.unanchored, next)!;
         this.stable.push(...this.pending);
-        this.pending = [...this.unanchored.slice(0, overlap(this.unanchored, next)!.old), ...next.slice(overlap(this.unanchored, next)!.next)];
+        this.pending = [...this.unanchored.slice(0, fresh.old), ...next.slice(fresh.next)];
         this.unanchored = undefined;
+      } else if (!this.pending.length && overlap(this.stable.slice(-12), next, 1)) {
+        // A historical word alone is not a trustworthy current-window anchor.
+        this.unanchored = next;
       } else {
         // Do not discard old speech just because recognition was rewritten.
         // Keep one tentative unmatched segment until a second anchor arrives.

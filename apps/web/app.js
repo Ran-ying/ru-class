@@ -6,8 +6,8 @@ let sent = [], stopTimer, startTimer, flushResolve;
 let stableRussian = '', provisionalRussian = '', transcriptRevision = 0;
 const errors = {WORKER_OFFLINE:'语音识别 API 未就绪，请在设置中检查地址、key 和模型。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
-function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['asr-url','asr-model','asr-key','asr-save'])$(id).disabled=active; }
-function setConnected(online) { $('connection-state').hidden = online; $('ru').hidden = !online && !hasTranscript; }
+function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['speech-url','speech-model','speech-key','speech-save','speech-test'])$(id).disabled=active; }
+function setConnected(online) { $('connection-state').hidden = online || hasTranscript; $('ru').hidden = !online && !hasTranscript; }
 function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待语音识别 API'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
 async function cleanup() {
   running = false; clearTimeout(stopTimer); clearTimeout(startTimer); stream?.getTracks().forEach(t => t.stop());
@@ -26,13 +26,14 @@ async function startRecording() {
   controls(true); $('error').textContent = ''; $('status').textContent = '请求麦克风权限…';
   sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false; hasTranscript = false;
   stableRussian = ''; provisionalRussian = ''; transcriptRevision = 0;
-  $('duration').textContent = '00:00'; $('ru').textContent = '开始录音后，俄语字幕将在这里更新。'; $('latency').textContent = '等待第一条识别结果…';
+  $('duration').textContent = '00:00'; $('ru').textContent = '开始录音后，俄语字幕将在这里更新。'; $('latency').textContent = '等待第一条识别结果…'; $('connection-state').hidden=false;
   try {
     // Resume inside the user gesture before waiting for network events (Safari requirement).
     context = new AudioContext(); await context.resume();
     if(!clientToken)await loadConfig();
     if(!clientToken) {
       if(!$('settings').open) $('settings').showModal();
+      selectTab('access');
       throw new Error('请先在设置中输入站点访问令牌。');
     }
     stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
@@ -88,12 +89,13 @@ async function startRecording() {
             $('ru').textContent = p.text || '当前窗口未识别到语音';
             if (p.text?.trim()) hasTranscript = true;
           }
+          if (hasTranscript) $('connection-state').hidden=true;
           if (autoFollow) ruPanel.scrollTop = ruPanel.scrollHeight;
           const anchor = sent.find(x => x.end >= m.payload.window_end_sample);
           const displayMs = anchor ? performance.now() - anchor.at : null;
           $('latency').textContent = `窗口 ${((m.payload.window_end_sample-m.payload.window_start_sample)/16000).toFixed(1)} s · 推理 ${m.payload.inference_ms.toFixed(0)} ms · 音频末端至显示 ${displayMs === null ? '—' : displayMs.toFixed(0)+' ms'}`;
         } else if(m.type === 'session.stopped' && m.session_id === sessionId) {
-          await cleanup(); stopping = false; $('status').textContent = '已停止 · 尾部识别完成'; updateWorker(false); controls(false); ws.close();
+          await cleanup(); stopping = false; $('status').textContent=''; $('worker').textContent=''; $('connection-state').hidden=true; $('ru').hidden=!hasTranscript; controls(false); ws.close();
         } else if(m.type === 'session.error') await fail(errors[m.payload.code] || `服务错误：${m.payload.code}`);
         else if(m.type === 'connection.status') updateWorker(m.payload.worker_online, m.payload.worker);
       } catch(e) { await fail(e.message || '无法处理服务端消息'); }
@@ -121,25 +123,55 @@ $('record').onclick = async () => {
 };
 window.addEventListener('pagehide', () => { stream?.getTracks().forEach(t => t.stop()); ws?.close(); });
 
+const profiles=['speech','image','text'];
+let savedProfiles={speech:{baseUrl:'',model:'',keyConfigured:false},image:{baseUrl:'',model:'',keyConfigured:false},text:{baseUrl:'',model:'',keyConfigured:false}};
+function selectTab(page){
+  const models=page==='models';
+  $('panel-models').hidden=!models; $('panel-access').hidden=models;
+  for (const name of ['models','access']){
+    const tab=$('tab-'+name);
+    tab.setAttribute?.('aria-selected',String(name===page));
+    tab.tabIndex=name===page?0:-1;
+  }
+}
+$('tab-models').onclick=()=>selectTab('models');
+$('tab-access').onclick=()=>selectTab('access');
+
+function displayProfiles(data){
+  if(!data)return;
+  for(const kind of profiles){
+    const profile=data[kind]||{};
+    savedProfiles[kind]=profile;
+    $(kind+'-url').value=profile.baseUrl||'';
+    $(kind+'-model').value=profile.model||'';
+    $(kind+'-key').value='';
+    $(kind+'-key').placeholder=profile.keyConfigured?'已保存密钥；留空继续使用':'输入 API Key';
+  }
+}
 async function loadConfig() {
   const res=await fetch('/api/bootstrap');
   if(res.status===403) {
     publicMode=true;
-    $('site-auth').hidden=false; $('asr-settings').hidden=true;
+    $('models-unavailable').hidden=false; $('model-cards').hidden=true;
+    $('site-auth').hidden=false; $('local-access-help').hidden=true;
     if(!clientToken)clientToken=sessionStorage.getItem('ru-class-site-token')||'';
-    $('worker-detail').textContent='公网访问模式：ASR 地址、模型及密钥在服务器 config.json 中配置。';
+    $('worker-detail').textContent='服务端模型配置不在公网网页中修改。';
     return;
   }
   if(!res.ok)throw new Error('无法读取本地配置。');
-  publicMode=false; $('site-auth').hidden=true; $('asr-settings').hidden=false;
-  const config=await res.json();clientToken=config.clientToken;
-  $('asr-url').value=config.asr.baseUrl;$('asr-model').value=config.asr.model;
-  $('asr-key').placeholder=config.asr.keyConfigured?'已配置；留空保持不变':'输入 ASR API key';
-  $('worker-detail').textContent=config.ready?'语音识别 API 已连接':'语音识别 API 未就绪，请保存并测试连接';
+  publicMode=false;
+  $('models-unavailable').hidden=true; $('model-cards').hidden=false;
+  $('site-auth').hidden=true; $('local-access-help').hidden=false;
+  const config=await res.json();
+  clientToken=config.clientToken;
+  displayProfiles(config.models||{speech:config.asr});
+  $('worker-detail').textContent=config.ready?'语音识别 API 已连接':'语音识别 API 尚未验证连接';
 }
 $('settings-open').onclick=async()=>{
   if(!$('settings').open)$('settings').showModal();
-  try{await loadConfig();}catch(e){$('asr-feedback').textContent=e.message;}
+  selectTab('models');
+  try{await loadConfig();if(publicMode)selectTab('access');}
+  catch(e){$('worker-detail').textContent=e.message;}
 };
 $('site-auth').onsubmit=event=>{
   event.preventDefault();
@@ -151,13 +183,34 @@ $('site-auth').onsubmit=event=>{
   $('site-feedback').textContent='令牌已保存到本标签页会话中。';
   $('settings').close();
 };
-$('asr-settings').onsubmit=async event=>{
-  event.preventDefault();
+async function modelAction(kind,operation){
   if(publicMode)return;
-  $('asr-save').disabled=true;$('asr-feedback').textContent='正在测试连接…';
-  try{if(!clientToken)await loadConfig();
-    const res=await fetch('/api/asr',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${clientToken}`},body:JSON.stringify({baseUrl:$('asr-url').value,model:$('asr-model').value,apiKey:$('asr-key').value})});
-    const body=await res.json();if(!res.ok)throw new Error(body.error||'连接失败');
-    $('asr-key').value='';$('asr-feedback').textContent='连接成功；配置已保存到当前服务进程。';await loadConfig();
-  }catch(e){$('asr-feedback').textContent=e.message;}finally{$('asr-save').disabled=false;}
-};
+  const feedback=$(kind+'-feedback');
+  feedback.textContent=operation==='save'?'正在保存配置…':'正在测试模型列表接口…';
+  $(kind+'-save').disabled=true;$(kind+'-test').disabled=true;
+  try{
+    if(!clientToken)await loadConfig();
+    const res=await fetch('/api/models/'+kind+'/'+operation,{
+      method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${clientToken}`},
+      body:JSON.stringify({baseUrl:$(kind+'-url').value.trim(),model:$(kind+'-model').value.trim(),apiKey:$(kind+'-key').value})
+    });
+    const result=await res.json();
+    if(!res.ok)throw new Error(result.error||'请求失败');
+    if(operation==='save'){
+      savedProfiles[kind]=result.profile;
+      $(kind+'-key').value='';
+      $(kind+'-key').placeholder='已保存密钥；留空继续使用';
+      feedback.textContent='已独立保存到服务器 config.json；尚未测试连接。';
+    } else {
+      feedback.textContent='测试成功：可访问模型列表并找到该模型；尚未验证实际推理。';
+    }
+  }catch(e){feedback.textContent='操作失败：'+e.message;}
+  finally{
+    $(kind+'-save').disabled=kind==='speech'&&(running||stopping);
+    $(kind+'-test').disabled=kind==='speech'&&(running||stopping);
+  }
+}
+for(const kind of profiles){
+  $('model-'+kind).onsubmit=e=>{e.preventDefault();void modelAction(kind,'save');};
+  $(kind+'-test').onclick=()=>void modelAction(kind,'test');
+}
