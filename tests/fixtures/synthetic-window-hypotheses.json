@@ -1,0 +1,7 @@
+[
+  {"text":"Сегодня мы изучаем методы защиты информации","window_start_sample":0,"window_end_sample":32000},
+  {"text":"мы изучаем методы защиты информации подробно","window_start_sample":16000,"window_end_sample":48000},
+  {"text":"методы защиты информации подробно на занятии","window_start_sample":32000,"window_end_sample":64000},
+  {"text":"Теперь мы говорим о цифровом кошельке","window_start_sample":48000,"window_end_sample":80000},
+  {"text":"мы говорим о цифровом кошельке сегодня","window_start_sample":64000,"window_end_sample":96000}
+]
