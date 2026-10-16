@@ -56,6 +56,10 @@ export class TranscriptBuffer {
   lastWindowStart = -1;
   lastWindowEnd = -1;
   lastHypothesis = [];
+  // Diagnostics only. No token removal or new stable text is authorized by
+  // these counters; window-level provenance remains in the separate journal.
+  unanchoredReplacementCount = 0;
+  unanchoredReplacementTokens = 0;
 
   /**
    * A repeated result for the very same sample range is a transport/replay
@@ -165,8 +169,14 @@ export class TranscriptBuffer {
         // A historical word alone is not a trustworthy current-window anchor.
         this.unanchored = next;
       } else {
-        // Do not discard old speech just because recognition was rewritten.
-        // Keep one tentative unmatched segment until a second anchor arrives.
+        // An unanchored candidate might be an alternate interpretation OR
+        // real speech. The lexical stream alone cannot resolve which one.
+        // Report a risk signal when a later candidate replaces it with no
+        // contiguous two-token anchor; never describe this as proven loss.
+        if (this.unanchored?.length && !overlap(this.unanchored, next)) {
+          this.unanchoredReplacementCount++;
+          this.unanchoredReplacementTokens += this.unanchored.length;
+        }
         this.unanchored = next;
       }
     }

@@ -214,3 +214,27 @@ test('first stop/flush never resurrects a previously hidden draft interpretation
     assert.equal(r.flush().stable_delta,'','repeated stop at prefix '+stopAt);
   }
 });
+
+test('replacement diagnostics expose uncertain speech without changing the live subtitle contract',()=>{
+  const r=new Recorder();
+  r.update('Первая длинная часть лекции',0,2*S);
+  r.update('Совершенно новая отдельная мысль',S,3*S);
+  r.update('Непохожее продолжение совершенно другой темы',2*S,4*S);
+  assert.equal(r.buffer.unanchoredReplacementCount,1);
+  assert.ok(r.buffer.unanchoredReplacementTokens>=4);
+  assert.match(r.current(),/Первая длинная часть лекции/);
+  assert.match(r.current(),/Непохожее продолжение/);
+  // Missing the intermediate candidate from this display is a RISK, not
+  // proof the teacher actually said it: the raw ASR journal must retain it.
+  const stopped=r.flush();
+  assert.equal(stopped.display,r.current());
+});
+
+test('an overlapping but anchored correction is not counted as uncertain replacement',()=>{
+  const r=new Recorder();
+  r.update('Первое длинное предложение',0,2*S);
+  r.update('Появилась новая длинная тема',S,3*S);
+  r.update('новая длинная тема продолжается',2*S,4*S);
+  assert.equal(r.buffer.unanchoredReplacementCount,0);
+  assert.ok(r.current().includes('новая длинная тема'));
+});

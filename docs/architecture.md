@@ -1,3 +1,10 @@
+> **ARCHIVED TOPOLOGY NOTICE (2026-10-17)**: This page describes the legacy
+> Node gateway / WebSocket design. The active product is a static anonymous
+> site with browser-owned BYOK + IndexedDB + browser-direct ASR. Consult
+> [current status](current-status.md) and
+> [current browser architecture](browser-direct-byok.md).
+> Do not reuse gateway topology, credentials or deployment recipes below.
+
 # Current v0.1 interface revision · 2026-10-16
 
 This document supersedes the earlier outbound Worker topology and full-width bottom toolbar. The user's correction explicitly authorizes the following v0.1 boundary; no later-version model integrations are added.
