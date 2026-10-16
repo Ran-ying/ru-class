@@ -105,6 +105,14 @@ export class TranscriptBuffer {
     }
     this.emptyWindows = 0;
     const old = [...this.stable, ...this.pending];
+    // Disjoint sample intervals represent independent speech. Similar words
+    // spoken again after a nonoverlapping interval are NOT duplicates.
+    if (!consecutive && old.length) {
+      this.stable.push(...this.pending);
+      this.pending = next;
+      this.unanchored = undefined;
+      return final ? this.flush() : this.state();
+    }
     if (!old.length) {
       this.pending = next;
       this.unanchored = undefined;
@@ -126,7 +134,7 @@ export class TranscriptBuffer {
         const advanceTo = Math.max(this.stable.length, Math.min(agreed, candidate.length - 3));
         if (advanceTo > this.stable.length) this.stable.push(...old.slice(this.stable.length, advanceTo));
         this.pending = candidate.slice(this.stable.length);
-      } else if (next.length === old.length && commonPrefix(next, old) === next.length) {
+      } else if (consecutive && next.length === old.length && commonPrefix(next, old) === next.length) {
         // One-word/very short identical windows are not new utterances.
         this.unanchored = undefined;
       } else if (this.unanchored && overlap(this.unanchored, next)) {
