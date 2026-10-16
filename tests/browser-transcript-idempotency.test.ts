@@ -148,3 +148,67 @@ test('privacy-safe local replay CLI can verify a synthetic cache without printin
   assert.ok(report.finalWordCount>0);
   assert.doesNotMatch(run.stdout,/кошельке|защиты/,'Report must not leak raw classroom transcript');
 });
+
+test('non-consecutive silence separated by unchanged speech must not prematurely finalize an old wrong word',()=>{
+  const r=new Recorder();
+  const rows=[
+    ['Здесь электронный шокер',0,2],
+    ['',0,3],
+    ['Здесь электронный шокер',0,4],
+    ['',0,5],
+    ['Здесь электронный кошелёк',0,6]
+  ] as const;
+  for(const [text,start,end] of rows)r.update(text,start*S,end*S);
+  assert.equal(r.flush().display,'Здесь электронный кошелёк');
+  assert.equal(r.flush().stable_delta,'');
+});
+
+test('an alternative unanchored draft is committed exactly as displayed when recording stops',()=>{
+  const r=new Recorder();
+  const tok=(s:string)=>s.split(' ').map(display=>({display,key:display.toLowerCase()}));
+  r.buffer.pending=tok('можно было на сень');
+  r.buffer.unanchored=tok('можно было на 7-й перекат');
+  const preliminary=r.buffer.state();
+  r.partial=preliminary.partial_text;
+  assert.equal(r.current(),'можно было на 7-й перекат');
+  const stopped=r.flush();
+  assert.equal(stopped.partial_text,'');
+  assert.equal(stopped.display,'можно было на 7-й перекат');
+  assert.doesNotMatch(stopped.display,/сень/);
+  assert.equal(r.flush().stable_delta,'');
+});
+
+test('an unanchored hypothesis matching an already-stable tail is not redisplayed at stop',()=>{
+  const r=new Recorder();
+  r.update('Я могу узнать где вы платили',0,2*S);
+  r.flush();
+  const tok=(s:string)=>s.split(' ').map(display=>({display,key:display.toLowerCase()}));
+  r.buffer.unanchored=tok('где вы платили когда вы платили');
+  const preview=r.buffer.state();
+  r.partial=preview.partial_text;
+  assert.equal(preview.partial_text,'когда вы платили');
+  const displayed=r.current();
+  assert.equal(r.flush().display,displayed);
+  assert.equal(r.flush().stable_delta,'');
+});
+
+test('first stop/flush never resurrects a previously hidden draft interpretation',()=>{
+  const seq=[
+    ['Карточка просто клалась в этот блокнотик',0,2],
+    ['просто клалась в этот блокнотик и уносилась',1,3],
+    ['клалась в этот блокнотик и уносилась куда-то',2,4],
+    ['Потому что карточка отслеживается',3,5],
+    ['карточка отслеживается когда вы платили',4,6],
+    ['Вы действительно рискуете всем своим счётом',5,7],
+    ['действительно рискуете всем своим счётом',6,8],
+    ['Я могу узнать где вы платили',7,9],
+    ['узнать где вы платили когда платили',8,10]
+  ] as const;
+  for(let stopAt=1;stopAt<=seq.length;stopAt++){
+    const r=new Recorder();
+    for(const [text,start,end] of seq.slice(0,stopAt))r.update(text,start*S,end*S);
+    const before=r.current();
+    assert.equal(r.flush().display,before,'stop at prefix '+stopAt);
+    assert.equal(r.flush().stable_delta,'','repeated stop at prefix '+stopAt);
+  }
+});
