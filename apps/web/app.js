@@ -1,357 +1,311 @@
-import { encodeFrame } from './audio.js';
-const $ = id => document.getElementById(id);
-let ws, stream, context, capture, source, sessionId, seq = 0, samples = 0, running = false, stopping = false;
-let clientToken='', publicMode = false, hasTranscript = false;
-let sent = [], stopTimer, startTimer, flushResolve;
-let stableRussian = '', provisionalRussian = '', transcriptRevision = 0;
-const errors = {WORKER_OFFLINE:'语音识别 API 未就绪，请在设置中检查地址、key 和模型。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
-function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
-function controls(active) { $('record').textContent = stopping ? '正在停止…' : running ? '停止录音' : active ? '连接中…' : '开始录音'; $('record').disabled = stopping || (active && !running); for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh'])$(id).disabled=active; }
-function setConnected(online) { $('connection-state').hidden = online || hasTranscript; $('ru').hidden = !online && !hasTranscript; }
-function updateWorker(online, worker = {}) { const label = online ? workerLabel(worker) : '等待语音识别 API'; $('worker').textContent = label; $('worker-detail').textContent = label; setConnected(online); }
-async function cleanup() {
-  running = false; clearTimeout(stopTimer); clearTimeout(startTimer); stream?.getTracks().forEach(t => t.stop());
-  capture?.disconnect(); source?.disconnect();
-  if (context && context.state !== 'closed') await context.close().catch(() => {});
-  context = undefined; capture = undefined; source = undefined; stream = undefined;
-}
-async function fail(message) {
-  $('error').textContent = message; $('status').textContent = '已停止 · 发生错误';
-  await cleanup(); stopping = false; updateWorker(false); controls(false); ws?.close();
-}
-function workerLabel(p) { return `${p.model || '未知模型'} · ${p.os || '未知系统'} · 后端：${p.backend || '未验证'}`; }
-async function startRecording() {
-  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) { await fail('录音需要 HTTPS（或 localhost）以及支持 AudioWorklet 的浏览器。'); return; }
+import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
+import {loadProfiles,saveProfile,saveLesson,listLessons,saveAudioChunk,recordingWav,clearBrowserData} from './local-store.js';
 
-  controls(true); $('error').textContent = ''; $('status').textContent = '请求麦克风权限…';
-  sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false; hasTranscript = false;
-  stableRussian = ''; provisionalRussian = ''; transcriptRevision = 0;
-  $('duration').textContent = '00:00'; $('ru').textContent = '开始录音后，俄语字幕将在这里更新。'; $('latency').textContent = '等待第一条识别结果…'; $('connection-state').hidden=false;
-  try {
-    // Resume inside the user gesture before waiting for network events (Safari requirement).
-    context = new AudioContext(); await context.resume();
-    if(!clientToken)await loadConfig();
-    if(!clientToken) {
-      if(!$('settings').open) $('settings').showModal();
-      selectTab('access');
-      throw new Error('请先在设置中输入站点访问令牌。');
-    }
-    stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+const $=id=>document.getElementById(id);
+const kinds=['speech','image','text'];
+let profiles={speech:null,image:null,text:null};
+const stages=Object.fromEntries(kinds.map(kind=>[kind,{revision:0,ready:false,manual:false}]));
+let running=false,stopping=false,stream,context,source,capture,asr,lessonId='',sampleCount=0,chunkIndex=0;
+let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve();
+let stable='',draft='',hasTranscript=false,marks=[];
+const errorMessage=e=>e instanceof Error?e.message:String(e);
+function status(message=''){
+  $('status').textContent=message;
+  $('connection-state').hidden=!message || hasTranscript;
+}
+function buttons(){
+  $('record').disabled=stopping;
+  $('record').textContent=stopping?'正在停止…':running?'停止录音':'开始录音';
+  for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh'])
+    $(id).disabled=running||stopping;
+}
+function showTranscript(update){
+  const panel=$('ru');
+  const follow=panel.scrollHeight-panel.clientHeight-panel.scrollTop<64;
+  if(update.stable_delta?.trim())stable=stable?[stable,update.stable_delta.trim()].join(' '):update.stable_delta.trim();
+  draft=update.partial_text?.trim()||'';
+  const text=[stable,draft].filter(Boolean).join(' ');
+  panel.textContent=text||'等待俄语语音…';
+  if(text)hasTranscript=true;
+  panel.hidden=false;
+  status();
+  if(follow)panel.scrollTop=panel.scrollHeight;
+  const point=marks.find(m=>m.end>=update.window_end_sample);
+  const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
+  $('latency').textContent='窗口 '+((update.window_end_sample-update.window_start_sample)/16000).toFixed(1)+' s · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
+  if(lessonId)void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
+}
+async function cleanupMicrophone(){
+  running=false;
+  stream?.getTracks().forEach(t=>t.stop());
+  capture?.disconnect();source?.disconnect();
+  if(context&&context.state!=='closed')await context.close().catch(()=>{});
+  stream=null;capture=null;source=null;context=null;
+}
+function finishLesson(outcome){
+  // Snapshot at the time of scheduling, never after a later async callback.
+  const record={id:lessonId,title:$('lesson').value.trim(),startedAt,durationSeconds:sampleCount/16000,
+    transcript:[stable,draft].filter(Boolean).join(' '),outcome,hasAudio:chunkIndex>0};
+  lessonWrites=lessonWrites.catch(()=>{}).then(()=>saveLesson(record));
+  return lessonWrites;
+}
+async function onFailure(e){
+  const message=errorMessage(e);
+  if(!running&&!stopping&&!context){$('error').textContent=message;return;}
+  asr?.cancel();
+  $('error').textContent=message;
+  try{
+    await cleanupMicrophone();
+    await writing;
+    if(lessonId)await finishLesson('interrupted');
+  }catch(storageError){$('error').textContent+='；本地保存失败：'+errorMessage(storageError);}
+  stopping=false;buttons();status();
+}
+async function start(){
+  if(running||stopping)return;
+  const p=profiles.speech;
+  if(!p?.baseUrl||!p?.model||!p?.apiKey){
+    $('error').textContent='请先在“设置 → 模型 → 语音”中填写自己的 API 地址、模型和 Token。';
+    $('settings').showModal();setTab('models');return;
+  }
+  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!window.AudioWorkletNode){
+    $('error').textContent='录音需要安全上下文（HTTPS 或 localhost）以及 AudioWorklet。';
+    return;
+  }
+  lessonId=crypto.randomUUID();startedAt=Date.now();
+  sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();
+  stable='';draft='';hasTranscript=false;
+  $('ru').textContent='等待俄语语音…';$('ru').hidden=false;
+  $('duration').textContent='00:00';$('error').textContent='';$('latency').textContent='等待第一条识别结果…';
+  status('请求麦克风权限…');
+  try{
+    // Safari: construct/resume audio inside the user's click handler.
+    context=new AudioContext();await context.resume();
+    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    await finishLesson('recording'); // Recovery metadata exists before audio chunks arrive.
     await context.audioWorklet.addModule('/capture-worklet.js');
-    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/client`);
-    const socket = ws;
-    startTimer = setTimeout(() => void fail('建立录音会话超时，请检查网关与 Worker。'),15000);
-    ws.onopen = () => send('auth', {token:clientToken});
-    ws.onmessage = async ({data}) => {
-      if(ws !== socket) return;
-      try {
-        const m = JSON.parse(data);
-        if (m.protocol_version !== '0.1') throw new Error('协议版本不匹配');
-        if (m.type === 'auth.ok') { updateWorker(m.payload.worker_online, m.payload.worker); send('session.start', {lesson_name:$('lesson').value}); }
-        else if (m.type === 'session.ready' && m.session_id === sessionId) {
-          clearTimeout(startTimer);
-          updateWorker(true, m.payload.worker);
-          const track = stream.getAudioTracks()[0];
-          if(!track || track.readyState !== 'live') throw new Error('麦克风已中断，请重新开始。');
-          source = context.createMediaStreamSource(stream); capture = new AudioWorkletNode(context, 'ru-capture');
-          capture.port.onmessage = ({data: audio}) => {
-            if (audio.type === 'flushed') { flushResolve?.(); return; }
-            if (audio.type !== 'audio' || !running) return;
-            if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > 512000) { void fail('音频网络发送积压，录音已停止；请检查连接后重新开始。'); return; }
-            const packet = encodeFrame(sessionId, crypto.randomUUID(), seq++, samples, audio.samples, audio.sourceRate);
-            samples += audio.samples.length; sent.push({end:samples,at:performance.now()}); if(sent.length > 100) sent.shift();
-            ws.send(packet); const seconds = Math.floor(samples / 16000); $('duration').textContent = `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
-          };
-          running = true; source.connect(capture); capture.connect(context.destination);
-          context.onstatechange = () => { if(running && !stopping && context?.state === 'suspended') void fail('浏览器暂停了音频采集，请保持页面在前台并重新开始。'); };
-          track.onended = () => { if(running && !stopping) void fail('麦克风采集中断，请重新开始。'); };
-          track.onmute = () => { if(running && !stopping) void fail('麦克风输入暂停，录音已停止，请检查设备后重新开始。'); };
-          $('status').textContent = '录音中 · 俄语识别'; controls(true);
-        } else if (m.type === 'asr.partial' && m.session_id === sessionId) {
-          const ruPanel = $('ru');
-          const autoFollow = Number.isFinite(ruPanel.scrollHeight) &&
-            ruPanel.scrollHeight - ruPanel.clientHeight - ruPanel.scrollTop < 64;
-          const p = m.payload;
-          if (Number.isSafeInteger(p.revision) && typeof p.stable_delta === 'string' && typeof p.partial_text === 'string') {
-            // The server sends only newly confirmed words. Overlapping Whisper
-            // windows must never be appended directly to the displayed text.
-            if (p.revision > transcriptRevision) {
-              transcriptRevision = p.revision;
-              if (p.stable_delta.trim()) stableRussian = stableRussian ? stableRussian + ' ' + p.stable_delta.trim() : p.stable_delta.trim();
-              provisionalRussian = p.partial_text.trim();
-              const combined = [stableRussian, provisionalRussian].filter(Boolean).join(' ');
-              $('ru').textContent = combined || '当前窗口未识别到语音';
-              if (combined) hasTranscript = true;
-            }
-          } else {
-            // Legacy Worker protocol: newest window only; never pretend that
-            // this is a stable history.
-            $('ru').textContent = p.text || '当前窗口未识别到语音';
-            if (p.text?.trim()) hasTranscript = true;
-          }
-          if (hasTranscript) $('connection-state').hidden=true;
-          if (autoFollow) ruPanel.scrollTop = ruPanel.scrollHeight;
-          const anchor = sent.find(x => x.end >= m.payload.window_end_sample);
-          const displayMs = anchor ? performance.now() - anchor.at : null;
-          $('latency').textContent = `窗口 ${((m.payload.window_end_sample-m.payload.window_start_sample)/16000).toFixed(1)} s · 推理 ${m.payload.inference_ms.toFixed(0)} ms · 音频末端至显示 ${displayMs === null ? '—' : displayMs.toFixed(0)+' ms'}`;
-        } else if(m.type === 'session.stopped' && m.session_id === sessionId) {
-          await cleanup(); stopping = false; $('status').textContent=''; $('worker').textContent=''; $('connection-state').hidden=true; $('ru').hidden=!hasTranscript; controls(false); ws.close();
-        } else if(m.type === 'session.error') await fail(errors[m.payload.code] || `服务错误：${m.payload.code}`);
-        else if(m.type === 'connection.status') updateWorker(m.payload.worker_online, m.payload.worker);
-      } catch(e) { await fail(e.message || '无法处理服务端消息'); }
+    source=context.createMediaStreamSource(stream);
+    capture=new AudioWorkletNode(context,'ru-capture');
+    asr=new BrowserAsrSession(p,showTranscript,e=>void onFailure(e));
+    capture.port.onmessage=({data})=>{
+      if(data?.type==='flushed'){flushResolve?.();flushResolve=null;return;}
+      if(data?.type!=='audio'||!running)return;
+      const samples=data.samples;
+      const index=chunkIndex++;
+      sampleCount+=samples.length;
+      marks.push({end:sampleCount,time:performance.now()});if(marks.length>100)marks.shift();
+      writing=writing.then(()=>saveAudioChunk(lessonId,index,samples))
+        .catch(e=>{void onFailure(new Error('浏览器录音存储失败：'+errorMessage(e)));throw e;});
+      asr.push(samples);
+      const seconds=Math.floor(sampleCount/16000);
+      $('duration').textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
     };
-    ws.onclose = event => {
-      if(ws !== socket || !(running || stopping || context))return;
-      if(event.code === 1008 && publicMode) { sessionStorage.removeItem('ru-class-site-token'); clientToken = ''; }
-      void fail(event.code === 1008 ? '站点认证失败，请在设置中检查访问令牌。' : '网关连接已断开，录音已停止。v0.1 不支持断网续传。');
-    };
-    ws.onerror = () => { if(ws === socket) void fail('无法连接网关，请检查网络与 HTTPS/WSS 配置。'); };
-  } catch(e) { await fail(e.name === 'NotAllowedError' ? '麦克风权限被拒绝，请在浏览器设置中允许访问后重试。' : `无法开始录音：${e.message}`); }
+    running=true;buttons();
+    source.connect(capture);capture.connect(context.destination);
+    const track=stream.getAudioTracks()[0];
+    if(!track||track.readyState!=='live')throw Error('麦克风不可用');
+    track.onended=()=>{if(running&&!stopping)void onFailure(Error('麦克风已中断'));};
+    track.onmute=()=>{if(running&&!stopping)void onFailure(Error('麦克风已暂停'));};
+    context.onstatechange=()=>{if(running&&!stopping&&context?.state==='suspended')void onFailure(Error('浏览器暂停了录音，请保持页面处于前台'));};
+    status('录音中 · 俄语识别');
+  }catch(e){await onFailure(e);}
 }
-async function stopRecording() {
-  if(!running || stopping) return;
-  stopping = true; controls(true); $('status').textContent = '正在停止并识别尾部…';
-  try {
-    await Promise.race([new Promise(resolve => { flushResolve = resolve; capture.port.postMessage('flush'); }),new Promise((_,reject) => setTimeout(() => reject(new Error('音频采集未响应停止请求')),2000))]);
-    await cleanup(); send('session.stop');
-    stopTimer = setTimeout(() => void fail('尾部识别超时，连接已关闭。'),70000);
-  } catch(e) { await fail(e.message); }
-}
-$('record').onclick = async () => {
-  if ($('record').disabled || stopping) return;
-  if (running) await stopRecording(); else await startRecording();
-};
-window.addEventListener('pagehide', () => { stream?.getTracks().forEach(t => t.stop()); ws?.close(); });
-
-const profiles=['speech','image','text'];
-let savedProfiles={
-  speech:{baseUrl:'',model:'',keyConfigured:false},
-  image:{baseUrl:'',model:'',keyConfigured:false},
-  text:{baseUrl:'',model:'',keyConfigured:false}
-};
-const steps=Object.fromEntries(profiles.map(kind=>[kind,{generation:0,ready:false,mode:null}]));
-function selectTab(page){
-  const models=page==='models';
-  $('panel-models').hidden=!models; $('panel-access').hidden=models;
-  for(const name of ['models','access']){
-    const tab=$('tab-'+name);
-    tab.setAttribute?.('aria-selected',String(name===page));
-    tab.tabIndex=name===page?0:-1;
+async function stop(){
+  if(!running||stopping)return;
+  stopping=true;buttons();status('正在识别最后的语音…');
+  try{
+    await Promise.race([
+      new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(Error('音频采集停止超时')),3000);
+        flushResolve=()=>{clearTimeout(timer);resolve();};
+        capture.port.postMessage('flush');
+      }),
+      new Promise((_,reject)=>setTimeout(()=>reject(Error('音频采集停止超时')),3500))
+    ]);
+    await cleanupMicrophone();
+    await Promise.all([asr.stop(),writing]);
+    await finishLesson('completed');
+    $('error').textContent='';
+  }catch(e){
+    asr?.cancel();$('error').textContent='停止或保存失败：'+errorMessage(e);
+  }finally{
+    stopping=false;buttons();status();$('ru').hidden=!hasTranscript;
+    void renderLessons();
   }
 }
-$('tab-models').onclick=()=>selectTab('models');
-$('tab-access').onclick=()=>selectTab('access');
+$('record').onclick=()=>running?void stop():void start();
+window.addEventListener('pagehide',()=>{
+  stream?.getTracks().forEach(t=>t.stop());
+  asr?.cancel();
+});
 
-/* Reset one provider's form whenever its API address changes. */
-function resetModelFlow(kind,{clearToken=true}={}){
-  const step=steps[kind];
-  step.generation++;
-  step.ready=false;
-  step.mode=null;
+// User-model configuration. The RU-Class server is NEVER consulted.
+function setTab(page){
+  for(const name of ['models','access']){
+    const selected=(name===page);
+    $('panel-'+name).hidden=!selected;
+    $('tab-'+name).setAttribute('aria-selected',String(selected));
+    $('tab-'+name).tabIndex=selected?0:-1;
+  }
+}
+$('tab-models').onclick=()=>setTab('models');
+$('tab-access').onclick=()=>{setTab('access');void renderLessons();};
+function reset(kind,clearKey=true){
+  const step=stages[kind];step.revision++;step.ready=false;step.manual=false;
   $(kind+'-discovery').hidden=false;
-  $(kind+'-list').disabled=kind==='speech'&&(running||stopping);
-  $(kind+'-refresh').disabled=kind==='speech'&&(running||stopping);
   $(kind+'-model-stage').hidden=true;
   $(kind+'-model-choice').hidden=true;
   $(kind+'-model-manual-wrap').hidden=true;
-  $(kind+'-model').value='';
-  $(kind+'-model').required=false;
-  $(kind+'-model-select').required=false;
-  $(kind+'-model-select').replaceChildren();
   $(kind+'-token-stage').hidden=true;
-  $(kind+'-key-wrap').hidden=true;
   $(kind+'-actions').hidden=true;
-  if(clearToken)$(kind+'-key').value='';
+  $(kind+'-model-select').replaceChildren();
+  $(kind+'-model-select').required=false;
+  $(kind+'-model').required=false;
+  $(kind+'-model').value='';
+  if(clearKey)$(kind+'-key').value='';
   $(kind+'-model-count').textContent='';
   $(kind+'-feedback').textContent='';
 }
-function displayProfiles(data){
-  for(const kind of profiles){
-    const profile=data?.[kind]||{};
-    savedProfiles[kind]=profile;
-    $(kind+'-url').value=profile.baseUrl||'';
-    resetModelFlow(kind);
-    $(kind+'-key').placeholder=profile.keyConfigured?'已保存 Token；留空沿用':'输入 API Token';
-  }
+function choice(kind){
+  return stages[kind].manual?$(kind+'-model').value.trim():$(kind+'-model-select').value;
 }
-function selectedModel(kind){
-  if(steps[kind].mode==='select')return $(kind+'-model-select').value;
-  if(steps[kind].mode==='manual')return $(kind+'-model').value.trim();
-  return '';
+function keyFor(kind){
+  const old=profiles[kind];
+  const url=$(kind+'-url').value.trim();
+  return $(kind+'-key').value || ((old?.baseUrl===url)?old.apiKey:'') || '';
 }
-function canUseToken(kind){
-  const previous=savedProfiles[kind]||{};
-  return !!$(kind+'-key').value || (!!previous.keyConfigured && previous.baseUrl===$(kind+'-url').value.trim());
+function updateActions(kind){
+  $(kind+'-actions').hidden=!(stages[kind].ready&&choice(kind)&&keyFor(kind));
 }
-function updateModelProgress(kind){
-  const step=steps[kind];
-  if(!step.ready)return;
-  const hasModel=!!selectedModel(kind);
-  // Once model enumeration completes, Token is always visible, even before a
-  // model is selected; Save/Test require both a choice and usable credentials.
-  $(kind+'-actions').hidden=!(hasModel&&canUseToken(kind));
-}
-function setModelChoices(kind,ids){
-  const step=steps[kind];
-  const previousChoice=step.ready?selectedModel(kind):'';
-  step.ready=true;
-  step.mode=ids.length?'select':'manual';
+function showModels(kind,ids){
+  const step=stages[kind],oldChoice=step.ready?choice(kind):profiles[kind]?.baseUrl===$(kind+'-url').value.trim()?profiles[kind].model:'';
+  step.ready=true;step.manual=ids.length===0;
+  $(kind+'-discovery').hidden=true;
+  $(kind+'-model-count').textContent='';
   $(kind+'-model-stage').hidden=false;
   $(kind+'-model-choice').hidden=!ids.length;
   $(kind+'-model-manual-wrap').hidden=!!ids.length;
   $(kind+'-model-select').required=!!ids.length;
   $(kind+'-model').required=!ids.length;
-  const stored=savedProfiles[kind]?.baseUrl===$(kind+'-url').value.trim()?savedProfiles[kind]?.model:'';
-  const preferred=previousChoice||stored||'';
   if(ids.length){
-    // Only IDs returned by the provider can be chosen; no manual option.
-    const options=ids.map(id=>{
-      const option=document.createElement('option');
-      option.value=id; option.textContent=id;
-      return option;
-    });
-    const placeholder=document.createElement('option');
-    placeholder.value='';placeholder.textContent='请选择模型';
+    const place=document.createElement('option');place.value='';place.textContent='请选择模型';
+    const options=ids.map(id=>{const item=document.createElement('option');item.value=id;item.textContent=id;return item;});
     const select=$(kind+'-model-select');
-    select.replaceChildren(placeholder,...options);
-    select.value=ids.includes(preferred)?preferred:'';
-  } else {
-    $(kind+'-model').value=preferred||'';
-  }
-  // The initial discovery button and its status vanish after a completed
-  // model lookup. The model selector/manual input and Token field appear
-  // together; the selector's refresh icon remains available.
-  $(kind+'-discovery').hidden=true;
-  $(kind+'-model-count').textContent='';
+    select.replaceChildren(place,...options);select.value=ids.includes(oldChoice)?oldChoice:'';
+  }else $(kind+'-model').value=oldChoice||'';
   $(kind+'-token-stage').hidden=false;
-  $(kind+'-key-wrap').hidden=false;
-  updateModelProgress(kind);
+  updateActions(kind);
 }
-async function loadConfig(){
-  const res=await fetch('/api/bootstrap');
-  if(res.status===403){
-    publicMode=true;
-    $('models-unavailable').hidden=false; $('model-cards').hidden=true;
-    $('site-auth').hidden=false; $('local-access-help').hidden=true;
-    if(!clientToken)clientToken=sessionStorage.getItem('ru-class-site-token')||'';
-    $('worker-detail').textContent='服务端模型配置不在公网网页中修改。';
-    return;
-  }
-  if(!res.ok)throw new Error('无法读取本地配置。');
-  publicMode=false;
-  $('models-unavailable').hidden=true; $('model-cards').hidden=false;
-  $('site-auth').hidden=true; $('local-access-help').hidden=false;
-  const config=await res.json();
-  clientToken=config.clientToken;
-  displayProfiles(config.models||{speech:config.asr});
-  $('worker-detail').textContent=config.ready?'语音识别 API 已连接':'语音识别 API 尚未验证连接';
-}
-$('settings-open').onclick=async()=>{
-  if(!$('settings').open)$('settings').showModal();
-  selectTab('models');
-  try{await loadConfig();if(publicMode)selectTab('access');}
-  catch(e){$('worker-detail').textContent=e.message;}
-};
-$('site-auth').onsubmit=event=>{
-  event.preventDefault();
-  const token=$('site-token').value.trim();
-  if(token.length<24){$('site-feedback').textContent='访问令牌至少需要 24 个字符。';return;}
-  clientToken=token;
-  sessionStorage.setItem('ru-class-site-token',token);
-  $('site-token').value='';
-  $('site-feedback').textContent='令牌已保存到本标签页会话中。';
-  $('settings').close();
-};
-async function discoverModels(kind){
-  if(publicMode)return;
+async function discover(kind){
   const url=$(kind+'-url').value.trim();
-  const key=$(kind+'-key').value;
+  const token=$(kind+'-key').value || (profiles[kind]?.baseUrl===url?profiles[kind].apiKey:'') || '';
+  const step=stages[kind],revision=++step.revision;
   const discovery=$(kind+'-discovery');
-  const feedback=discovery.hidden ? $(kind+'-feedback') : $(kind+'-model-count');
-  if(!url){feedback.textContent='请先填写 API 地址';return;}
-  const step=steps[kind], generation=++step.generation;
-  const list=$(kind+'-list'),refresh=$(kind+'-refresh');
-  list.disabled=true;refresh.disabled=true;
-  feedback.textContent='正在获取可用模型…';
+  const feedback=discovery.hidden?$(kind+'-feedback'):$(kind+'-model-count');
+  feedback.textContent='获取可用模型中…';
+  const list=$(kind+'-list'),refresh=$(kind+'-refresh');list.disabled=true;refresh.disabled=true;
   try{
-    if(!clientToken)await loadConfig();
-    const res=await fetch('/api/models/'+kind+'/list',{
-      method:'POST',
-      headers:{'Content-Type':'application/json',Authorization:'Bearer '+clientToken},
-      body:JSON.stringify({baseUrl:url,apiKey:key})
-    });
-    const body=await res.json();
-    if(generation!==step.generation || $(kind+'-url').value.trim()!==url || $(kind+'-key').value!==key)return;
-    if(!res.ok)throw new Error(body.error||'MODEL_LIST_UNAVAILABLE');
-    if(!Array.isArray(body.models))throw new Error('INVALID_MODEL_LIST');
-    const ids=body.models.filter(id=>typeof id==='string');
-    setModelChoices(kind,ids);
-    // No extra fetch button/status text once the choice and Token fields show.
+    const {models}=await discoverModels(url,token);
+    if(step.revision!==revision)return;
+    showModels(kind,models);
     feedback.textContent='';
   }catch(e){
-    if(generation!==step.generation || $(kind+'-url').value.trim()!==url || $(kind+'-key').value!==key)return;
-    const message=String(e.message||e);
+    if(step.revision!==revision)return;
+    const message=errorMessage(e);
     if(/MODEL_HTTP_40[13]/.test(message)){
-      // Some providers require the Token before revealing their model list.
-      step.ready=false; step.mode=null;
-      $(kind+'-model-stage').hidden=true;
+      // An authenticated provider may require the Token before listing IDs.
       discovery.hidden=false;
       $(kind+'-token-stage').hidden=false;
-      $(kind+'-key-wrap').hidden=false;
       $(kind+'-actions').hidden=true;
-      feedback.textContent='该 API 要求先填写 Token，填写后再次点击“获取可用模型”';
-    } else if(/MODEL_HTTP_(404|405|501)|MODEL_LIST_UNAVAILABLE|INVALID_MODEL_LIST/.test(message)){
-      setModelChoices(kind,[]);
-      feedback.textContent='';
-    } else {
-      // Network/timeouts are failures, not an assertion that no models exist.
-      feedback.textContent='检索失败：'+message+'；请检查 API 地址或 Token 后重试';
-    }
+      $(kind+'-model-count').textContent='该 API 需要 Token。填写后再次获取可用模型。';
+    }else feedback.textContent='获取失败：'+message;
   }finally{
-    if(generation===step.generation){
-      list.disabled=kind==='speech'&&(running||stopping);
-      refresh.disabled=kind==='speech'&&(running||stopping);
-    }
+    if(step.revision===revision){list.disabled=kind==='speech'&&(running||stopping);refresh.disabled=kind==='speech'&&(running||stopping);}
   }
 }
-async function modelAction(kind,operation){
-  if(publicMode)return;
-  const step=steps[kind],feedback=$(kind+'-feedback');
-  const model=selectedModel(kind);
-  if(!step.ready || !model || !canUseToken(kind)){
-    feedback.textContent='请先获取模型、选择模型并填写 Token';
-    return;
-  }
-  feedback.textContent=operation==='save'?'正在保存配置…':'正在测试连接…';
-  $(kind+'-save').disabled=true;$(kind+'-test').disabled=true;
+async function modelAction(kind,mode){
+  const label=$(kind+'-feedback');
+  const candidate={baseUrl:$(kind+'-url').value.trim(),model:choice(kind),apiKey:keyFor(kind)};
   try{
-    if(!clientToken)await loadConfig();
-    const res=await fetch('/api/models/'+kind+'/'+operation,{
-      method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+clientToken},
-      body:JSON.stringify({baseUrl:$(kind+'-url').value.trim(),model,apiKey:$(kind+'-key').value})
-    });
-    const result=await res.json();
-    if(!res.ok)throw new Error(result.error||'请求失败');
-    if(operation==='save'){
-      savedProfiles[kind]=result.profile;
-      $(kind+'-key').value='';
-      $(kind+'-key').placeholder='已保存 Token；留空沿用';
-      updateModelProgress(kind);
-      feedback.textContent='配置已保存；连接测试需单独点击。';
-    }else feedback.textContent='连接成功：模型列表包含该模型（未验证实际推理）';
-  }catch(e){feedback.textContent='操作失败：'+e.message;}
-  finally{
-    $(kind+'-save').disabled=kind==='speech'&&(running||stopping);
-    $(kind+'-test').disabled=kind==='speech'&&(running||stopping);
+    if(!stages[kind].ready)throw Error('请先获取可用模型');
+    const profile=validateProfile(candidate);
+    const save=$(kind+'-save'),test=$(kind+'-test');
+    save.disabled=true;test.disabled=true;
+    try{
+      if(mode==='save'){
+        await saveProfile(kind,profile);
+        profiles[kind]=profile;
+        $(kind+'-key').value='';
+        $(kind+'-key').placeholder='已存储在此浏览器中；留空继续使用';
+        label.textContent='已保存到此浏览器，不会发送给 RU-Class 服务器。';
+      }else{
+        await testConnection(profile);
+        label.textContent='连接成功：API 模型列表包含所选模型。';
+      }
+    }finally{save.disabled=false;test.disabled=false;updateActions(kind);buttons();}
+  }catch(e){label.textContent='操作失败：'+errorMessage(e);}
+}
+function displayProfiles(){
+  for(const kind of kinds){
+    const p=profiles[kind];
+    $(kind+'-url').value=p?.baseUrl||'';
+    reset(kind);
+    $(kind+'-key').placeholder=p?.apiKey?'已存储在此浏览器中；留空继续使用':'输入自己的 API Token';
   }
 }
-for(const kind of profiles){
+$('settings-open').onclick=()=>{
+  displayProfiles();
+  $('settings').showModal();
+  setTab('models');
+};
+for(const kind of kinds){
   $('model-'+kind).onsubmit=e=>{e.preventDefault();void modelAction(kind,'save');};
   $(kind+'-test').onclick=()=>void modelAction(kind,'test');
-  $(kind+'-list').onclick=()=>void discoverModels(kind);
-  $(kind+'-refresh').onclick=()=>void discoverModels(kind);
-  $(kind+'-model-select').onchange=()=>updateModelProgress(kind);
-  $(kind+'-model').oninput=()=>updateModelProgress(kind);
-  $(kind+'-key').oninput=()=>updateModelProgress(kind);
-  $(kind+'-url').oninput=()=>resetModelFlow(kind);
+  $(kind+'-list').onclick=()=>void discover(kind);
+  $(kind+'-refresh').onclick=()=>void discover(kind);
+  $(kind+'-url').oninput=()=>reset(kind);
+  $(kind+'-model-select').onchange=()=>updateActions(kind);
+  $(kind+'-model').oninput=()=>updateActions(kind);
+  $(kind+'-key').oninput=()=>updateActions(kind);
 }
+async function renderLessons(){
+  const holder=$('local-lessons');
+  if(!holder)return;
+  try{
+    const lessons=await listLessons();
+    holder.replaceChildren();
+    for(const item of lessons.slice(0,25)){
+      const row=document.createElement('div');
+      row.className='saved-lesson';
+      const label=document.createElement('span');
+      label.textContent=new Date(item.startedAt).toLocaleString()+' · '+(item.title||'未命名课堂')+' · '+Math.round(item.durationSeconds)+' 秒';
+      row.append(label);
+      if(item.hasAudio){
+        const button=document.createElement('button');button.type='button';
+        button.textContent='下载 WAV';
+        button.onclick=async()=>{
+          try{
+            const wav=await recordingWav(item.id);
+            const url=URL.createObjectURL(wav);
+            const link=document.createElement('a');link.href=url;link.download='ru-class-'+item.id+'.wav';
+            link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
+          }catch(e){$('local-feedback').textContent=errorMessage(e);}
+        };
+        row.append(button);
+      }
+      holder.append(row);
+      const caption=document.createElement('p');
+      caption.className='saved-transcript';caption.textContent=item.transcript||'（无识别文本）';
+      holder.append(caption);
+    }
+  }catch(e){$('local-feedback').textContent=errorMessage(e);}
+}
+$('clear-local').onclick=async()=>{
+  if(running||stopping){$('local-feedback').textContent='请先停止录音，再清空浏览器数据。';return;}
+  if(!confirm('确定清空此浏览器里所有 API 配置、课堂文本和录音吗？此操作无法撤销。'))return;
+  try{await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();await renderLessons();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
+  catch(e){$('local-feedback').textContent='清空失败：'+errorMessage(e);}
+};
+try{profiles={speech:null,image:null,text:null,...await loadProfiles()};}
+catch(e){$('error').textContent='浏览器本地存储不可用：'+errorMessage(e);}
+buttons();status();$('ru').hidden=true;

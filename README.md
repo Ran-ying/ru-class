@@ -1,45 +1,55 @@
-# RU-Class · v0.1.7
+# RU-Class · 浏览器直连 BYOK（v0.2.0）
 
-面向俄语课堂的实时字幕网页。桌面左右各占 1/2，左侧暂时预留笔记，右侧上方是未来双语历史、下方为实时俄语窗口；开始/停止、时长、延迟与设置在右侧底部。**当前不保存完整录音，也没有正式双语历史、中文翻译。**
+面向俄语课堂的网页语音转写工具。**无需注册、无需登录、无需向 RU-Class 提交 API Token**。每个访问者自行填写语音、图像、文字 API 地址与模型，个人配置、录音及识别文本只保存在自己的浏览器。网页服务器不提供默认 AI 服务，不接受用户模型配置或音频转发请求。
 
-当前架构：浏览器 AudioWorklet → 主项目 Node.js 分窗推理 → 独立 `ru-class-asr` 的 OpenAI 兼容 HTTP API → 常驻 whisper.cpp。**旧 Worker 主动连接方案只留作历史/迁移测试，正常启动无需 Worker。**
+## 运行原理
 
-## 配置与本地启动
+1. 网页经 HTTPS 加载后，在浏览器的 IndexedDB 中读取自己保存的 API 配置（语音/图像/文字分别独立）。用户可通过「获取可用模型」直接请求自己的提供商 `GET /models`，也可以在该接口不支持时手动填写模型 ID。
+2. 用户点击录音，AudioWorklet 在**浏览器**采集音频并重采样成 16 kHz 单声道；最新 **8 秒 PCM 音频**保存在浏览器内存中。约每秒向用户自己配置的兼容 ASR API 发起一次 `POST /audio/transcriptions`，请求串行、429 限次重试。
+3. 浏览器本地运行文字对齐和稳定化算法，展示 append-only 已确认俄语与可改写尾部。正常停止会最后一次推理并结算尾部。
+4. 浏览器把课堂文本和录音分块写入 IndexedDB。停止后在「设置 → 本地数据」查看最近课堂并下载 WAV。录音数据不传给 RU-Class 网站服务器，但**会按用户选择的服务商协议发送片段给语音 API**。
+5. 文字/图像配置当前可以保存并查询模型列表；相应推理、DeepSeek 安全句子消费及同步功能仍属于未来版本。**本版没有实时中文翻译**。
 
-需要 Node.js 22.6+。RU-Class **不提供任何默认 ASR、文字或图像 API**，即使维护者自己使用也必须手动配置。若你打算使用自己部署的 `ru-class-asr`，请先单独启动该服务，再在网页中自行输入它的 API 地址、模型和 Token。主项目根目录：
+### 核心边界：不提供 CORS 代理
+
+浏览器直接请求自己的 API，要求提供商支持 CORS（跨域），包括携带 `Authorization` 时的 `OPTIONS` 预检。**RU-Class 不为不支持 CORS 的 API 提供中转或绕过方式**。遇到 CORS 错误请换用支持跨域的 API，或在自己控制的 API 服务中开启严格 Origin 白名单。网络连通性和服务端是否支持 CORS 是不同概念，浏览器可能将两者都报告为 `Failed to fetch`。
+
+自行部署的 [ru-class-asr](https://github.com/Ran-ying/ru-class-asr) 已提供可配置 CORS：配置 `cors.allowedOrigins` 为网页实际 HTTPS Origin，ASR 运行时仍独立保管其 API Key。ASR 在用户自己的机器上时，API 必须具有浏览器可访问的 HTTPS 入口，浏览器的 `localhost` 不是远程服务器的 localhost。
+
+## 浏览器本地数据与隐私
+
+- API 地址/模型/Token：IndexedDB `profiles`，本地存储；不提交给 RU-Class 服务器。
+- 课堂文本/课程名/时间：IndexedDB `lessons`。
+- 录音音频：IndexedDB `audio`，16kHz PCM16 分块；下载时在浏览器封装成 WAV，录音时不需要积攒整段音频到 RAM。
+- 点击「清空此浏览器的全部数据」会删除该站点的模型配置、课堂文本及录音。清除浏览器网站数据同样会丢失这些信息；不同设备之间不会自动同步。
+- API Token 可被同源网页 JavaScript 读取，因此应该避免使用权限过大的长期密钥；网站启用限制性 CSP，不加载第三方脚本，生产环境必须使用可信 HTTPS 域名。**浏览器存储不等于加密保管密钥**。
+- 录音保存受浏览器存储空间配额、无痕浏览及系统回收策略限制；重要课堂请自行下载 WAV 保留备份。当前不支持断网离线 ASR。
+
+## 本地运行
+
+Node.js 22.6+：
 
 ```sh
 npm ci
 cp config.example.json config.json
-# 只设置 listen/site 系统部署参数；首次启动后在网页填写自己的模型 API
 npm run dev
+# 浏览器打开 http://127.0.0.1:3000
 ```
 
-默认监听 `127.0.0.1:3000`。系统 `config.json` 只包含 `listen` 与 `site` 部署选项，**不存供应商模型或 API Token**。环境变量 `HOST`、`PORT` 等只覆盖部署选项，旧的 `ASR_*` 环境变量在 RU-Class 主项目里不再作为供应商配置使用，因此也不会阻止网页保存。仅限内网单用户测试，网页“模型”设置独立保存在 Git 忽略的 `data/local-models.json`（可通过 `RU_CLASS_LOCAL_MODELS_PATH` 设置路径），且重启后保留。旧部署文件里的 `asr`/`models` 不再自动迁移，请在网页中重新填写。
+`config.json` 仅包含可选的 `listen.host`、`listen.port`、`site.publicOrigin`，没有模型地址或共享站点访问令牌。没有配置语音 API 时依然可以打开网页，在设置中填写自己的 API 后录音。用户模型配置不再存放到服务器的 `data/local-models.json`，旧文件可以在核对迁移后自行清理。
 
-本地模式的站点访问令牌自动生成。设置标题行现在固定不随内容滚动，左侧标题、中间“模型 / 访问”胶囊、右侧关闭按钮。模型页支持语音、图像、文字三套独立配置，**使用“API 地址 → 获取可用模型 → 下拉选择/空列表手动输入 → 填写 Token → 保存/测试”的逐步流程**。获取模型成功后，原“获取可用模型”按钮和提示隐藏，**模型选择/手动输入框与 Token 输入框立即同时显示**，不再要求额外点击“填写 Token”；下拉小箭头与右侧刷新图标同为 20px。改动地址会清空后续步骤；需要 Token 才能检索的提供者会保留按钮以便填写后重试。保存会持久写入独立的本地用户配置文件，**不自动测试**；测试只验证模型列表接口和模型 ID，不代表图像/文字推理已实现。API 密钥不会回传浏览器。
+部署到公网时也只需要提供**静态文件**（`apps/web/`，需将所有 JS 模块和 `capture-worklet.js` 原样托管）与 HTTPS，甚至不需要 Node.js 常驻。仓库自带的 `npm run dev` / `npm start` 只是提供静态页面的轻量 HTTP 服务，不含 API 路由或 WebSocket 录音网关。
 
-## 公网与反向代理
-
-**尚未完成面向公众的多用户 BYOK 版，不要直接公开当前单用户内网版本。** 要开放给其他人使用，必须先实现账户鉴权、每用户模型及密钥隔离、会话隔离和 API 请求出口限制，详见 [公共 BYOK 架构及迁移要求](docs/byok-public-service.md)。下面是旧单用户反代模式的历史说明，**不是可公开多人使用的部署指南**。
-
-服务器配置 `site.publicOrigin` 为 **HTTPS 的精确站点来源**，例如 `https://class.example.com`；配置至少 24 字符的 `site.accessToken`，可用 `openssl rand -hex 32` 生成。公网网页在设置中要求手动输入站点令牌（仅保存到当前浏览器标签页），不会返回服务器私有 ASR 密钥；公网模式也不允许在网页中编辑 ASR 配置。建议主项目仍监听 127.0.0.1，通过同机 Nginx 反代并转发 WebSocket 升级。
-
-**完整 Nginx 示例、Mac mini 与 VPS 跨机器连接说明**：[docs/reverse-proxy.md](docs/reverse-proxy.md)。不要把未受保护的 HTTP 后端端口直接开放到互联网，也不要将示例 Token 作为真实密码使用。
-
-## 质量检查
+## 验证
 
 ```sh
-ASR_REPO=../ru-class-asr npm test
+npm test
 npm run typecheck
 npm run build
-node dist/apps/server/src/index.js
 ```
 
-v0.1.1 修复：正常停止录音时保留最后字幕；独立 ASR API 临时返回 HTTP 429 时有限重试；两个 Node 服务都能从忽略提交的 JSON 文件加载监听端口。未进行新的真实设备验证前，修复后的部署验收仍待执行。
+测试包含静态站点路由、直连模型列表、WAV multipart、8 秒窗口、文字稳定化和不支持 CORS 的失败处理。真实 Mac/iPad Safari 的麦克风、跨域请求、长时间录音、IndexedDB 配额与低电量后台行为仍需实际设备验证，CI 模拟测试不能代替这些验收。
 
-当前 ASR **音频**窗口最多 8 秒，约 1 秒步长；v0.1.2 新增不随该窗口滚动而消失的 **稳定文字累计缓冲**，并用可改写的临时尾部显示最新俄语。已确认文字不受音频窗口截断，停止后保留当前课程全部可见文字。此机制基于重叠词序列的启发式共识，还不是 v0.3 的精细时间戳/词级对齐。具体说明见 [docs/transcript-v0.1.2.md](docs/transcript-v0.1.2.md)。联网失败、麦克风中断都会停止当前录音，v0.1 不支持断网续录，因此不要将它作为重要课堂录音的唯一副本。
+### 旧架构说明
 
-[当前 ASR API 协议](docs/api-integration-v0.1.md) · [原始 v0.1 验收记录](docs/acceptance-v0.1.md) · [后续 M4 验收](docs/hardware-validation.md)。此前 M1 短音频真实 API 联调通过，未声称 M4 完整验收。
-
-**v0.1.3：** 停止录音后隐藏无用状态文字，保留俄语转写；对齐机制要求近期 Whisper 窗口之间有可信重叠，不用历史术语误吞新句。详见 [docs/v0.1.3-notes.md](docs/v0.1.3-notes.md)、[docs/v0.1.4-notes.md](docs/v0.1.4-notes.md) 与 [docs/v0.1.5-notes.md](docs/v0.1.5-notes.md)、[docs/v0.1.6-notes.md](docs/v0.1.6-notes.md)。
+v0.1.x 的 Node.js 音频 WebSocket 网关、`config.json` 里的全局模型和公网站点 Token 已不再用于**正式启动入口**；相应历史代码/测试保留在仓库供迁移比对。不要沿用旧的 Nginx 到 `/ws/client` 转发说明。参见 [浏览器直连架构](docs/browser-direct-byok.md)。

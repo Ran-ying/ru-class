@@ -1,4 +1,4 @@
-# Current v0.1 interface revision · 2026-10-16
+> **历史文件（v0.1）**：所述“主项目 Node 负责 ASR HTTP 请求”已于 v0.2.0 被浏览器直连取代。现在由 `apps/web/direct-asr.js` 直接调用用户自带的支持 CORS 的 API。详见 [新架构](browser-direct-byok.md)。不要按此文件恢复 Node 网关或服务器保存 Token。\n\n# Current v0.1 interface revision · 2026-10-16
 
 This document supersedes the earlier outbound Worker topology and full-width bottom toolbar. The user's correction explicitly authorizes the following v0.1 boundary; no later-version model integrations are added.
 
