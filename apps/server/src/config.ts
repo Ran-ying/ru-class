@@ -30,7 +30,8 @@ export function loadConfig(path = process.env.RU_CLASS_CONFIG || 'config.json') 
   } else if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
     throw new Error('Non-loopback listener requires a public HTTPS origin and strong site access token');
   }
-  const clientToken = stringValue(process.env.SITE_ACCESS_TOKEN ?? process.env.CLIENT_TOKEN ?? json.site?.accessToken, 'site.accessToken', publicOrigin ? '' : randomBytes(32).toString('hex'));
+  const configuredToken = stringValue(process.env.SITE_ACCESS_TOKEN ?? process.env.CLIENT_TOKEN ?? json.site?.accessToken, 'site.accessToken');
+  const clientToken = configuredToken || (publicOrigin ? '' : randomBytes(32).toString('hex'));
   if (publicOrigin && clientToken.length < 24) throw new Error('Public site requires a site access token of at least 24 characters');
   return {
     host, port, publicOrigin: publicOrigin || undefined, clientToken,
