@@ -81,3 +81,15 @@ main{grid-template-rows:minmax(0,1fr)}
  #settings .settings-heading .close-button{min-width:38px;min-height:36px}
  #settings .settings-body{padding:14px;scrollbar-gutter:auto}
 }
+
+/* v0.1.5 — sequential model configuration */
+#settings .model-card>.model-discovery{margin:4px 0 12px}
+#settings .model-card>.model-discovery button{flex:none}
+#settings .model-select-row{display:flex;align-items:center;gap:8px;margin-top:7px}
+#settings .model-select-row select{margin-top:0;flex:1;min-width:0}
+#settings .model-refresh{display:flex;align-items:center;justify-content:center;min-width:38px;height:38px;flex:none;padding:0;background:#e9eee5;border:1px solid #cbd9cd;color:#245946;border-radius:9px;font-size:23px;line-height:1}
+#settings .model-refresh:hover{background:#dce7dd}
+#settings .token-toggle{background:#e9eee5;color:#245946;border:1px solid #cbd9cd;width:100%;padding:10px;margin:2px 0 0}
+#settings .model-card [id$="-key-wrap"]{margin:14px 0}
+#settings .model-card [id$="-actions"]{margin-top:13px}
+#settings .model-card [id$="-model-stage"]{margin:14px 0}
