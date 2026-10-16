@@ -214,3 +214,59 @@ test('first stop/flush never resurrects a previously hidden draft interpretation
     assert.equal(r.flush().stable_delta,'','repeated stop at prefix '+stopAt);
   }
 });
+
+
+test('moving overlapping windows must not reconfirm words already in stable tail',()=>{
+  const r=new Recorder();
+  r.update('Я могу узнать где вы платили',0,2*S);
+  r.flush(); // An immutable stable prefix, as in an earlier rolling-window commit.
+  const tok=(s:string)=>s.split(' ').map(display=>({
+    display,key:display.normalize('NFKC').toLowerCase()
+  }));
+  // An ASR alternate from the same overlapping acoustic passage refers back
+  // to the stable tail, while the next window corroborates and extends it.
+  r.buffer.unanchored=tok('где вы платили когда вы платили');
+  r.buffer.lastHypothesis=tok('где вы платили когда вы платили');
+  r.buffer.lastWindowStart=S;
+  r.buffer.lastWindowEnd=3*S;
+  const preview=r.buffer.state();
+  r.partial=preview.partial_text;
+  const before=r.current();
+  assert.equal(before,'Я могу узнать где вы платили когда вы платили');
+  const after=r.update('вы платили когда вы платили наличными',2*S,4*S);
+  assert.equal(after.display,'Я могу узнать где вы платили когда вы платили наличными');
+  assert.equal(r.flush().display,after.display);
+  assert.equal(r.flush().stable_delta,'');
+});
+
+test('overlap reconciles alternative draft without confirming both interpretations',()=>{
+  const r=new Recorder();
+  const tok=(s:string)=>s.split(' ').map(display=>({
+    display,key:display.normalize('NFKC').toLowerCase()
+  }));
+  r.buffer.stable=tok('Сегодня обсуждаем оплату картой здесь');
+  r.buffer.sentStable=r.buffer.stable.length;
+  r.stable='Сегодня обсуждаем оплату картой здесь';
+  r.buffer.pending=[];
+  r.buffer.unanchored=tok('оплату картой здесь электронный кошелёк');
+  r.buffer.lastHypothesis=tok('оплату картой здесь электронный кошелёк');
+  r.buffer.lastWindowStart=S;
+  r.buffer.lastWindowEnd=3*S;
+  const preview=r.buffer.state();
+  r.partial=preview.partial_text;
+  const before=r.current();
+  assert.equal(before,'Сегодня обсуждаем оплату картой здесь электронный кошелёк');
+  const result=r.update('картой здесь электронный кошелёк и наличные',2*S,4*S);
+  assert.equal(result.display,'Сегодня обсуждаем оплату картой здесь электронный кошелёк и наличные');
+  assert.equal(r.flush().display,result.display);
+});
+
+test('a clearly independent moving-window topic remains available',()=>{
+  const r=new Recorder();
+  r.update('Карточка отслеживается банком',0,2*S);
+  r.update('Совсем другая тема здесь',S,3*S);
+  r.update('другая тема здесь объясняется подробно',2*S,4*S);
+  const finished=r.flush();
+  assert.match(finished.display,/Карточка отслеживается банком/);
+  assert.match(finished.display,/Совсем другая тема здесь объясняется подробно/);
+});
