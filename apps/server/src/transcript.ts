@@ -106,15 +106,16 @@ export class TranscriptBuffer {
       } else if (next.length === old.length && commonPrefix(next, old) === next.length) {
         // One-word/very short identical windows are not new utterances.
         this.unanchored = undefined;
-      } else if (!this.pending.length && overlap(this.stable.slice(-12), next, 1)) {
-        // Await another hypothesis; repeated one-word anchors are ambiguous.
-        this.unanchored = next;
       } else if (this.unanchored && overlap(this.unanchored, next)) {
-        // Two consecutive hypotheses of a new phrase agree; preserve the old
-        // speech before moving on, even if it has left the 8-second window.
+        // The previous unanchored hypothesis is an independent new utterance.
+        // Prefer confirming it over matching common terminology in old history.
+        const fresh = overlap(this.unanchored, next)!;
         this.stable.push(...this.pending);
-        this.pending = [...this.unanchored.slice(0, overlap(this.unanchored, next)!.old), ...next.slice(overlap(this.unanchored, next)!.next)];
+        this.pending = [...this.unanchored.slice(0, fresh.old), ...next.slice(fresh.next)];
         this.unanchored = undefined;
+      } else if (!this.pending.length && overlap(this.stable.slice(-12), next, 1)) {
+        // A historical word alone is not a trustworthy current-window anchor.
+        this.unanchored = next;
       } else {
         // Do not discard old speech just because recognition was rewritten.
         // Keep one tentative unmatched segment until a second anchor arrives.
