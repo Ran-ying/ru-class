@@ -65,3 +65,23 @@ test('public mode requires a site token and hides local-only ASR editing',async(
     assert.equal(entries.get('ru-class-site-token'),'long-public-site-test-token-32-chars');
   }finally{(globalThis as any).fetch=previousFetch;}
 });
+
+test('browser app appends only stable deltas and replaces mutable Russian tail',async()=>{
+  captureEnvironment();const id=await readySession();
+  const next=async(payload:any)=>socket.onmessage({data:JSON.stringify({protocol_version:'0.1',type:'asr.partial',session_id:id,payload:{
+    text:'raw sliding window',window_start_sample:0,window_end_sample:16000,inference_ms:15,...payload
+  }})});
+  await next({revision:1,stable_delta:'',partial_text:'Сегодня мы обсуждаем'});
+  assert.equal(get('ru').textContent,'Сегодня мы обсуждаем');
+  await next({revision:2,stable_delta:'Сегодня',partial_text:'мы обсуждаем методы'});
+  assert.equal(get('ru').textContent,'Сегодня мы обсуждаем методы');
+  await next({revision:3,stable_delta:'мы',partial_text:'обсуждаем методы защиты'});
+  assert.equal(get('ru').textContent,'Сегодня мы обсуждаем методы защиты');
+  await next({revision:2,stable_delta:'НЕ ДОЛЖНО ДОБАВЛЯТЬСЯ',partial_text:'испорчено'});
+  assert.equal(get('ru').textContent,'Сегодня мы обсуждаем методы защиты');
+  await next({revision:4,stable_delta:'обсуждаем методы защиты',partial_text:'',final:true});
+  assert.equal(get('ru').textContent,'Сегодня мы обсуждаем методы защиты');
+  await get('record').onclick();
+  await socket.onmessage({data:JSON.stringify({protocol_version:'0.1',type:'session.stopped',session_id:id,payload:{}})});
+  assert.equal(get('ru').hidden,false);assert.equal(get('ru').textContent,'Сегодня мы обсуждаем методы защиты');
+});
