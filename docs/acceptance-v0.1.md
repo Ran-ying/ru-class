@@ -10,7 +10,7 @@ Date: 2026-10-16. Scope: PROJECT_SPEC.md revision 1.2 plus the user's M1-first i
 - Browser microphone permissions, AudioWorklet channel mixing and streaming low-pass resampling from actual source rate to 16 kHz mono PCM16; binary audio frames carry session, sequence, target sample position and original sample mapping.
 - Independent client/Worker tokens, exact browser origin check, session ownership, bounded message sizes, strict audio metadata and continuity validation, heartbeat and explicit failures. Local secrets remain ignored and readable only by the local user.
 - Worker-initiated connection to gateway, platform-neutral resident whisper-server HTTP adapter, actual startup inference probe, bounded overlapping windows and serial/coalesced inference. Stop flushes remaining input; cancelled sessions suppress stale results.
-- Actual 2:1 desktop page and narrow layout, replacement RU live window, duration/state/error indicators and separately labeled latency metrics. Chinese/history features remain explicit future-version placeholders.
+- Actual 1:1 fullscreen desktop page and narrow layout, replacement RU live window, duration/state/error indicators and separately labeled latency metrics. Chinese/history features remain explicit future-version placeholders.
 - macOS/VPS setup and troubleshooting, real-time replay driver, synthetic developer text fixture, tests, architecture decisions, development log, backend evidence and honest acceptance limits. No production service was modified.
 
 ## Verification
@@ -54,3 +54,7 @@ Follow [hardware-validation.md](hardware-validation.md) at the later M4 stage. R
 Only the newest overlapping RU window is displayed; no full transcript archive or stable LocalAgreement exists. Slow inference coalesces pending work and can leave earlier audio unrecognized; it bounds memory and keeps current input. Window ranges are not word alignment. No permanent classroom recording, browser reconnect/recovery, translation, committed bilingual history, sentence playback, ZIP archive or AI notes was implemented. v0.1 must not be the only copy of important classroom audio. Later versions require explicit user direction.
 
 Implementation source baselines: main `d07280d4a8f51ba93907388f90be1ac7f0426a4c`, M1 browser lifecycle refinement `8a3be3715ced8013d6a23c9d3fcf2500ac3ef414`; Worker core `0134b428f080e24a35bcc7dd3b8eafb6c19d8f2a`. Subsequent commits record evidence. Git history is local; no GitHub push, release tag or production deployment was performed.
+
+UI revision 2026-10-16: fixed viewport, equal desktop columns, no document scrolling/top/bottom bars; gateway token moved into Settings. This UI change leaves audio and inference protocol unchanged. Layout checks are recorded in the development log.
+
+UI revision checks passed: 1366×900, 390×844 and 900×400 document heights matched viewport heights. Desktop widths were 683/683. Settings open/close and missing-token redirect were checked in the actual browser; main regression 12/12, typecheck and build passed. No new model integration or key storage was added.

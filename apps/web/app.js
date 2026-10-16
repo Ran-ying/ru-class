@@ -2,6 +2,7 @@ import { encodeFrame } from './audio.js';
 const $ = id => document.getElementById(id);
 let ws, stream, context, capture, source, sessionId, seq = 0, samples = 0, running = false, stopping = false;
 let sent = [], stopTimer, startTimer, flushResolve;
+$('settings-open').onclick = () => $('settings').showModal();
 const errors = {WORKER_OFFLINE:'ASR Worker 未上线，请启动 Worker 后重试。',WORKER_DISCONNECTED:'ASR Worker 已断开，录音已停止，本次缺失音频不能续传。',AUDIO_DISCONTINUITY:'检测到音频采样缺口，录音已停止，请重新开始。',SESSION_BUSY:'已有课堂正在录音，请先结束当前会话。',INFERENCE_FAILED:'Whisper 推理失败，录音已停止。',WORKER_UNAVAILABLE_OR_SLOW:'Worker 不可用或处理积压，录音已停止。'};
 function send(type, payload = {}) { ws.send(JSON.stringify({protocol_version:'0.1',type,session_id:type === 'auth' ? '' : sessionId || '',message_id:crypto.randomUUID(),payload})); }
 function controls(active) { $('start').disabled = active; $('stop').disabled = !running || stopping; $('token').disabled = active; }
@@ -18,7 +19,7 @@ async function fail(message) {
 function workerLabel(p) { return `${p.model || '未知模型'} · ${p.os || '未知系统'} · 后端：${p.backend || '未验证'}`; }
 $('start').onclick = async () => {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) { await fail('录音需要 HTTPS（或 localhost）以及支持 AudioWorklet 的浏览器。'); return; }
-  if (!$('token').value) { $('error').textContent = '请输入访问令牌。'; return; }
+  if (!$('token').value) { $('error').textContent = '请在设置中输入网关访问令牌。'; $('settings').showModal(); return; }
   controls(true); $('error').textContent = ''; $('status').textContent = '请求麦克风权限…';
   sessionId = crypto.randomUUID(); seq = 0; samples = 0; sent = []; stopping = false;
   $('duration').textContent = '00:00'; $('ru').textContent = '等待俄语音频…'; $('latency').textContent = '等待第一条识别结果…';

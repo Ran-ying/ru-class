@@ -12,3 +12,5 @@
 - Platform statements distinguish architecture from validation. Automated tests may run on any supported Node environment; real M4/Metal + foreground browser acceptance remains separate.
 
 - User implementation clarification (2026-10-16): use the current M1 / 8 GB machine for development and real engine integration now. Mac mini M4 formal acceptance is intentionally deferred; it does not block M1 development. Record M1 results separately and retain the v0.1-only scope.
+
+- UI clarification (2026-10-16): fixed viewport with no document scrolling; equal desktop columns; visible top/bottom bars removed. Gateway access moves into a top-right native Settings dialog. Content can scroll only inside its own panel. credentials-plan.md reserves three model configuration groups without adding model integrations.

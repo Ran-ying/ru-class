@@ -19,7 +19,7 @@ flowchart LR
 | ru-class / `apps/web/audio.js` | Portable streaming resampler and binary PCM encoder; original-to-16 kHz sample mapping |
 | ru-class / `capture-worklet.js` | Mix channels, retain filter context, send 200 ms frames, flush tail |
 | ru-class / `app.js` | User permission, session lifecycle, bounded socket backlog, capture errors, replacement subtitles and local-clock latency estimate |
-| ru-class / `index.html`, `style.css` | 2:1 landscape layout, narrow-screen layout, truthful later-version placeholders |
+| ru-class / `index.html`, `style.css` | 1:1 fullscreen viewport layout, narrow-screen layout, truthful later-version placeholders |
 | ru-class / `apps/server/src/gateway.ts` | Same-origin HTTP assets, independent token authentication, one-session ownership, metadata validation, WS routing and liveness |
 | both / `protocol.ts` | Version 0.1 types, binary encoding/validation, strict sequence and sample continuity |
 | ru-class-asr / `audio-window.ts` | At most one bounded PCM ring-equivalent buffer, audio sample ranges, PCM WAV header |
