@@ -1,5 +1,5 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
-import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,clearBrowserData} from './local-store.js';
+import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
 const kinds=['speech','image','text'];
@@ -46,6 +46,7 @@ function renderClassroomList(){
       $('classroom-feedback').textContent='';
       $('error').textContent='';
       renderClassroomLock(); // Unlock synchronously, before awaited IndexedDB.
+      $('classroom-rename-form').hidden=true;
       renderClassroomList();
       void renderSelectedClassroom();
       void renderLessons();
@@ -72,16 +73,24 @@ async function renderSelectedClassroom(){
   try{
     const sessions=await listClassroomRecordings(key);
     if(revision!==classroomRevision||key!==activeClassroom?.key||starting||running)return;
-    for(const session of sessions){
+    $('history-empty').hidden=sessions.length>0;
+    for(const [index,session] of sessions.entries()){
       const article=document.createElement('article');
       article.className='session-history-item';
       const label=document.createElement('time');
-      label.textContent=new Date(session.startedAt).toLocaleTimeString()+
+      label.textContent='录音 '+(index+1)+' · '+
+        new Date(session.startedAt).toLocaleTimeString()+
         ' · '+Math.round(session.durationSeconds||0)+' 秒'+
         (session.outcome==='interrupted'?' · 中断':'');
-      const text=document.createElement('p');
-      text.textContent=session.transcript||'（这段录音没有识别文本）';
-      article.append(label,text);holder.append(article);
+      const columns=document.createElement('div');
+      columns.className='session-bilingual';
+      const ru=document.createElement('p');
+      ru.lang='ru';ru.textContent=session.transcript||'（这段录音没有识别文本）';
+      const zh=document.createElement('p');
+      zh.lang='zh-CN';
+      zh.textContent=session.translation||'（中文翻译尚未生成）';
+      columns.append(ru,zh);
+      article.append(label,columns);holder.append(article);
     }
     const last=sessions.at(-1);
     stable=last?.transcript||'';draft='';
@@ -119,8 +128,43 @@ $('classroom-add').onclick=()=>{
   renderClassroomList();
   void renderLessons();
 };
+$('classroom-rename').onclick=()=>{
+  if(!activeClassroom||starting||running||stopping)return;
+  $('classroom-rename-title').value=activeClassroom.title;
+  $('classroom-rename-feedback').textContent='';
+  $('classroom-rename-form').hidden=false;
+  $('classroom-rename-title').focus();
+};
+$('classroom-rename-cancel').onclick=()=>{
+  $('classroom-rename-form').hidden=true;
+  $('classroom-rename-feedback').textContent='';
+};
+$('classroom-rename-form').onsubmit=e=>{
+  e.preventDefault();
+  if(!activeClassroom||starting||running||stopping)return;
+  const source=activeClassroom;
+  const submit=$('classroom-rename-submit');
+  submit.disabled=true;
+  void (async()=>{
+    try{
+      const renamed=await renameClassroom(source.key,$('classroom-rename-title').value);
+      $('classroom-rename-form').hidden=true;
+      releasePlayback();
+      await refreshClassrooms(renamed.key);
+    }catch(err){
+      $('classroom-rename-feedback').textContent=
+        errorMessage(err)==='CLASSROOM_ALREADY_EXISTS'?
+        '同一天已有同名课程，请使用其他名称。':
+        '重命名失败：'+errorMessage(err);
+    }finally{submit.disabled=false;}
+  })();
+};
 $('classroom-close').onclick=()=>$('classroom-dialog').close();
-$('classroom-dialog').addEventListener('close',releasePlayback);
+$('classroom-dialog').addEventListener('close',()=>{
+  releasePlayback();
+  $('classroom-rename-form').hidden=true;
+  $('classroom-create-form').hidden=true;
+});
 $('classroom-new').onclick=()=>{
   $('new-classroom-title').value='';
   $('new-classroom-date').value=localCalendarDate(Date.now());
@@ -158,6 +202,7 @@ function buttons(){
   $('record').textContent=stopping?'正在停止…':starting?'正在启动…':running?'停止录音':'开始录音';
   $('classroom-add').disabled=starting||running||stopping;
   $('classroom-new').disabled=starting||running||stopping;
+  $('classroom-rename').disabled=starting||running||stopping||!activeClassroom;
   for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh'])
     $(id).disabled=starting||running||stopping;
 }
@@ -492,6 +537,7 @@ async function renderLessons(){
   const classroom=activeClassroom;
   $('classroom-records-title').textContent=classroom?
     classroom.date+' · '+classroom.title:'请选择左侧课程';
+  $('classroom-rename').disabled=!classroom||running||starting||stopping;
   holder.replaceChildren();
   if(!key){
     releasePlayback();
