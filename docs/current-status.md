@@ -173,6 +173,26 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.4 DeepSeek-compatible formal RU/ZH history (CI pending)
+
+The original v0.4 scope includes user-configured, browser-direct
+DeepSeek/OpenAI-compatible `/chat/completions` calls using serial
+`setTimeout`, Russian sentence splitting/correction and formal
+Simplified Chinese translation. This implementation consumes ONLY
+confirmed v0.3 stable units after the +8-second confirmation gate.
+The provider returns exact source-prefix verification metadata and
+zero or more RU/ZH sentences. Prefix/count errors are rejected
+without acknowledging source units. All accepted sentence batches
+are durably saved in **IndexedDB v5 separate `sentences` store**
+before the stable-prefix ACK and upper-history UI projection.
+Original Whisper/raw window journal/PCM remain untouched; textual
+model failure does not block speech capture. Lower draft Chinese
+remains a v0.5 objective.
+
+No real DeepSeek calls, paid provider use or physical Safari bilingual
+endurance have been run by this repository CI. See
+[v0.4 bilingual contract and user-side verification](v04-deepseek-bilingual-history.md).
+
 ## v0.3.1 offline exact-source-unit replay
 
 A new private `scripts/audit-stable-source.mjs` CLI reads one
