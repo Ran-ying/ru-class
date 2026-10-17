@@ -35,9 +35,10 @@ Historic decisions remain in `docs/decisions.md` and old acceptance reports.
 `docs/p1-private-audio-audit.md` provide a strictly offline, privacy-safe
 review workflow for possible repeat collapse. A numerical acoustic
 separation candidate is **not** proof that two identical sentences were
-spoken. Review original audio and raw private hypotheses on the user's
-machine; do not turn this signal into a live caption decision without
-the C1/C2 45/227 regression and listening gates.
+spoken. Keep original audio and raw private hypotheses available privately;
+do not turn numerical acoustic activity alone into a live caption
+decision. The user has explicitly opted out of Russian human listening;
+see the machine-only P1 engineering acceptance policy below.
 
 ## P1 shadow-only replay after real second-model check
 
@@ -74,6 +75,37 @@ local model; never send private audio to a third-party API, never emit
 transcripts in CI or logs, and never treat a second model as human speech
 ground truth. The Python test suite uses a fake model only, so CI cannot
 claim real Russian inference occurred. P2 stays excluded.
+
+## P1 non-human engineering acceptance — explicit user decision (2026-10-17)
+
+The user has **declined further Russian human listening**. Do not ask
+for a Russian-speaking reviewer or make human transcription/listening
+a required condition for continuing P1 engineering or reviewing a
+**non-production** PR. The opt-out applies to all C1 #30, C2 #76/#77,
+C1 #120 and true-repeat probes. Preserve previously prepared blind
+review materials privately; do not treat `PACKET_PREPARED_NOT_AUDITED`
+as a required open task.
+
+**Three independent outcome labels must remain separate:**
+- `ENGINEERING_REGRESSION_PASS/FAIL`: deterministic replay,
+  source-sample integrity, same-window idempotency, all 227 stop
+  prefixes, real 121+106-window per-window change audit, build/tests.
+- `MODEL_CROSS_EVIDENCE`: existing Whisper vs actual Qwen3-ASR
+  comparison and anomaly classification. Signals hypotheses rather
+  than actual spoken truth.
+- `SPEECH_ACCURACY_UNVERIFIED`: no valid listener-verified Russian
+  reference transcript; do not claim WER, confirmed missing spoken
+  words, zero true-repeat false positives, or recovered speech.
+
+P1 may **continue offline algorithm experiments without a listening
+gate**. A future browser/live merge requires green deterministic
+regressions, explicit changed-window/append-only analysis, conservative
+handling of ambiguous real repetitions and valid corrections, and a
+documented residual-error risk. A result based only on lower token
+count, heuristic risk scores, or one cross-model match does not
+establish real accuracy. Keep PR #22/#23 as drafts until their own
+release decision, not until a Russian reviewer is recruited. Do not
+re-enable or request the disabled temporary cloud key.
 
 ## Development safety and acceptance
 
