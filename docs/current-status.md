@@ -72,14 +72,12 @@ visible output. Second flush and plain-vs-injected final output matched.
 These prove the new diagnostic counters are non-regressive for those private
 fixtures, not that the displayed sentences match what was spoken.
 
-**Private listening review queue:** C1 index 30 (24–32 s, an earlier visible
-25-token tentative candidate disappeared), C2 index 77 (82.2–90.2 s,
-164-token candidate inside an eight-second window containing obvious
-repetition, suggesting an ASR hallucination/decode loop), and the final C1
-index 120 (short correction still triggered the diagnostic). Review
-original WAV and nearby raw hypotheses locally. The same candidate may be
-counted more than once, or be entirely erroneous; do not call 43 events
-43 lost phrases.
+**Evidence review queue (no human Russian listening required):** C1
+#30 (25-word overwritten candidate), C2 #76/#77 (164-word extreme
+repetition), C1 #120 (normal final-correction control), and the known
+true-repeat overlap counterexample. Interpret saved Whisper/Qwen evidence,
+source sample coordinates and private numerical results separately.
+No counted candidate replacement equals a verified spoken omission.
 
 **Confirmed synthetic counterexample to the lexical overlap algorithm:**
 two identical genuine utterances at 1–2 s and 10–11 s appear in ASR windows
@@ -91,12 +89,15 @@ it reliably needs better audio-time evidence, e.g. speech regions or
 timed tokens from a compatible provider, not merely more aggressive lexical
 deduplication.
 
-**Remaining admission:** complete private audio listening and a
-separately measured candidate algorithm against both caches before any
-caption reducer replacement. Retain raw hypotheses (PR #14 is still
-awaiting Safari IndexedDB migration/export acceptance) and exclude
-deferred P2 recording/playback/recovery from this work. Track the
-remaining P1 work in [Issue #16](https://github.com/Ran-ying/ru-class/issues/16).
+**Remaining engineering admission:** privately replay both C1/C2
+caches and all same-window/stop-prefix cases against each proposed
+caption algorithm; record changed windows, retained correctable drafts,
+append-only compatibility and known repetition failure modes.
+Russian human listening is explicitly **not required**, per the user's
+2026-10-17 decision. Actual speech accuracy and WER remain unverified.
+PR #14 Safari IndexedDB migration/export acceptance is independent;
+P2 recording/playback/recovery stays deferred.
+Track P1 in [Issue #16](https://github.com/Ran-ying/ru-class/issues/16).
 
 ## Offline P1 audio-evidence audit helper
 
@@ -111,9 +112,10 @@ production subtitle fix. The synthetic duplicate-utterance case remains
 a known failing correctness scenario. Detailed Mac-local instructions:
 [docs/p1-private-audio-audit.md](p1-private-audio-audit.md).
 
-**C1/C2 private source audio is not accessible from GitHub CI.** Real
-listening results are still needed for C1 #30, C2 #77 and C1 #120.
-No new Whisper inference and no P2 long-recording/playback changes.
+**C1/C2 private source audio is not accessible from GitHub CI.**
+Human Russian listening has been waived by user preference. Keep
+`SPEECH_ACCURACY_UNVERIFIED` instead of implying a human validation
+has occurred. No new Whisper inference and no P2 changes.
 
 ## Official Alibaba Cloud Beijing Qwen3-ASR cross-check
 
@@ -191,16 +193,46 @@ Required before a caption-algorithm merge:
    stable deltas and no visible growth; verify both original and injected runs.
 3. At **every** one of the 227 input prefixes, stopping must commit exactly
    the text then visible, without resurrecting superseded words.
-4. Independently inspect unanchored transitions against the source WAV:
-   correction versus genuinely new teacher speech is unknowable from lexical
-   similarity alone. Increased/decreased diagnostic counters are *signals*,
-   never proof of quality.
-5. Compare audible omissions, accidental duplication, hallucinations and
-   speaker repetition against a locally reviewed transcript; no acceptance
-   based solely on shorter output, fewer matched words or green CI.
+4. Compare private Whisper and saved independent Qwen3-ASR hypothesis
+   evidence, source-window sample ranges, candidate retention and anomaly
+   metrics, without claiming word-level audio timestamps or spoken truth.
+   Increased/decreased diagnostic counters are *signals*, not accuracy.
+5. Measure the proposed algorithm's per-window behavior on C1 #30,
+   C2 #76/#77, C1 #120 and the synthetic true-repeat counterexample;
+   disclose changed stable deltas, remaining false-positive/false-negative
+   uncertainty and append-only session-switch restrictions. A human
+   Russian transcript is **not a required test**, but any WER/actual
+   spoken-word accuracy claim remains unavailable without one or an
+   independently validated acoustic reference.
 
 The private original recording and caches are **not available to GitHub CI**.
 Do not report those checks as passed until run locally with recorded results.
+
+## Explicit opt-out of Russian listening (2026-10-17)
+
+The user has decided **not to do Russian listening**. Stop requesting
+human listening reports or keeping the prepared five-second blind
+review packet as a mandatory development gate. It was successfully
+prepared locally as `PACKET_PREPARED_NOT_AUDITED`; it must never be
+misreported as an audited transcript.
+
+Already available machine evidence: the official Beijing Qwen3-ASR
+cross-check 6/6 succeeded, the shadow check flagged C2 #76 only as
+an extreme loop, Draft PR #22 replay passed 121 C1 + 106 C2 windows
+with 45 sample-replay and 227 stop-prefix cases, and Draft PR #23
+narrowed C1 #30 to **four jointly model/later-window supported yet
+finally lexically uncovered candidate positions** within a
+conditional 26–31s time intersection. The two Qwen evidence paths
+refer to **one audio region**, not two occurrences. RMS activity is
+not speech recognition and these four candidate positions are
+**not verified missing spoken words**.
+
+Proceed with machine-only **engineering** checks and conservative
+experiments. P1 outcome can be `ENGINEERING_REGRESSION_PASS`
+while remaining `SPEECH_ACCURACY_UNVERIFIED`. Neither a draft
+tooling PR nor a tested algorithm change becomes production-safe
+solely because human listening has been waived. Do not rely on
+the disabled temporary Alibaba Cloud key.
 
 ## P0 / P1 / P2 / P3 boundaries
 
