@@ -39,6 +39,18 @@ spoken. Review original audio and raw private hypotheses on the user's
 machine; do not turn this signal into a live caption decision without
 the C1/C2 45/227 regression and listening gates.
 
+## P1 shadow-only replay after real second-model check
+
+The operator completed **6/6 genuine** official Beijing Qwen3-ASR
+calls for private C1/C2 focus clips (2026-10-17), but nobody with
+verified Russian listening skill evaluated the source audio. This is
+strong *independent model evidence*, not human ground truth.
+`scripts/inspect-private-caption-risks.mjs` and
+`docs/p1-shadow-caption-risk.md` provide a purely diagnostic replay.
+Do not turn its thresholds or risk counters into automatic deletion,
+freezing of corrections, or stable transcript rewrites. No raw classroom
+text, voice or prior temporary cloud Key belongs in GitHub or CI.
+
 ## P1 official Beijing-region cloud option
 
 The user also authorized the **official Alibaba Cloud Beijing**

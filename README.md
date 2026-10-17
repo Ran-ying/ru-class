@@ -8,6 +8,7 @@
 - [P1：C1/C2 私有音频定点审查工具与使用方法](docs/p1-private-audio-audit.md)
 - [P1：Mac 离线独立 Qwen3-ASR 交叉验证（不上传课堂录音）](docs/p1-independent-asr-crosscheck.md)
 - [P1：阿里云百炼**北京地域**官方 Qwen3-ASR 交叉验证（无需下载模型）](docs/p1-dashscope-official-asr.md)
+- [P1：真实 6/6 Qwen3-ASR 交叉验证、私有字幕风险影子分析](docs/p1-shadow-caption-risk.md)
 - [浏览器直连 BYOK 设计](docs/browser-direct-byok.md)
 - [维护者工作规范](AGENTS.md)
 

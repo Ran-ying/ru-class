@@ -145,6 +145,30 @@ numerical-only comparisons and runs no production code. GitHub CI uses
 Neither Qwen/Whisper agreement nor difference proves spoken-word truth.
 Do not mark C1 #30, C2 #77, C1 #120 human-verified based on this runner.
 
+## Real second-model evidence and P1 shadow-only risk analysis
+
+On 2026-10-17, the owner reported **six successful real** official
+Beijing `qwen3-asr-flash` recognitions of the three C1/C2 focus clips
+and their matching context audio. This is materially different from
+the repository's simulated model CI and earlier numerical RMS probes.
+C1 #30's overwritten hypothesis has independent Qwen lexical support
+(six contiguous shared words and 0.651 normalized similarity); C2 #76
+shows a 164-token/seven-unique-token repeated decoding loop with an
+independent-model mismatch; C1 #120's final hypothesis has substantially
+stronger cross-model support than the previous three-token draft.
+**None was reviewed by a Russian-speaking human, and Qwen cannot
+provide audio ground truth by agreement alone**. Full derived findings
+and a shadow replay procedure:
+[docs/p1-shadow-caption-risk.md](p1-shadow-caption-risk.md).
+
+`scripts/inspect-private-caption-risks.mjs` reads only local private
+ASR window JSON, emits *numerical index/risk metrics* for conservative
+lexical-loop signals and ambiguous unanchored replacements, and **never
+changes production captions**, network requests, audio or original
+evidence. The purpose is to determine which generic mechanisms a later
+reducer experiment should measure without hiding legitimate repetition
+or normal final corrections. Issue #16 stays open.
+
 ## Private classroom regression gate (P1)
 
 Use the *same private originals* for baseline and proposed algorithm. Raw
