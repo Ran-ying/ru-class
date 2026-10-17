@@ -35,42 +35,64 @@ const fakeDb={
   createObjectStore(name:string,args:{keyPath:string|string[]}){
     stores.set(name,new Map());schemas.set(name,args.keyPath);
   },
-  transaction(name:string){
-    const table=stores.get(name);
-    if(!table)throw Error('Unknown store: '+name);
+  transaction(names:string|string[]){
+    const requested=Array.isArray(names)?names:[names];
+    for(const name of requested)if(!stores.has(name))throw Error('Unknown store: '+name);
     const tx:any={};
+    let outstanding=0,aborted=false,completeScheduled=false,completed=false;
     const request=(op:()=>any)=>{
       const r:any={result:undefined,error:null};
+      outstanding++;
       queueMicrotask(()=>{
-        try{r.result=op();r.onsuccess?.();tx.oncomplete?.();}
-        catch(e){r.error=e;r.onerror?.();tx.onerror?.();}
+        if(aborted)return;
+        try{r.result=op();r.onsuccess?.();}
+        catch(e){
+          r.error=e;aborted=true;r.onerror?.();tx.onerror?.();
+          tx.onabort?.();return;
+        }
+        outstanding--;
+        if(outstanding===0&&!completeScheduled){
+          completeScheduled=true;
+          queueMicrotask(()=>{
+            completeScheduled=false;
+            if(!aborted&&!completed&&outstanding===0){
+              completed=true;tx.oncomplete?.();
+            }
+          });
+        }
       });
       return r;
     };
-    tx.objectStore=()=>({
-      get:(id:any)=>request(()=>structuredClone(table.get(key(id)))),
-      add:(value:any)=>request(()=>{
-        if(name==='hypotheses'&&simulateHypothesisQuotaFailure)throw Error('QuotaExceededError');
-        const k=key(keyParts(name,value));
-        if(table.has(k))throw Error('ConstraintError');
-        table.set(k,structuredClone(value));
-        return keyParts(name,value);
-      }),
-      put:(value:any)=>request(()=>{
-        table.set(key(keyParts(name,value)),structuredClone(value));
-        return keyParts(name,value);
-      }),
-      getAll:(range?:{lower:any;upper:any})=>request(()=>{
-        const list=[...table.values()];
-        return list.filter(v=>{
-          if(!range)return true;
-          const current=keyParts(name,v);
-          return Array.isArray(current)&&current[0]===range.lower[0]&&
-            current[1]>=range.lower[1]&&current[1]<=range.upper[1];
-        }).map(v=>structuredClone(v));
-      }),
-      clear:()=>request(()=>{table.clear();return undefined;})
-    });
+    tx.abort=()=>{aborted=true;tx.onabort?.();};
+    tx.objectStore=(name:string)=>{
+      if(!requested.includes(name))throw Error('Not in transaction: '+name);
+      const table=stores.get(name)!;
+      return {
+        get:(id:any)=>request(()=>structuredClone(table.get(key(id)))),
+        add:(value:any)=>request(()=>{
+          if(name==='hypotheses'&&simulateHypothesisQuotaFailure)throw Error('QuotaExceededError');
+          const k=key(keyParts(name,value));
+          if(table.has(k))throw Error('ConstraintError');
+          table.set(k,structuredClone(value));
+          return keyParts(name,value);
+        }),
+        put:(value:any)=>request(()=>{
+          table.set(key(keyParts(name,value)),structuredClone(value));
+          return keyParts(name,value);
+        }),
+        delete:(id:any)=>request(()=>table.delete(key(id))),
+        getAll:(range?:{lower:any;upper:any})=>request(()=>{
+          const list=[...table.values()];
+          return list.filter(v=>{
+            if(!range)return true;
+            const current=keyParts(name,v);
+            return Array.isArray(current)&&current[0]===range.lower[0]&&
+              current[1]>=range.lower[1]&&current[1]<=range.upper[1];
+          }).map(v=>structuredClone(v));
+        }),
+        clear:()=>request(()=>{table.clear();return undefined;})
+      };
+    };
     return tx;
   }
 };
@@ -99,7 +121,7 @@ const storage = await import('../apps/web/local-store.js');
 const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
   beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,
   saveProfile,loadProfiles,saveLesson,listLessons,
-  createClassroom,listClassrooms,listClassroomRecordings,classroomKey,localCalendarDate,
+  createClassroom,renameClassroom,listClassrooms,listClassroomRecordings,classroomKey,localCalendarDate,
   clearBrowserData}=storage;
 
 test('IndexedDB v4 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
@@ -318,6 +340,42 @@ test('v1-v3 recordings group into date/name classrooms WITHOUT overwriting origi
   assert.deepEqual((await listLessons()).find((x:any)=>x.id==='v1-course'),before);
   assert.ok([...stores.get('audio')!.values()].some((a:any)=>a.lessonId==='v1-course'),
     'old WAV chunks must retain their original session UUID');
+});
+
+
+test('renaming a dated classroom preserves stable UUID and both recording IDs and source evidence',async()=>{
+  const date='2026-10-17';
+  const before=(await listClassrooms()).find((x:any)=>x.date===date&&x.title==='信息安全导论');
+  assert.ok(before);
+  const recordingIds=(await listClassroomRecordings(before.key)).map((x:any)=>x.id);
+  const renamed=await renameClassroom(before.key,'信息安全基础');
+  assert.equal(renamed.id,before.id);
+  assert.equal(renamed.date,date);
+  assert.equal(renamed.key,classroomKey('信息安全基础',date));
+  assert.deepEqual((await listClassroomRecordings(renamed.key)).map((x:any)=>x.id),recordingIds);
+  assert.deepEqual(await listClassroomRecordings(before.key),[]);
+  assert.equal((await listClassrooms()).filter((x:any)=>x.key===renamed.key).length,1);
+  assert.ok((await listLessons()).filter((x:any)=>recordingIds.includes(x.id)).every((x:any)=>
+    x.classroomId===before.id&&x.title==='信息安全基础'));
+  assert.deepEqual([...stores.get('audio')!.values()].filter((x:any)=>recordingIds.includes(x.lessonId)),[],
+    'test class has no fabricated WAV bytes during rename');
+  const other=await createClassroom({title:'Already taken',date});
+  await assert.rejects(renameClassroom(renamed.key,other.title),/CLASSROOM_ALREADY_EXISTS/);
+  assert.deepEqual((await listClassroomRecordings(renamed.key)).map((x:any)=>x.id),recordingIds,
+    'a rejected conflicting rename cannot detach existing recording sessions');
+});
+test('renaming existing legacy virtual class materializes UUID without touching audio or raw ASR keys',async()=>{
+  const before=(await listLessons()).find((x:any)=>x.id==='v1-course');
+  assert.ok(before);
+  const oldKey=classroomKey(before.title,localCalendarDate(before.startedAt));
+  const pcm=structuredClone([...stores.get('audio')!.values()].find((x:any)=>x.lessonId===before.id));
+  const renamed=await renameClassroom(oldKey,'Renamed historical class');
+  assert.match(renamed.id,/^[0-9a-f-]{36}$/i);
+  assert.equal(renamed.key,classroomKey('Renamed historical class',localCalendarDate(before.startedAt)));
+  assert.equal((await listClassroomRecordings(renamed.key))[0].id,before.id);
+  assert.deepEqual([...stores.get('audio')!.values()].find((x:any)=>x.lessonId===before.id),pcm);
+  assert.equal((await listClassrooms()).filter((x:any)=>x.key===oldKey).length,0);
+  assert.ok((await listClassrooms()).some((x:any)=>x.id===renamed.id));
 });
 
 test('validate hypotheses before writing and clear private evidence with browser data',async()=>{

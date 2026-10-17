@@ -129,6 +129,29 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.2 course renaming and shared bilingual history
+
+Course title is editable *within a fixed local date*, while its
+UUID remains stable. The IndexedDB v4 `classrooms` store uses a
+date+normalized-name primary key: rename must **atomically re-key**
+the catalog and update only membership/title metadata in the
+`lessons` store in one readwrite transaction. Never alter any
+recording UUID, original PCM blocks, ASR hypotheses, or evidence
+manifest. Implicit legacy classroom groups become a catalog entry
+with a stable UUID on explicit rename. Validate uniqueness against
+both catalog rows and implicit legacy groups; no duplicate date/title.
+
+Keep *each* stop/start as an independent recording session for
+failure isolation and independent evidence provenance. The **one
+classroom's history** must present all its session transcripts
+chronologically, including the boundaries, across pauses/stops.
+Use RU for stored raw/reduced source captions; ZH is a truthful
+placeholder unless a genuine translation exists. Do not pass
+the previous recording's stable transcript into the new
+`TranscriptBuffer` nor concatenate arbitrary audio sample
+offsets. The main two panes use a subtle 1px separator.
+See `docs/v02-dated-classroom-identity.md`.
+
 ## v0.2 wide classroom manager and heading regression fix
 
 The original dated-classroom selector created in PR #37 had a

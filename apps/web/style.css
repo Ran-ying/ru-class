@@ -266,3 +266,22 @@ main{grid-template-rows:minmax(0,1fr)}
  .saved-lesson button{white-space:normal}
  .classroom-panel-records h3{overflow-wrap:anywhere}
 }
+
+/* Fine hairline between the two main 50/50 panes. No framed cards added. */
+main>.transcription{border-left:1px solid #d9e2d9}
+.classroom-records-heading{display:flex;align-items:center;gap:12px;justify-content:space-between}
+#classroom-rename{padding:7px 10px;font-size:12px;background:transparent;color:#245946;
+  text-decoration:underline}
+#classroom-rename:disabled{opacity:.4}
+#classroom-rename-form{margin-top:14px;padding:14px;background:#f1f6f0;border-radius:9px}
+#classroom-rename-form label{font-size:12px}
+#classroom-rename-feedback{font-size:12px;color:#a24130;line-height:1.5}
+.history-empty{padding:24px;text-align:center;font-size:12px;color:#95a299;line-height:1.6}
+.session-bilingual{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.session-bilingual p{font-size:14px;line-height:1.6;white-space:pre-wrap;
+  overflow-wrap:anywhere;margin:8px 0 0;color:#324e42}
+.session-bilingual p[lang="zh-CN"]{color:#8b998d}
+@media(max-width:760px){
+ main>.transcription{border-left:0;border-top:1px solid #d9e2d9}
+ .session-bilingual{gap:12px}
+}
