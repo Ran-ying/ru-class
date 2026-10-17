@@ -67,8 +67,9 @@ async function renderSelectedClassroom(){
   holder.replaceChildren();
   renderClassroomLock();
   if(!activeClassroom){
+    stable='';draft='';sourceJournal=null;
     renderCaption();$('duration').textContent='00:00';
-    $('latency').textContent='—';stable='';draft='';return;
+    $('latency').textContent='—';return;
   }
   const key=activeClassroom.key;
   try{
