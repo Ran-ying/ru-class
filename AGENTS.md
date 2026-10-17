@@ -39,6 +39,16 @@ spoken. Review original audio and raw private hypotheses on the user's
 machine; do not turn this signal into a live caption decision without
 the C1/C2 45/227 regression and listening gates.
 
+## P1 independent Russian ASR cross-check
+
+`scripts/cross-validate-private-asr.py` and
+`docs/p1-independent-asr-crosscheck.md` define an optional Mac-only,
+offline Qwen3-ASR *second-model* comparison. Require an already-downloaded
+local model; never send private audio to a third-party API, never emit
+transcripts in CI or logs, and never treat a second model as human speech
+ground truth. The Python test suite uses a fake model only, so CI cannot
+claim real Russian inference occurred. P2 stays excluded.
+
 ## Development safety and acceptance
 
 - Preserve all original recognition evidence before any destructive
