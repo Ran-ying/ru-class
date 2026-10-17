@@ -63,6 +63,28 @@ test('invalid sample ranges, out-of-order windows and invalid ack fail explicitl
   assert.throws(()=>j.add(row('backward',7)),/INVALID_UNIT_WINDOW/);
   assert.throws(()=>j.acknowledge(['recording-1:44']),/UNKNOWN_UNIT_ACK/);
 });
+
+// @ts-ignore Existing browser LocalAgreement reducer intentionally untyped.
+import {TranscriptBuffer} from '../apps/web/transcript.js';
+test('source-unit sequence follows unmodified rolling LocalAgreement output without adding/repeating text',()=>{
+  const transcript=new TranscriptBuffer(),units=setup();
+  let append='';
+  for(const [start,end,text] of [
+    [0,128000,'Сегодня мы говорим об информации'],
+    [16000,144000,'мы говорим об информации сегодня'],
+    [32000,160000,'говорим об информации сегодня подробнее']
+  ] as const){
+    const update=transcript.update(text,start,end,false);
+    append=[append,update.stable_delta].filter(Boolean).join(' ');
+    units.add({...update,window_start_sample:start,window_end_sample:end,final:false});
+  }
+  const closed=transcript.flush();
+  units.add({...closed,window_start_sample:32000,window_end_sample:160000,final:true});
+  const expected=[append,closed.stable_delta].filter(Boolean).join(' ');
+  assert.equal(units.export().map((unit:any)=>unit.text).join(' '),expected);
+  assert.deepEqual(units.ready().map((x:any)=>x.id),units.export().map((x:any)=>x.id));
+});
+
 test('page keeps visually separate stable and draft RU spans, session metadata stays in browser only',()=>{
   const html=readFileSync('apps/web/index.html','utf8');
   const js=readFileSync('apps/web/app.js','utf8');
