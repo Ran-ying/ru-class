@@ -229,12 +229,32 @@ export function wavHeader(sampleCount){
   ascii(36,'data');view.setUint32(40,sampleCount*2,true);
   return new Uint8Array(header);
 }
-export async function recordingWav(lessonId){
-  const chunks=await withStore('audio','readonly',s=>s.getAll(IDBKeyRange.bound([lessonId,0],[lessonId,Number.MAX_SAFE_INTEGER])));
-  chunks.sort((a,b)=>a.index-b.index);
+/**
+ * Build one playable/downloadable WAV without silently joining discontiguous
+ * audio or producing a valid-looking empty file. Browser Blob holds immutable
+ * PCM parts; this does not transcode/upsample the private source.
+ */
+export function recordingWavFromChunks(chunks){
+  if(!Array.isArray(chunks)||!chunks.length)throw Error('LOCAL_AUDIO_EMPTY');
+  const ordered=[...chunks].sort((a,b)=>a.index-b.index);
   let samples=0;
-  for(const chunk of chunks)samples+=chunk.data.byteLength/2;
-  return new Blob([wavHeader(samples),...chunks.map(c=>c.data)],{type:'audio/wav'});
+  for(let i=0;i<ordered.length;i++){
+    const {index,data}=ordered[i];
+    if(index!==i || !(data instanceof Uint8Array) || !data.byteLength ||
+       data.byteLength%2!==0)throw Error('LOCAL_AUDIO_GAP_OR_INVALID_CHUNK');
+    samples+=data.byteLength/2;
+    // RIFF WAV uses 32-bit chunk sizes, not extensible RF64.
+    if(!Number.isSafeInteger(samples)||samples*2+36>0xFFFFFFFF)
+      throw Error('LOCAL_WAV_TOO_LARGE');
+  }
+  return new Blob([wavHeader(samples),...ordered.map(c=>c.data)],{type:'audio/wav'});
+}
+export async function recordingWav(lessonId){
+  if(typeof lessonId!=='string'||!lessonId)throw Error('INVALID_LESSON_ID');
+  const chunks=await withStore('audio','readonly',s=>s.getAll(
+    IDBKeyRange.bound([lessonId,0],[lessonId,Number.MAX_SAFE_INTEGER])
+  ));
+  return recordingWavFromChunks(chunks);
 }
 export async function clearBrowserData(){
   const db=await connection();

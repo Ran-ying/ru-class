@@ -10,6 +10,7 @@ let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise
 let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 const CLIENT_VERSION='0.2.2'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[];
+let playbackUrl=null,playbackRevision=0;
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function buttons(){
   $('record').disabled=stopping;
@@ -83,6 +84,7 @@ async function onFailure(e){
 }
 async function start(){
   if(running||stopping)return;
+  releasePlayback(); // Never play existing audio into a new microphone recording.
   const p=profiles.speech;
   if(!p?.baseUrl||!p?.model||!p?.apiKey){
     $('error').textContent='请先在“设置 → 模型 → 语音”中填写自己的 API 地址、模型和 Token。';
@@ -174,12 +176,14 @@ async function stop(){
 }
 $('record').onclick=()=>running?void stop():void start();
 window.addEventListener('pagehide',()=>{
+  releasePlayback();
   stream?.getTracks().forEach(t=>t.stop());
   asr?.cancel();
 });
 
 // User-model configuration. The RU-Class server is NEVER consulted.
 function setTab(page){
+  if(page!=='access')releasePlayback();
   for(const name of ['models','access']){
     const selected=(name===page);
     $('panel-'+name).hidden=!selected;
@@ -307,19 +311,66 @@ for(const kind of kinds){
   // earlier selection and any in-flight discovery without clearing the draft.
   $(kind+'-key').oninput=()=>reset(kind,false);
 }
+function releasePlayback(){
+  playbackRevision++;
+  const player=$('local-player');
+  if(player){
+    player.pause();
+    player.removeAttribute('src');
+    player.load();
+  }
+  if(playbackUrl){URL.revokeObjectURL(playbackUrl);playbackUrl=null;}
+  const section=$('local-playback');
+  if(section)section.hidden=true;
+}
+async function loadPlayback(item){
+  if(running||stopping){$('local-feedback').textContent='录音期间不能播放以前的课堂，请先停止录音。';return;}
+  releasePlayback();
+  const revision=playbackRevision;
+  $('local-feedback').textContent='正在读取本地完整录音…';
+  try{
+    const wav=await recordingWav(item.id);
+    if(revision!==playbackRevision)return; // Old slow IndexedDB result is stale.
+    const url=URL.createObjectURL(wav);
+    playbackUrl=url;
+    $('local-player').src=url;
+    $('local-playback-title').textContent=item.title||'未命名课堂';
+    $('local-playback').hidden=false;
+    // Safari can block autoplay after an awaited IndexedDB read; use native
+    // controls and let the user press Play to start private local playback.
+    $('local-feedback').textContent='录音已加载，请在下方播放器点击播放。';
+  }catch(e){
+    if(revision===playbackRevision)
+      $('local-feedback').textContent='无法播放录音：'+errorMessage(e);
+  }
+}
+$('settings').addEventListener('close',releasePlayback);
+$('local-player').addEventListener('error',()=>{
+  if(playbackUrl)$('local-feedback').textContent='本地音频解码失败，请下载 WAV 检查数据是否完整。';
+});
+
 async function renderLessons(){
   const holder=$('local-lessons');
   if(!holder)return;
   try{
     const lessons=await listLessons();
     holder.replaceChildren();
-    for(const item of lessons.slice(0,25)){
+    for(const item of lessons){
       const row=document.createElement('div');
       row.className='saved-lesson';
       const label=document.createElement('span');
       label.textContent=new Date(item.startedAt).toLocaleString()+' · '+(item.title||'未命名课堂')+' · '+Math.round(item.durationSeconds)+' 秒';
       row.append(label);
       if(item.hasAudio){
+        const estimatedMiB=(Math.max(0,Number(item.durationSeconds)||0)*32000/(1024*1024)).toFixed(1);
+        const audioInfo=document.createElement('span');
+        audioInfo.textContent='本地音频分块 · 约 '+estimatedMiB+' MiB（未校验完整性）';
+        row.append(audioInfo);
+        const playButton=document.createElement('button');
+        playButton.type='button';playButton.textContent='播放录音';
+        playButton.disabled=running||stopping;
+        playButton.onclick=()=>void loadPlayback(item);
+        row.append(playButton);
         const button=document.createElement('button');button.type='button';
         button.textContent='下载 WAV';
         button.onclick=async()=>{
@@ -364,7 +415,7 @@ async function renderLessons(){
 $('clear-local').onclick=async()=>{
   if(running||stopping){$('local-feedback').textContent='请先停止录音，再清空浏览器数据。';return;}
   if(!confirm('确定清空此浏览器里所有 API 配置、课堂文本和录音吗？此操作无法撤销。'))return;
-  try{await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();await renderLessons();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
+  try{releasePlayback();await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();await renderLessons();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
   catch(e){$('local-feedback').textContent='清空失败：'+errorMessage(e);}
 };
 try{profiles={speech:null,image:null,text:null,...await loadProfiles()};}

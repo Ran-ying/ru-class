@@ -129,6 +129,21 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.2 whole-recording local playback (explicit user request, 2026-10-17)
+
+The owner explicitly resumed **v0.2 local lesson playback and audio
+storage testing**, superseding the previous blanket deferment of
+in-app playback for this *whole-recording* scope only. Keep original
+browser-direct BYOK and same IndexedDB v3 schema. `recordingWav` and
+the `设置 → 本地数据` one-audio-player UI may load old sessions
+and must refuse missing/corrupt PCM parts; retain WAV/JSON exports.
+Do not conflate full-WAV playback with **v0.6 word/sentence-aligned
+playback**, which remains deferred, along with P2 automatic recovery
+and 90-minute endurance testing. CI's 30-minute synthetic WAV Blob
+checks are not real MacBook Safari 30-minute microphone acceptance.
+Prefer preserving raw original data and reasonable blob memory bounds.
+See `docs/v02-local-recording-playback.md`.
+
 ## P0 durable evidence manifests (Issue #33, 2026-10-17)
 
 Use **IndexedDB schema v3** in the unchanged
@@ -224,9 +239,12 @@ window JSON remain owner-local. Read
   `src/protocol.ts` and `docs/protocol.md` must remain byte-for-byte equal;
   document deprecation in separate pages, not in the mirrored files.
   GitHub CI is not physical Safari/M1/M4/five-minute classroom acceptance.
-- M1 synthetic/Metal development smoke is recorded; M4 is deferred.
-  **P2 full recording recovery, in-app replay and endurance work is deferred
-  by the user.** Do not modify these features as an incidental refactor.
+- M1 synthetic/Metal development smoke and real M4 inference evidence are
+  recorded separately. **Owner explicitly resumed v0.2 whole-recording
+  in-browser playback**; its bounded scope is documented above. P2
+  automatic recovery, sentence-aligned replay, 90-minute endurance and
+  background recording remain deferred. Do not modify those features
+  incidentally.
 - Do not deploy or publish private classroom data as part of a test.
   Use focused branches and explicit PR review for meaningful changes.
 
