@@ -2,28 +2,26 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.2.2</title><link rel="stylesheet" href="/style.css"></head>
 <body>
 <main><section class="notes"><div class="workspace-top">
-  <label for="classroom-select">课程</label>
-  <div class="classroom-selector-row">
-    <select id="classroom-select" aria-label="选择课堂日期和课程名称"><option value="">请先添加或选择课程</option></select>
-    <button id="classroom-add" type="button" aria-label="添加课程" title="添加课程">+</button>
+  <div class="classroom-heading" aria-live="polite">
+    <div class="classroom-heading-text">
+      <time id="classroom-date">尚未选择课程</time>
+      <h1 id="classroom-title">请选择一节课</h1>
+    </div>
+    <button id="classroom-add" type="button" aria-label="打开课程管理" title="课程管理">+</button>
   </div>
   <p id="classroom-feedback" role="status"></p>
 </div><div class="notes-placeholder"><span class="eyebrow">课堂工作区</span><h1>留给思考的空间。</h1><p>笔记区域预留</p><small>当前版本提供右侧俄语实时字幕。</small></div></section>
-<section class="transcription is-locked" aria-label="课堂转写">
+<section id="transcription" class="transcription is-locked" aria-label="课堂转写">
 <div id="transcription-lock" class="transcription-lock">请先在左侧添加并选择一节课</div>
 <section class="history"><div class="history-title"><span>俄语</span><span>中文</span></div><div class="empty"><span>双语历史</span><p>翻译将在后续版本提供</p></div><div id="session-history" aria-live="polite"></div></section>
 <section class="live"><div class="ru"><span class="label">RU</span><p id="ru" lang="ru" aria-live="polite"></p></div><p id="error" role="alert"></p><div class="zh"><span class="label">ZH</span><p>实时中文翻译 · 后续版本</p></div></section>
 <footer class="bottom-toolbar" aria-label="录音控制"><button id="record" type="button">开始录音</button><output id="duration" aria-label="录音时长">00:00</output><small id="latency">窗口跨度 / 推理耗时 / 音频末端至显示延迟：—</small><button id="settings-open" class="settings-button" type="button" aria-label="设置" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button></footer></section></main><dialog id="settings" aria-labelledby="settings-title">
   <div class="settings-heading">
     <h2 id="settings-title">设置</h2>
-    <div class="settings-tabs" role="tablist" aria-label="设置分类">
-      <button type="button" class="settings-tab" id="tab-models" role="tab" aria-selected="true" aria-controls="panel-models">模型</button>
-      <button type="button" class="settings-tab" id="tab-access" role="tab" aria-selected="false" aria-controls="panel-access" tabindex="-1">本地数据</button>
-    </div>
     <form method="dialog"><button class="close-button" aria-label="关闭设置" title="关闭设置">×</button></form>
   </div>
   <div class="settings-body">
-  <section id="panel-models" role="tabpanel" aria-labelledby="tab-models">
+  <section id="panel-models" aria-label="模型配置">
     
     <div id="model-cards">
       <form class="model-card" id="model-speech">
@@ -71,35 +69,49 @@
     </div>
     <p class="settings-help">这里保存的 Token 只存放在当前浏览器中；直接请求 API 时会发送给你选择的供应商。</p>
   </section>
-  <section id="panel-access" role="tabpanel" aria-labelledby="tab-access" hidden>
-    <p class="settings-help">你的模型 API 地址和 Token、课堂记录和录音都只存储在当前浏览器。RU-Class 网站服务器不保存这些数据，换设备或清除网站数据不会自动恢复。</p>
-    <h3>本地课堂记录</h3>
-    <div id="local-lessons" aria-live="polite"></div>
-    <section id="local-playback" class="local-playback" aria-label="本地课堂录音播放器" hidden>
-      <h4 id="local-playback-title"></h4>
-      <audio id="local-player" controls preload="metadata" aria-label="完整课堂录音"></audio>
-      <p>仅播放当前浏览器保存的完整 WAV；可以暂停、拖动进度，不会上传到网站服务器。</p>
-    </section>
-    <p class="settings-help">录音保存在此浏览器，刷新后仍可查看。30 分钟原始音频约 55 MiB；空间不足或浏览器清理数据可能造成丢失，重要课程请另存 WAV 与原始识别窗口。</p>
-    <button type="button" class="secondary" id="clear-local">清空此浏览器的全部数据</button>
-    <p id="local-feedback" role="status"></p>
-  </section>
   </div>
 </dialog>
 <dialog id="classroom-dialog" aria-labelledby="classroom-dialog-title">
-  <form id="classroom-create-form">
-    <h2 id="classroom-dialog-title">添加课程</h2>
-    <label for="new-classroom-title">课程名称
-      <input id="new-classroom-title" type="text" maxlength="120" placeholder="例如：信息安全导论" required>
-    </label>
-    <label for="new-classroom-date">上课日期
-      <input id="new-classroom-date" type="date" required>
-    </label>
-    <p id="classroom-create-feedback" role="alert"></p>
-    <div class="classroom-dialog-actions">
-      <button id="classroom-cancel" class="secondary" type="button">取消</button>
-      <button id="classroom-submit" type="submit">添加并选择</button>
-    </div>
-  </form>
+  <header class="classroom-panel-heading">
+    <h2 id="classroom-dialog-title">课程管理</h2>
+    <button type="button" id="classroom-close" class="close-button" aria-label="关闭课程管理">×</button>
+  </header>
+  <div class="classroom-panel-body">
+    <nav class="classroom-panel-list-pane" aria-label="所有课程">
+      <div class="classroom-panel-section-heading">
+        <h3>所有课程</h3>
+        <button id="classroom-new" type="button">添加课程</button>
+      </div>
+      <form id="classroom-create-form" hidden>
+        <label for="new-classroom-title">课程名称
+          <input id="new-classroom-title" type="text" maxlength="120" placeholder="例如：信息安全导论" required>
+        </label>
+        <label for="new-classroom-date">上课日期
+          <input id="new-classroom-date" type="date" required>
+        </label>
+        <p id="classroom-create-feedback" role="alert"></p>
+        <div class="classroom-dialog-actions">
+          <button id="classroom-cancel" type="button" class="secondary">取消</button>
+          <button id="classroom-submit" type="submit">保存课程</button>
+        </div>
+      </form>
+      <div id="classroom-list" class="classroom-panel-list" aria-label="课程列表"></div>
+    </nav>
+    <section class="classroom-panel-records" aria-label="课程课堂记录">
+      <h3 id="classroom-records-title">请选择左侧课程</h3>
+      <p class="classroom-panel-description">这里显示所选课程的全部录音会话、转录和下载记录。</p>
+      <div id="local-lessons" aria-live="polite"></div>
+      <section id="local-playback" class="local-playback" aria-label="本地课堂录音播放器" hidden>
+        <h4 id="local-playback-title"></h4>
+        <audio id="local-player" controls preload="metadata" aria-label="完整课堂录音"></audio>
+        <p>只读取浏览器本地 WAV；可以暂停、拖动进度，录音不会上传到网站。</p>
+      </section>
+      <p id="local-feedback" role="status"></p>
+    </section>
+  </div>
+  <footer class="classroom-panel-footer">
+    <p>课堂录音仅存储于当前浏览器。重要课程请备份 WAV 和原始识别窗口。</p>
+    <button id="clear-local" type="button" class="classroom-danger-link">清空此浏览器全部数据</button>
+  </footer>
 </dialog>
 <script type="module" src="/app.js"></script></body></html>
