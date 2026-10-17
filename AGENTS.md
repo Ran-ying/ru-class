@@ -157,9 +157,10 @@ journal now exists.
 ## Development safety and acceptance
 
 - Preserve all original recognition evidence before any destructive
-  caption stabilization. PR #14 implements a private raw-window journal
-  but requires real Safari IndexedDB migration and export validation; it
-  must not be merged based solely on simulated tests.
+  caption stabilization. The forward-ported PR #14 raw-window journal is
+  integrated into main for owner-requested testing, but requires real
+  Safari IndexedDB migration and export verification before physical
+  browser acceptance can be claimed.
 - PR #13's 64-word cutoff / aggressive mutable-draft rewrite failed the
   two private real-classroom C1/C2 caches and is closed unmerged. Never
   reintroduce without the full documented private regression gate.
