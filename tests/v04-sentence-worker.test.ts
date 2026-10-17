@@ -32,11 +32,11 @@ test('a real confirmed unit older than 8s is sent exactly once after durable sto
   const committed:any[]=[];let requests=0,saves=0;
   const worker=new SentenceWorker({
     journal,profile:{},intervalMs:10,
-    request:async(_,units)=>{requests++;return {
+    request:async(_:unknown,units:any[])=>{requests++;return {
       consumed_units:1,source_prefix:units[0].text,
       sentences:[{ru:'Это пример.',zh:'这是一个例子。'}]
     };},
-    save:async(rows)=>{saves++;committed.push(...rows);},
+    save:async(rows:any[])=>{saves++;committed.push(...rows);},
     onCommit:()=>{}
   });
   await worker.tick();worker.close();
@@ -51,7 +51,7 @@ test('write failure does not acknowledge or silently drop the untranslated Russi
   const errors:string[]=[];
   const worker=new SentenceWorker({
     journal,profile:{},intervalMs:10,
-    request:async(_,units)=>({consumed_units:1,source_prefix:units[0].text,
+    request:async(_:unknown,units:any[])=>({consumed_units:1,source_prefix:units[0].text,
       sentences:[{ru:'Данная фраза завершена.',zh:'这句话已结束。'}]}),
     save:async()=>{throw Error('QuotaExceededError');},
     onError:(e:string)=>errors.push(e)
