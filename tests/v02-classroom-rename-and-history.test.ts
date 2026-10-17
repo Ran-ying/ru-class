@@ -7,6 +7,13 @@ test('the middle of the two main panes is separated by one thin border only',()=
  assert.match(css,/main>\.transcription\{border-left:1px solid #[0-9a-f]{6}\}/i);
  assert.match(css,/@media\(max-width:760px\)\{\s*main>\.transcription\{border-left:0;border-top:1px/);
 });
+test('live RU zone has one subtle full-width hairline separating it from bilingual history',()=>{
+ const html=readFileSync('apps/web/index.html','utf8');
+ const css=readFileSync('apps/web/style.css','utf8');
+ assert.match(html,/<section class="history">[\\s\\S]*?<\\/section>\\s*<section class="live">/);
+ assert.match(css,/\\.transcription \\.live\\{border-top:1px solid #d9e2d9;background:transparent\\}/);
+ assert.doesNotMatch(css,/\\.transcription \\.live\\{border-top:0/);
+});
 test('rename form is scoped to the selected course and maintains recording UUIDs',()=>{
  const html=readFileSync('apps/web/index.html','utf8');
  const js=readFileSync('apps/web/app.js','utf8');
