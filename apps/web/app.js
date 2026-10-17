@@ -240,7 +240,7 @@ function showTranscript(update){
   if(follow)panel.scrollTop=panel.scrollHeight;
   const point=marks.find(m=>m.end>=update.window_end_sample);
   const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
-  $('latency').textContent='窗口 '+((update.window_end_sample-update.window_start_sample)/16000).toFixed(1)+' s · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
+  $('latency').textContent='识别窗 '+(update.window_start_sample/16000).toFixed(1)+'–'+(update.window_end_sample/16000).toFixed(1)+' s（非逐词时间） · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
   if(lessonId)void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
 }
 function archiveRawHypothesis(entry){
