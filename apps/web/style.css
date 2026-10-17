@@ -291,3 +291,9 @@ main>.transcription{border-left:1px solid #d9e2d9}
 #ru-draft{color:#84918a;white-space:pre-wrap;font-style:normal}
 #ru-draft:not(:empty){border-bottom:1px dotted #bac8b8}
 .history-provenance{display:block;margin:8px 0 0;color:#84958c;font-size:11px}
+
+/* v0.4 model-generated sentence history, source RU and formal ZH in equal columns. */
+.translation-status{padding:5px 24px;margin:0;color:#687d71;font-size:11px;line-height:1.5}
+.history-untranslated{opacity:.6;border-top:1px dashed #d8e1d7;margin-top:10px!important;padding-top:8px}
+.session-bilingual>p>p{margin:3px 0 12px;line-height:1.6}
+@media(max-width:760px){.translation-status{padding:5px 12px}}
