@@ -13,43 +13,12 @@ import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import {TranscriptBuffer} from '../apps/web/transcript.js';
 
+import {inspectHypothesis,LOOP_RISK_CRITERIA} from '../apps/web/asr-loop-risk.js';
+export {inspectHypothesis} from '../apps/web/asr-loop-risk.js';
+
 const SAMPLE_RATE=16000;
-const RISK_CRITERIA=Object.freeze({
-  minTokens:40,
-  minTokensPerSecond:8,
-  maxUniqueRatio:0.25,
-  minRepeatedTrigram:8
-});
+const RISK_CRITERIA=LOOP_RISK_CRITERIA;
 function fail(test,code){if(!test)throw Error(code);}
-export function inspectHypothesis(text,start,end){
-  fail(typeof text==='string'&&text.length<=20000,'INVALID_HYPOTHESIS');
-  fail(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>=0&&end>start,
-    'INVALID_AUDIO_RANGE');
-  const tokens=(text.normalize('NFKC').toLocaleLowerCase('ru-RU').match(/[\p{L}\p{N}]+/gu)??[]);
-  const tokenCount=tokens.length;
-  const durationSeconds=(end-start)/SAMPLE_RATE;
-  const wordRate=tokenCount/durationSeconds;
-  const uniqueCount=new Set(tokens).size;
-  const repeated=new Map();
-  let maxRepeatedTrigram=0;
-  for(let i=2;i<tokens.length;i++){
-    // Delimiter is never part of regex-matched word tokens.
-    const gram=tokens[i-2]+'\0'+tokens[i-1]+'\0'+tokens[i];
-    const count=(repeated.get(gram)??0)+1;
-    repeated.set(gram,count);
-    if(count>maxRepeatedTrigram)maxRepeatedTrigram=count;
-  }
-  const uniqueRatio=tokenCount?uniqueCount/tokenCount:1;
-  // The conjunction is deliberately conservative, not calibrated to audio
-  // truth. Genuine rapid/repeated speech can still be misclassified.
-  const lexicalLoopRisk=tokenCount>=RISK_CRITERIA.minTokens
-    &&wordRate>=RISK_CRITERIA.minTokensPerSecond
-    &&uniqueRatio<=RISK_CRITERIA.maxUniqueRatio
-    &&maxRepeatedTrigram>=RISK_CRITERIA.minRepeatedTrigram;
-  return {tokenCount,uniqueCount,wordRate:+wordRate.toFixed(3),
-    uniqueRatio:+uniqueRatio.toFixed(4),maxRepeatedTrigram,
-    lexicalLoopRisk};
-}
 export function loadPrivateWindows(path){
   const raw=readFileSync(path,'utf8');
   let content;
