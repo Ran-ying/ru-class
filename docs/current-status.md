@@ -174,9 +174,23 @@ Do not report those checks as passed until run locally with recorded results.
 ## Hardware validation
 
 M1 / Metal 101.16-second synthetic Russian inference is a *historical
-development smoke*, NOT a five-minute microphone/classroom acceptance,
-NOT evidence of browser-direct v0.2 acceptance, and NOT an M4 result.
-The later Mac mini M4 formal hardware check remains separate and pending.
+development smoke*, NOT a five-minute microphone/classroom acceptance or
+evidence of browser-direct v0.2 acceptance.
+
+On 2026-10-17, the operator reported a **partial M4 independent-ASR HTTP
+validation**: 8-second private audio through local ASR and remote HTTPS
+reverse-proxy/WireGuard paths succeeded; a serial 20-request HTTPS run
+returned **20/20 HTTP 200**, mean **852.380 ms**, p95 **906.832 ms**.
+These are request-total latencies, **not browser acoustic-to-caption latency**.
+See the ASR repository's
+[M4 field report](https://github.com/Ran-ying/ru-class-asr/blob/main/docs/m4-2026-10-17-field-report.md)
+and [numeric evidence](https://github.com/Ran-ying/ru-class-asr/blob/main/docs/m4-2026-10-17-http-benchmark.json).
+
+Neither M4 Metal device activation logs, 5+ minute natural microphone speech,
+browser CORS/real UI, WAV duration, nor captions-vs-source accuracy were
+verified by these curl tests. Mac mini M4 **formal hardware and RU-Class
+browser-direct/classroom acceptance remain pending**. No P0/P1/P2 gate
+is waived or changed by this HTTP-only smoke.
 
 ## Historic files retained for reference only
 
