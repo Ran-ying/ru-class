@@ -173,6 +173,19 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## P1 local numeric-only replacement provenance (2026-10-17)
+
+`scripts/audit-private-replacements.mjs` runs the unchanged browser
+`TranscriptBuffer` over a private raw ASR window JSON and outputs only
+window indices, original 16-kHz sample ranges, tentative-candidate
+lengths and weak final/later lexical match counts. It tracks which
+source window supplied the displaced tentative hypothesis, without
+changing how production captions work. See
+[documentation](p1-private-replacement-audit.md). No raw Russian text,
+API keys, WAV or user paths are printed. Candidate replacements are
+ambiguous text-rewrite events, **not proven missing spoken words**;
+no PR #25 opt-in or speech-accuracy/WER claim is authorized.
+
 ## Offline P1 audio-evidence audit helper
 
 A new **offline-only** `scripts/audit-private-audio.mjs` tool accepts
