@@ -55,7 +55,8 @@ test('v0.2: player is browser-only, one shared controls element, no server media
   assert.match(js,/URL\.revokeObjectURL\(playbackUrl\)/);
   assert.match(js,/playbackRevision/);
   assert.match(js,/loadPlayback\(item\)/);
-  assert.match(js,/addEventListener\('close',releasePlayback\)/);
+  assert.match(js,/\$\('classroom-dialog'\)\.addEventListener\('close',\(\)=>\{/);
+  assert.match(js,/releasePlayback\(\);/);
   assert.match(css,/\.local-playback\[hidden\]\{display:none!important\}/);
   assert.doesNotMatch(js,/local-player'\)\.play\(/);
 });
