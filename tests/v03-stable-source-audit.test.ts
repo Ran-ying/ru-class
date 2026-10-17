@@ -102,7 +102,7 @@ test('source frames out of order or malformed are refused before projection comp
 });
 test('switching classrooms clears stale live subtitles before async IndexedDB finishes',()=>{
   const code=readFileSync('apps/web/app.js','utf8');
-  const start=code.indexOf('async function renderSelectedClassroom(){');
+  const start=code.indexOf('async function renderSelectedClassroom(');
   const fetch=code.indexOf('const sessions=await listClassroomRecordings(key);',start);
   const clear=code.indexOf("if(selectedKey!==renderedClassroomKey){",start);
   assert.ok(start>=0&&clear>start&&clear<fetch);

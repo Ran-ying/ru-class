@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+test('v0.4 refreshes one persistent history row per recording after LLM commit, never duplicates it',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
+  const start=app.indexOf('function showBilingualSentenceRows(');
+  const end=app.indexOf('function startSentenceWorker(',start);
+  const action=app.slice(start,end);
+  assert.ok(start>=0&&end>start);
+  assert.match(action,/renderSelectedClassroom\(\{historyOnly:true\}\)/);
+  assert.doesNotMatch(action,/holder\.append\(|createElement\('article'\)/);
+  assert.match(app,/article\.dataset\.recordingId=session\.id/);
+});
+
+test('background history refresh during microphone use retains live RU stable and draft text',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
+  const start=app.indexOf('async function renderSelectedClassroom(');
+  const end=app.indexOf('async function refreshClassrooms(',start);
+  const render=app.slice(start,end);
+  assert.match(render,/\{historyOnly=false\}=\{\}/);
+  assert.match(render,/if\(revision!==classroomRevision\|\|key!==activeClassroom\?\.key\|\|\(!historyOnly&&\(starting\|\|running\)\)\)return/);
+  assert.ok(render.includes('if(historyOnly)return; //'));
+  assert.ok(render.indexOf('if(historyOnly)return')<render.indexOf("stable=last?.transcript"),'history-only load must exit before modifying current RU');
+});
+
+test('v0.4 text model is correctly described as active history processing, not future placeholder',()=>{
+  const html=readFileSync('apps/web/index.html','utf8');
+  assert.match(html,/逐句生成正式俄语校正与中文翻译/);
+  assert.match(html,/id="translation-status"/);
+  assert.doesNotMatch(html,/中文翻译将在后续版本提供/);
+});
