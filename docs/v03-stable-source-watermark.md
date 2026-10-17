@@ -1,0 +1,97 @@
+# RU-Class v0.3 — stable captions, source-window provenance and future DeepSeek input
+
+## Scope
+
+The existing production `TranscriptBuffer` applies LocalAgreement-style
+overlap stabilization, emitting `stable_delta` and `partial_text`.
+**v0.3 does not replace this matching algorithm**, modify the Whisper
+decode settings, or run DeepSeek. It improves the observable state and
+adds source evidence for future v0.4 sentence splitting/translation.
+
+- The live Russian area renders the **immutable confirmed prefix**
+  and **replaceable draft tail** as two visually distinct spans
+  (`#ru-stable`, `#ru-draft`). The final stop `flush` transfers the
+  visible draft into the stable prefix as in the original reducer.
+- Each accepted **stable delta** generates a unique `StableUnitJournal`
+  item with `classroomId`, `recordingId`, stable session-local ordinal,
+  Russian text, source ASR confirmation-window start/end samples,
+  a *wall-clock estimate* of that confirmation window end and explicit
+  null **spoken-word** start/end timestamps.
+- These items are saved alongside the corresponding independent
+  recording metadata as `stableUnits[]` in the existing IndexedDB
+  `lessons` store. Original 8s raw ASR hypotheses stay intact in
+  `hypotheses` and WAV PCM stays in `audio`; no new IndexedDB store,
+  key mutation or cloud sync is introduced. Old recordings with no
+  `stableUnits[]` remain valid and display their original transcript.
+- The classroom-wide bilingual history still spans multiple separate
+  recordings chronologically, with recording boundaries intact.
+  Where stable units exist, the history displays the number and last
+  **confirmation window** time, explicitly *not* a word or sentence
+  time. Chinese stays a placeholder until real translation is available.
+
+## The user's 8-second DeepSeek idea: useful boundary, not automatic truth
+
+The Whisper client sends an 8-second sliding PCM window. Once the
+current rolling window start has moved beyond a source sample, that
+audio sample will not appear in a **new** 8-second window (barring
+session restart/replay). **This alone does not prove a correct,
+immutable transcription**: the hypothesis may have remained tentative,
+Whisper might have omitted some utterance, and no ASR word timestamp
+is available to attribute a phrase to the old sample.
+
+The `StableUnitJournal.ready()` API therefore uses **two gates**:
+1. The text must have **already been emitted by `stable_delta`**.
+   Never age `partial_text` or a raw `unanchored` hypothesis into
+   stability simply because eight seconds have passed.
+2. During a live recording, the *window that confirmed this text*
+   must itself have ended **at least eight seconds before the latest
+   processed ASR window end**, expressed as 128,000 16-kHz samples.
+   This is deliberately conservative and can add substantially more
+   than 8 seconds of perceived lag.
+   At clean session stop, after `flush`, all remaining stable units
+   are eligible without an additional timer.
+
+Stable units receive deterministic `recordingId:ordinal` IDs.
+A future v0.4 consumer can mark actual successful sends with
+`acknowledge(ids)` to prevent sending the same unit twice. This
+**in-memory eligibility helper is not yet a durable, exactly-once
+DeepSeek job queue**: v0.4 must supply authenticated user-selected
+API credentials, serial timer-based processing, persistence/retry
+semantics, sentence splitting/correction, prefix verification and
+stale-response protection. Nor is a stable unit necessarily a
+syntactically complete **sentence**; v0.4 handles sentence boundaries.
+
+## Time semantics (important)
+
+The `window_start_sample` / `window_end_sample` from each ASR request
+come from the 16kHz **recording-session** PCM timeline. When the first
+actual browser audio chunk is received, the application estimates a
+capture epoch from `Date.now() - sampleCount / 16000 * 1000`. A
+stable unit's `estimatedConfirmationWallTimeMs` is **that estimated
+epoch + confirmation-window-end audio offset**, not the actual time
+the Russian words were uttered. AudioWorklet buffering, request lag,
+microphone scheduling and word placement within the overlapping
+window preclude exact speech timestamps.
+
+Do not assert word-level/sentence-level audio ranges at v0.3.
+`speechStartSample` and `speechEndSample` remain **null**.
+Independent Start/Stop segments each have distinct PCM zero-time
+origins and recording UUIDs. The classroom history sorts them by
+recording metadata; it never concatenates offsets across pauses.
+
+## Acceptance
+
+- No modification to the already regression-tested text matching
+  or old 44-window output/replay contracts.
+- Verify immutable stable prefix, replaceable draft, final `flush`
+  and no duplicate stable unit from the same original delta.
+- Verify a 7-second-old confirmed unit remains withheld, an 8-second
+  confirmed unit becomes eligible, a 30-second-old *draft* stays
+  ineligible, and distinct recording IDs remain isolated.
+- Verify observed source sample provenance is retained on save/reload;
+  legacy recordings retain their original transcript.
+- UI tests and Node tests are **not** MacBook Safari long-recording,
+  audio-word alignment or Russian WER checks.
+
+**This v0.3 work does not activate text/image model inference or
+DeepSeek. The v0.4 call contract remains separately scoped.**
