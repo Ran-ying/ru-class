@@ -43,8 +43,8 @@ export class StableUnitJournal{
         state:'stable',
         sourceWindowStartSample:start,
         confirmedWindowEndSample:end,
-        confirmedAt:this.startedAt+end/RATE*1000,
-        timeBasis:'confirmation_window_only',
+        estimatedConfirmationWallTimeMs:this.startedAt+end/RATE*1000,
+        timeBasis:'estimated_capture_epoch_plus_confirmation_window_end',
         // Explicitly unavailable until a future verified alignment is added.
         speechStartSample:null,
         speechEndSample:null
