@@ -129,6 +129,21 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.2 whole-recording local playback (explicit user request, 2026-10-17)
+
+The owner explicitly resumed **v0.2 local lesson playback and audio
+storage testing**, superseding the previous blanket deferment of
+in-app playback for this *whole-recording* scope only. Keep original
+browser-direct BYOK and same IndexedDB v3 schema. `recordingWav` and
+the `设置 → 本地数据` one-audio-player UI may load old sessions
+and must refuse missing/corrupt PCM parts; retain WAV/JSON exports.
+Do not conflate full-WAV playback with **v0.6 word/sentence-aligned
+playback**, which remains deferred, along with P2 automatic recovery
+and 90-minute endurance testing. CI's 30-minute synthetic WAV Blob
+checks are not real MacBook Safari 30-minute microphone acceptance.
+Prefer preserving raw original data and reasonable blob memory bounds.
+See `docs/v02-local-recording-playback.md`.
+
 ## P0 durable evidence manifests (Issue #33, 2026-10-17)
 
 Use **IndexedDB schema v3** in the unchanged
