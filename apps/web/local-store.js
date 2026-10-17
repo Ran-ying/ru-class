@@ -136,6 +136,64 @@ export async function createClassroom({title,date}){
   await withStore('classrooms','readwrite',s=>s.add(item));
   return item;
 }
+/**
+ * Rename the logical classroom while preserving its stable UUID and all
+ * original per-recording IDs, PCM, hypothesis and evidence blobs.
+ *
+ * The v4 classroom store is keyed by date/name; changing the name requires
+ * rekeying the catalog row AND its recording metadata atomically. Both stores
+ * share one transaction so a Safari crash cannot leave orphaned recordings.
+ * Legacy implicit groups are materialized only when explicitly renamed.
+ */
+export async function renameClassroom(oldKey,title){
+  if(typeof oldKey!=='string'||!/^\d{4}-\d{2}-\d{2}\u001f/u.test(oldKey))
+    throw Error('INVALID_CLASSROOM_KEY');
+  const date=oldKey.slice(0,10);
+  const nextKey=classroomKey(title,date),nextTitle=normalizedName(title);
+  const db=await connection();
+  const stableId=crypto.randomUUID(); // Only used if this was a virtual legacy group.
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(['classrooms','lessons'],'readwrite');
+    const catalog=tx.objectStore('classrooms'),recordings=tx.objectStore('lessons');
+    let catalogRows,sessionRows,result,reason=null,processed=false;
+    const fail=code=>{reason=code;try{tx.abort();}catch{}};
+    const finish=()=>{
+      if(processed||!catalogRows||!sessionRows)return;
+      processed=true;
+      const existing=catalogRows.find(x=>x.key===oldKey);
+      const owned=sessionRows.filter(x=>{
+        try{return recordingClassroomKey(x)===oldKey;}catch{return false;}
+      });
+      if(!existing&&!owned.length){fail('CLASSROOM_NOT_FOUND');return;}
+      // Protect against both explicitly created and old implicit classrooms.
+      const occupied=catalogRows.some(x=>x.key===nextKey&&x.key!==oldKey)||
+        sessionRows.some(x=>{
+          try{return nextKey!==oldKey&&recordingClassroomKey(x)===nextKey;}
+          catch{return false;}
+        });
+      if(occupied){fail('CLASSROOM_ALREADY_EXISTS');return;}
+      result={
+        ...(existing||{id:stableId,createdAt:Date.now()}),
+        key:nextKey,date,title:nextTitle
+      };
+      if(nextKey!==oldKey&&existing)catalog.delete(oldKey);
+      // The same transaction serializes the unique-key operation across tabs.
+      if(nextKey===oldKey&&existing)catalog.put(result);
+      else catalog.add(result);
+      for(const row of owned)recordings.put({
+        ...row,title:nextTitle,lessonDate:date,
+        classroomKey:nextKey,classroomId:result.id
+      });
+    };
+    const a=catalog.getAll(),b=recordings.getAll();
+    a.onsuccess=()=>{catalogRows=a.result;finish();};
+    b.onsuccess=()=>{sessionRows=b.result;finish();};
+    tx.oncomplete=()=>resolve(result);
+    tx.onerror=()=>reject(Error(reason||'CLASSROOM_RENAME_FAILED'));
+    tx.onabort=()=>reject(Error(reason||'CLASSROOM_RENAME_FAILED'));
+  });
+}
+
 export async function listClassroomRecordings(classroomKeyValue){
   if(typeof classroomKeyValue!=='string'||!classroomKeyValue)
     throw Error('INVALID_CLASSROOM_KEY');
