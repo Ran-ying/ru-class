@@ -297,3 +297,6 @@ main>.transcription{border-left:1px solid #d9e2d9}
 .history-untranslated{opacity:.6;border-top:1px dashed #d8e1d7;margin-top:10px!important;padding-top:8px}
 .session-bilingual>p>p{margin:3px 0 12px;line-height:1.6}
 @media(max-width:760px){.translation-status{padding:5px 12px}}
+
+.session-bilingual>div{font-size:14px;line-height:1.6;color:#324e42;white-space:pre-wrap;overflow-wrap:anywhere}
+.session-bilingual>div[lang="zh-CN"]{color:#566d5e}
