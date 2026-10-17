@@ -95,7 +95,8 @@ async function renderSelectedClassroom(){
         provenance.textContent='已保存 '+session.stableUnits.length+
           ' 个稳定文字单元 · 最近确认窗口末端 '+
           (last.confirmedWindowEndSample/16000).toFixed(1)+' 秒（非逐词时间）';
-        article.append(provenance);
+        columns.dataset.confirmedWindowEndSample=String(last.confirmedWindowEndSample);
+        columns.append(provenance);
       }
       const zh=document.createElement('p');
       zh.lang='zh-CN';
@@ -303,7 +304,7 @@ async function start(){
   const p=profiles.speech;
   if(!p?.baseUrl||!p?.model||!p?.apiKey){
     $('error').textContent='请先在“设置 → 模型 → 语音”中填写自己的 API 地址、模型和 Token。';
-    $('settings').showModal();setTab('models');return;
+    $('settings').showModal();return;
   }
   if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!window.AudioWorkletNode){
     $('error').textContent='录音需要安全上下文（HTTPS 或 localhost）以及 AudioWorklet。';
