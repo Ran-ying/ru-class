@@ -67,6 +67,7 @@ export class SentenceWorker{
     Object.assign(this,{journal,profile,save,onCommit,onError,request,intervalMs});
     this.closed=false;this.running=false;this.timer=null;this.controller=null;
     this.nextIndex=0;this.lastEmptySignature='';
+    this.failedSignature='';this.failuresOnSignature=0;
   }
   schedule(ms=this.intervalMs){
     if(this.closed||this.timer!==null)return;
@@ -104,10 +105,16 @@ export class SentenceWorker{
       this.journal.acknowledge(consumed.map(u=>u.id));
       this.nextIndex+=rows.length;
       this.lastEmptySignature='';
+      this.failedSignature='';this.failuresOnSignature=0;
       this.onCommit(rows);
     }catch(e){
       if(!this.closed&&!signal.aborted){
         delay=5000;
+        if(this.failedSignature===signature)this.failuresOnSignature++;
+        else{this.failedSignature=signature;this.failuresOnSignature=1;}
+        // A permanently invalid API/token must not generate unbounded paid
+        // retries. New confirmed text or a final flush forms a new signature.
+        if(this.failuresOnSignature>=3)this.lastEmptySignature=signature;
         this.onError(e instanceof Error?e.message:'LLM_PROCESSING_ERROR');
       }
     }finally{
