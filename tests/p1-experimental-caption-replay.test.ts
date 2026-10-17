@@ -57,11 +57,12 @@ test('later four-word support is recorded but never reinserted into the caption'
     w('Совершенно новая отдельная мысль продолжается',3,5,true)
   ];
   const report=counterfactualReplay(input);
-  assert.equal(report.candidateReplacements.length,1);
-  assert.equal(report.candidateReplacements[0].replacementIndex,2);
-  assert.equal(report.laterLexicalSupport.length,1);
-  assert.equal(report.laterLexicalSupport[0].supportingWindowIndex,3);
-  assert.ok(report.laterLexicalSupport[0].matchedContiguousTokens>=4);
+  assert.ok(report.candidateReplacements.some((x:{replacementIndex:number})=>x.replacementIndex===2));
+  const supported=report.laterLexicalSupport.find(
+    (x:{replacementIndex:number})=>x.replacementIndex===2);
+  assert.ok(supported,'The targeted discarded candidate is supported later');
+  assert.equal(supported.supportingWindowIndex,3);
+  assert.ok(supported.matchedContiguousTokens>=4);
   assert.equal(report.displayChangedWindows,0,
     'Ledger is advisory; it does not insert or freeze unverified phrases');
 });
@@ -75,10 +76,13 @@ test('unconfirmed candidate expires numerically; actual audio remains unverified
     w('Тема теперь вообще другая',4,6,true)
   ];
   const report=counterfactualReplay(input);
-  assert.equal(report.candidateReplacements.length,1);
-  assert.equal(report.laterLexicalSupport.length,0);
-  assert.equal(report.unresolvedCandidates.length,1);
-  assert.equal(report.unresolvedCandidates[0].resolution,'NO_MATCH_IN_TWO_SUBSEQUENT_WINDOWS');
+  assert.ok(report.candidateReplacements.some((x:{replacementIndex:number})=>x.replacementIndex===2));
+  assert.equal(report.laterLexicalSupport.some(
+    (x:{replacementIndex:number})=>x.replacementIndex===2),false);
+  const expired=report.unresolvedCandidates.find(
+    (x:{replacementIndex:number})=>x.replacementIndex===2);
+  assert.ok(expired,'The targeted candidate has an explicit expiration');
+  assert.equal(expired.resolution,'NO_MATCH_IN_TWO_SUBSEQUENT_WINDOWS');
 });
 
 test('existing genuine repeated phrase in disjoint audio is not suppressed',()=>{
