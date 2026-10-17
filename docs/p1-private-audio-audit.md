@@ -144,7 +144,8 @@ are **diagnostic signals, never a WER or proven word-loss count**.
   *private* output directory intentionally stores snippets and raw text;
   this is sensitive source material and must never be committed.
 
-Automated synthetic tests include the known two-utterance false-dedup
-counterexample, an acoustic-separation case, a shared-activity negative
+Automated synthetic tests mark the known two-utterance false-dedup
+counterexample as a **failing `test.todo`**, not a correctness PASS; they
+also cover an acoustic-separation case, a shared-activity negative
 case, redaction of CLI output, local excerpt integrity and malformed
 inputs. Synthetic passing does **not** count as physical C1/C2 listening.
