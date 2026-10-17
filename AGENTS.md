@@ -154,6 +154,25 @@ PR #25 remains Draft/off, as does the original P1 evidence
 acceptance; do not enable its quarantine merely because the raw
 journal now exists.
 
+## P1 same-source 44-window M4 decoder control (2026-10-17)
+
+Read `docs/p1-2026-10-17-44window-m4-controlled-comparison.md`:
+the owner reported authentic original 44-row WAV + 44-row JSON
+comparison from the physical M4, reusing exact browser sample start/end
+and final flags. Fresh small/0.2 matched **44/44 exact provider text**
+to the original export; small/0 matched 17/44 and medium/0.2 1/44.
+Unchanged reducer: small/0 `152/12/59` and small/0.2
+`174/14/73` and medium/0.2 `144/10/22` as
+final words/replacement count/replacement tokens. All three passed
+mechanical stop-prefix/same-window/double-flush tests.
+This is **strong decoding-source reproducibility** but still
+`SPEECH_ACCURACY_UNVERIFIED`. No metric justifies claiming
+spoken words were recovered/lost, switching medium, or enabling
+PR #25. The frontend JSON v1 does **not** attest Whisper deployment
+revision or `temperatureInc`; add only honest privacy-safe
+metadata in a separate, reviewed schema with backward compatibility.
+Preserve original source files and complete/no-failure evidence status.
+
 ## P1 numeric-only replacement provenance (2026-10-17)
 
 `scripts/audit-private-replacements.mjs` provides a read-only offline

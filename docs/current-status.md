@@ -173,6 +173,39 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## P1 authentic new 44-window same-PCM model A/B/C (2026-10-17)
+
+The owner submitted a new physical M4 same-source report under
+[Issue #31](https://github.com/Ran-ying/ru-class/issues/31).
+Read [the full redacted 44-window control report](p1-2026-10-17-44window-m4-controlled-comparison.md)
+before changing model settings or the subtitle algorithm.
+
+The same **44 authentic 16-kHz source sample ranges and final flags**
+were independently re-inferred on Mac mini M4 under three controlled
+Whisper settings. The originally exported 44 raw texts were
+**byte-identical 44/44** to the operator's small/0.2 run
+(small/0 matched 17/44; medium/0.2 matched 1/44). Small/0 produced
+**152** final reducer tokens and **12/59** ambiguous unanchored
+replacement events/tokens, small/0.2 produced **174 / 14/73**, and
+medium/0.2 **144 / 10/22**. All three model sequences passed 44-window
+stop-prefix/same-range/double-flush mechanical replay. Local inference
+p95 was **407 / 1315 / 4290 milliseconds**, respectively.
+The operator's numerical model inference results and fallback logs
+were not independently rerun by GitHub CI; the original supplied
+WAV/JSON format, SHA-256 and source sample lengths were independently
+checked.
+
+The higher 0.2 token count or lower medium candidate churn is
+**not** WER or semantic completeness; changing decoding changes
+the actual raw hypotheses, not necessarily the correctness of the
+unchanged `TranscriptBuffer`. Keep the user-selected production
+default unchanged, PR #25 Draft/OFF, and original private files
+out of public GitHub. Next: finish true Safari IndexedDB
+evidence/provenance and incomplete-save acceptance in Issue #28
+and collect more independently captured sessions before modifying
+reducer heuristics. Model settings are not externally attested by
+the current v1 browser JSON alone. `SPEECH_ACCURACY_UNVERIFIED`.
+
 ## P1 local numeric-only replacement provenance (2026-10-17)
 
 `scripts/audit-private-replacements.mjs` runs the unchanged browser

@@ -11,6 +11,7 @@
 - [P1：真实 6/6 Qwen3-ASR 交叉验证、私有字幕风险影子分析](docs/p1-shadow-caption-risk.md)
 - [P1：M4 C1 重建 121 窗口、C2 焦点与 PR #25 离线回归报告](docs/p1-m4-c1-reconstruction-c2-focus-2026-10-17.md)
 - [P1：离线定位原始识别候选替换（仅输出窗口索引、数字与样本范围）](docs/p1-private-replacement-audit.md)
+- [P1：真实 44 窗口同音频 small/medium 对照（0.2 会改变字幕，非 WER）](docs/p1-2026-10-17-44window-m4-controlled-comparison.md)
 - [浏览器直连 BYOK 设计](docs/browser-direct-byok.md)
 - [维护者工作规范](AGENTS.md)
 
