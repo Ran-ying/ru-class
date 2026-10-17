@@ -123,3 +123,103 @@ word-timestamp/speech-region attribution*, not silent reinsertion.
 PR #22 remains draft; this experiment must stay draft as well until
 source-audio acceptance exists. P0 PR #14 Safari raw-window journal
 review is separate, and **P2 stays excluded**.
+
+## Second offline experiment: audio-window intersection and RMS regions (no provider key)
+
+The 2026-10-17 private owner-side C1 attribution check reported:
+
+| Metric | C1 #30 | C1 #120 normal-final control |
+| --- | ---: | ---: |
+| Replaced candidate source index | #29 | #119 |
+| Candidate words | 25 | 3 |
+| Qwen focus/context best contiguous matches | 6 / 6 | 1 / 1 |
+| Candidate positions supported in Qwen focus or context | 18 | 0 |
+| Subsequent raw Whisper maximum continuous match | 7 | no later window |
+| Joint Qwen + subsequent supported candidate positions | 9 | 0 |
+| Candidate positions lexically covered anywhere in final subtitle | 16 | 0 |
+| Jointly supported but not lexically covered in final subtitle | **4** | **0** |
+
+The 4 target positions are *not* four verified missing spoken words, nor
+is a phrase's presence elsewhere proof that the same spoken occurrence
+was preserved. C1 converted 121-window input SHA-256:
+`e09920d62fa6d74295aa7729c4648e918b53466d06cb53f54170f82a88f5db08`;
+private cross-model report SHA-256:
+`ab71fe74c36f8d472ff9c67c499b466714f854b37a357b8024e9acb36dfebb4e`.
+These are provenance fingerprints, not actual public audio/text.
+
+### Acoustic region tool
+
+`scripts/audit-candidate-time-regions.mjs` combines existing private
+Whisper cache, **previously saved** Qwen report, and the local 16-kHz
+PCM16 WAV clip plus its original private review JSON. **It does not
+request ASR from any provider, download a model, write any file, or
+modify production captions.** It emits numeric-only, bounded time-region
+candidates; it never emits speech strings, WAV samples, private paths,
+credentials or exact recognized words.
+
+Run from the latest **Draft PR #23** branch; the full C1 original WAV is
+not needed because `review-0030.wav` already covers the source and
+subsequent Whisper window intersections. The focus control #120 uses
+its own 10-second clip.
+
+```sh
+node scripts/audit-candidate-time-regions.mjs \
+  --windows /Users/ranying/Documents/Codex/2026-10-16/zhu/work/main-regression-20261017/private/C1-fixed-windows-converted.json \
+  --cross-asr /Users/ranying/Documents/Codex/2026-10-17/p1-qwen-beijing-private/cross-asr-private.json \
+  --clip /Users/ranying/Documents/Codex/2026-10-17/p1-private-audio-audit/private/c1-targeted-private/review-0030.wav \
+  --clip-evidence /Users/ranying/Documents/Codex/2026-10-17/p1-private-audio-audit/private/c1-targeted-private/review-0030-private.json \
+  --case C1 --index 30
+
+node scripts/audit-candidate-time-regions.mjs \
+  --windows /Users/ranying/Documents/Codex/2026-10-16/zhu/work/main-regression-20261017/private/C1-fixed-windows-converted.json \
+  --cross-asr /Users/ranying/Documents/Codex/2026-10-17/p1-qwen-beijing-private/cross-asr-private.json \
+  --clip /Users/ranying/Documents/Codex/2026-10-17/p1-private-audio-audit/private/c1-targeted-private/review-0120.wav \
+  --clip-evidence /Users/ranying/Documents/Codex/2026-10-17/p1-private-audio-audit/private/c1-targeted-private/review-0120-private.json \
+  --case C1 --index 120
+```
+
+The tool **fails closed** if the real audio file's SHA-256 differs
+from the exact WAV used for Qwen, if WAV frame count disagrees with
+saved absolute clip sample bounds, or if the private neighboring
+Whisper evidence differs from the full cache. This prevents comparing
+unrelated classroom sessions or time bases.
+
+Per *individual later window*, the tool finds candidate positions that
+(1) match a contiguous run of **at least three normalized words** in
+Qwen focused/context output; (2) match a contiguous run in that
+specific later Whisper raw window; (3) were not lexically covered by a
+run of at least three words *anywhere* in the final subtitle. It never
+concatenates #31 and #32 to invent a continuous phrase. For each
+provisional supported subspan it emits the intersection of **the
+old candidate source window, the Qwen input window, and the later raw
+Whisper window**, under the **UNVERIFIED assumption they refer to the
+same spoken occurrence**. If the bounds do not intersect, it emits
+null rather than inventing times.
+
+Within each conditional window intersection, it measures 20ms
+normalized PCM16 RMS energy, with thresholds 0.01 and 0.02, and
+reports intervals with at least 80ms of activity (merging short gaps
+of at most 60ms). These are **acoustic activity / possible review
+regions**, not verified speech, not forced word alignment, not diarization
+and not evidence that a matched word was spoken there. Sound may be
+background noise or another teacher phrase. It deliberately sets
+`verifiedWordTimeIntervals=0` and `status=UNVERIFIED_WORD_TIME_AND_SPEECH`.
+
+C1 #120 should be a negative control: it has no subsequent Whisper
+window, so no joint temporal region should be asserted, despite a
+proper final correction. This does **not** mean the earlier 3-word
+draft was definitively false.
+
+### Acceptance to move beyond conditional bounds
+
+- A trained Russian listener or a **separately verified forced aligner /
+  acoustic ASR reference** must establish whether the same candidate
+  phrase occurred in the proposed audio region. Energy alone cannot.
+- Check whether its actual occurrence is already represented somewhere
+  else in stable text, and separate real omissions from rephrasing or
+  repeated genuine speech before proposing recovery.
+- Run 121+106 original windows, 45 sample-range replay cases and 227
+  first-stop prefixes on any proposed **new** reducer; retain valid C1
+  #120 correction and known real-repeat limitation as explicit gates.
+- PR #22 and PR #23 remain draft. P0 #14 Safari gate remains separate;
+  **P2 stays deferred**. Alibaba Key was revoked by the user.
