@@ -173,6 +173,27 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.2 editable course names and unified classroom history
+
+A 1px central divider separates the equal-width main panes.
+The two-column course manager now provides **rename** for the
+selected classroom, preserving its existing UUID (materializing
+a stable UUID only for an old implicit/legacy group) and migrating
+session membership/name metadata in **one IndexedDB transaction**.
+Per-session WAV and original ASR JSON remain keyed by their
+unaltered recording UUIDs; no audio or raw texts are merged
+or re-identified. Same-day name collision rejects the rename.
+Automated tests cover active and legacy groups and recorded WAV
+preservation. Physical Safari rename/multi-tab acceptance pending.
+
+The classroom history panel now renders **all saved recordings in
+chronological order**, per-segment Russian text and a distinct
+ZH column. Chinese shows an explicit not-generated placeholder
+until a real translation provider is implemented. Original PCM,
+ASR hypothesis and completeness state remain separate per
+Start/Stop session; no fake continuous speech or sample-offset
+translation across gaps. No Whisper or `TranscriptBuffer` changes.
+
 ## v0.2 classroom selection and two-pane course manager
 
 The user found a real UI regression after selecting a classroom:
