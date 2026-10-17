@@ -359,8 +359,10 @@ test('renaming a dated classroom preserves stable UUID and both recording IDs an
     x.classroomId===before.id&&x.title==='信息安全基础'));
   assert.deepEqual([...stores.get('audio')!.values()].filter((x:any)=>recordingIds.includes(x.lessonId)),[],
     'test class has no fabricated WAV bytes during rename');
-  await assert.rejects(renameClassroom(renamed.key,'信息安全导论'),/CLASSROOM_ALREADY_EXISTS/,
-    'a same-day collision with the legacy catalog or another explicit classroom must be rejected only if present');
+  const other=await createClassroom({title:'Already taken',date});
+  await assert.rejects(renameClassroom(renamed.key,other.title),/CLASSROOM_ALREADY_EXISTS/);
+  assert.deepEqual((await listClassroomRecordings(renamed.key)).map((x:any)=>x.id),recordingIds,
+    'a rejected conflicting rename cannot detach existing recording sessions');
 });
 test('renaming existing legacy virtual class materializes UUID without touching audio or raw ASR keys',async()=>{
   const before=(await listLessons()).find((x:any)=>x.id==='v1-course');
