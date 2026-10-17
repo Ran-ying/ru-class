@@ -7,7 +7,7 @@ const kinds=['speech','image','text'];
 let profiles={speech:null,image:null,text:null};
 const stages=Object.fromEntries(kinds.map(kind=>[kind,{revision:0,ready:false,manual:false}]));
 let running=false,stopping=false,starting=false,stream,context,source,capture,asr,lessonId='',sampleCount=0,chunkIndex=0;
-let activeClassroom=null,classroomOptions=[],classroomRevision=0;
+let activeClassroom=null,classroomOptions=[],classroomRevision=0,renderedClassroomKey='';
 let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve(),evidenceWarning='';
 let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 const CLIENT_VERSION='0.2.2'; // Selected frontend build label, not attested ASR engine metadata.
@@ -66,6 +66,14 @@ async function renderSelectedClassroom(){
   const holder=$('session-history');
   holder.replaceChildren();
   renderClassroomLock();
+  // Do not display the previously selected class's transcript while the new
+  // class's asynchronous IndexedDB read is pending.
+  const selectedKey=activeClassroom?.key||'';
+  if(selectedKey!==renderedClassroomKey){
+    renderedClassroomKey=selectedKey;
+    stable='';draft='';renderCaption();
+    $('latency').textContent='—';
+  }
   if(!activeClassroom){
     stable='';draft='';sourceJournal=null;
     renderCaption();$('duration').textContent='00:00';
