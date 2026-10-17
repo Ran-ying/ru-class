@@ -173,6 +173,28 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.3.1 offline exact-source-unit replay
+
+A new private `scripts/audit-stable-source.mjs` CLI reads one
+locally exported `ru-class-asr-windows-v1` JSON and internally
+replays the unchanged browser `TranscriptBuffer`, comparing
+stable deltas against optional `source_units[]` and saved
+recording/classroom IDs and source ASR sample boundaries. The
+original `windows[]` shape is unchanged so earlier numeric
+audit/replay scripts remain compatible. The special no-new-audio
+stop case performs an additional synthetic final flush only
+for replay comparison. Only numeric outcomes are printed, never
+private Russian speech or local filenames.
+
+The eligibility helper cannot be externally accelerated with a
+forged future window timestamp or final-state argument. Switching
+to no classroom also clears old RU stable/draft text before
+render, preventing the previous classroom transcript showing
+briefly in a locked view. No new IndexedDB schema, audio rewrites,
+server requests or DeepSeek calls. Audit matches provide
+**engineering replay evidence, not exact spoken word times/WER**.
+Real Safari v0.3 source persistence/reload is still pending.
+
 ## v0.3 stable source units and conservative 8-second LLM eligibility
 
 The current browser-direct Whisper `TranscriptBuffer` and its
