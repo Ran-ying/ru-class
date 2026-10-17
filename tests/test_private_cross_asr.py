@@ -36,7 +36,7 @@ class PrivateCrossAsrTests(unittest.TestCase):
             frames=192000 if index!=120 else 160000
             with wave.open(str(directory/(stem+'.wav')),'wb') as audio:
                 audio.setnchannels(1);audio.setsampwidth(2);audio.setframerate(mod.RATE)
-                audio.writeframes(b'\\x00\\x00'*frames)
+                audio.writeframes(bytes(2*frames))
             focusstart=start+32000
             focusend=start+min(160000,frames)
             record={'format':'ru-class-private-p1-review-v1',
