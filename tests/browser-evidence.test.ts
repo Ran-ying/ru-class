@@ -179,6 +179,37 @@ test('raw ASR hypotheses survive caption rewrites and are exported as private po
   }),/ASR_WINDOW_CONFLICT/);
 });
 
+
+test('v0.3 private ASR export includes its recording-scoped stable-unit evidence without leaking provider keys',async()=>{
+  const id='source-units-recording-0.3';
+  const fixedTime=1780000000000;
+  const unit={
+    id:id+':0',recordingId:id,classroomId:'classroom-v03',ordinal:0,
+    text:'Только подтверждённые слова',state:'stable',
+    sourceWindowStartSample:0,confirmedWindowEndSample:32000,
+    estimatedConfirmationWallTimeMs:fixedTime+2000,
+    timeBasis:'estimated_capture_epoch_plus_confirmation_window_end',
+    speechStartSample:null,speechEndSample:null
+  };
+  await saveLesson({id,startedAt:fixedTime,title:'Private course',classroomId:'classroom-v03',
+    stableUnits:[unit],transcript:unit.text,hasAudio:false});
+  await saveHypothesis(id,{
+    text:'Только подтверждённые слова',startSample:0,endSample:32000,
+    final:true,inferenceMs:240
+  });
+  const exported=JSON.parse(await (await lessonHypothesesJson(id)).text());
+  assert.equal(exported.format,'ru-class-asr-windows-v1');
+  assert.equal(exported.recording.recording_id,id);
+  assert.equal(exported.recording.classroom_id,'classroom-v03');
+  assert.equal(exported.source_units.length,1);
+  assert.deepEqual(exported.source_units[0],unit);
+  assert.equal(exported.windows.length,1);
+  assert.ok(!JSON.stringify(exported).includes('private-secret'));
+  const legacy=JSON.parse(await (await lessonHypothesesJson('course-a')).text());
+  assert.ok(!Object.hasOwn(legacy,'source_units'));
+  assert.ok(!Object.hasOwn(legacy,'recording'));
+});
+
 test('empty evidence export is reported clearly for recordings created before schema v2',async()=>{
   await assert.rejects(lessonHypothesesJson('older-lesson'),/没有原始 ASR 窗口记录/);
 });
