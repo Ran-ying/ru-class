@@ -4,6 +4,70 @@
 experimental branch into production before evaluating the genuine private
 C1/C2 recordings and an audio-grounded correction reference.**
 
+## 2026-10-17 genuine private-cache mechanical replay result
+
+**Status: `PRIVATE_MECHANICAL_REGRESSION_PASS`; `SPEECH_ACCURACY_UNVERIFIED`; `PR_MUST_REMAIN_DRAFT`.**
+A local Codex report executed the exact experimental branch
+`83c17a0eed0616248ea364b4b320a66d6d3b15d3` on private converted
+C1 (121 windows; SHA-256
+`e09920d62fa6d74295aa7729c4648e918b53466d06cb53f54170f82a88f5db08`)
+and C2 (106 windows; SHA-256
+`d0bd6abac8f71193b7bf695b90d39b669dbeecc0728a3d346f078d7ca92afc19`).
+Results below are **operator-reported metrics** from the actual private
+replay, not GitHub CI access to private data.
+
+| Metric | C1 | C2 |
+| --- | ---: | ---: |
+| First baseline/trial visible divergence | none | **#76** |
+| Visible-text divergence windows | 0 | **30 (#76–#105)** |
+| `stable_delta` divergence windows | 0 | **19** |
+| Baseline/trial final word count (whitespace) | 829/829 | 718/723 |
+| Extreme loop quarantines in trial | 0 | **1 (#76)** |
+| Trial unanchored replacements | 23 | **19** |
+
+At C2 #76 baseline/trial visible counts were 678/531; at #77:
+527/544; at #78: 537/547. The dominating three-word loop appeared
+53 times in the baseline #76 display, but 0 times in the trial #76,
+#77 and final text. Trial #77 and final visible text retained a
+19-token consecutive sequence from the 20-token raw #77 hypothesis.
+**These are lexical probes, not a human speech-accuracy measurement.**
+
+C1 #30 and #120 visible strings and emitted deltas were unchanged at
+all 121 windows. The ledger recorded the #30 overwritten 25-token
+candidate and found seven contiguous supporting tokens at #32;
+**no words were auto-restored**. The #120 three-token predecessor was
+marked `STOP_BEFORE_FUTURE_EVIDENCE`, while the normal final 15-token
+correction remained identical to baseline.
+
+The operator independently reran the original **45 same-sample replay
+cases** (0 violations for both variants), plus same-interval repeats at
+the 120 + 105 non-final windows (0 violations). For **all 227 stop
+prefixes**, first flush committed exactly visible text, repeated
+flush emitted no extra stable text, and no stable-prefix violation
+occurred in either version. `npm test` after enabling localhost
+listening: 76 tests, 73 pass, 0 fail, 2 skipped, 1 **known failing
+TODO** (genuine speech repetition collapsed by lexical overlap).
+`npm run typecheck` and `npm run build` passed.
+
+The difference from earlier published final counts 828/717 is **not
+automatically a regression**, because this experiment reports
+whitespace-delimited tokens (829/718) rather than the previous
+normalization. Compare equivalent definitions before drawing conclusions.
+
+**Important contract nuance:** 19 changed `stable_delta` outputs
+between separate baseline/trial sessions do **not alone** violate
+append-only semantics *within* either session; both passed
+within-strategy prefix and stop tests. However, replacing a reducer
+**mid-session** cannot retract baseline stable tokens, so hot switching
+is unsupported. Speech accuracy, false-positive suppression of genuine
+repetition and safe rollout still need independent admission.
+
+Next research gate: establish an actual spoken-word reference for
+C1 #30 and C2 #76/#77 and check C1 #120's final correction; measure
+quality gains **against audio**. Do not accept a five-word final-count
+increase as five recovered spoken words, and do not merge this draft
+based only on mechanical regression success.
+
 ## Why now
 
 An operator-provided 2026-10-17 private C1/C2 shadow risk report ran against
