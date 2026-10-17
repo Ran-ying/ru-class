@@ -37,10 +37,12 @@ public provider default or automatic cross-device synchronization.
 - Existing baseline corrected same-range replay idempotence, non-consecutive
   silence handling and first-stop prefix consistency. Genuine rolling
   overlap repetition, ambiguous spoken repetition, and lost phrases remain.
-- An independent PR #14 adds *browser-local raw ASR window evidence* before
-  the lossy subtitle projection. Its storage migration and export still need
-  real Safari testing. Do not merge without its documented review gate in
-  `docs/asr-evidence-v0.1.md` on that PR branch.
+- The raw-window journal originally developed in PR #14 has been
+  forward-ported into main on the user's request. It saves raw ASR evidence
+  before lossy subtitle projection. Its Safari storage migration/export
+  still needs real-device testing under `docs/asr-evidence-v0.1.md` and
+  Issue #28; merging this recoverability feature was not a claim of
+  physical-browser acceptance.
 - Main includes **non-destructive diagnostic counters** for unrelated
   unmatched-window replacements, exposed only in the local replay report.
   These count ambiguity, not confirmed lost speech; the live text algorithm
@@ -166,8 +168,9 @@ hypothesis journaling from PR #14 in Safari (IndexedDB v1→v2,
 two-tab upgrades, accurate per-request source coordinates, export
 without keys, and error visibility). A future **new** authentic
 captured realtime window sequence can then be replayed deterministically;
-it cannot retroactively re-create the original C2 timing. Keep
-PR #14 unmerged until that acceptance, and do not revive PR #13.
+it cannot retroactively re-create the original C2 timing. The
+raw-window recording feature is now integrated, while Issue #28
+remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
 ## Offline P1 audio-evidence audit helper
