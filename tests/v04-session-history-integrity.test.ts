@@ -20,7 +20,7 @@ test('background history refresh during microphone use retains live RU stable an
   const render=app.slice(start,end);
   assert.match(render,/\{historyOnly=false\}=\{\}/);
   assert.match(render,/if\(revision!==classroomRevision\|\|key!==activeClassroom\?\.key\|\|\(!historyOnly&&\(starting\|\|running\)\)\)return/);
-  assert.match(render,/if\(historyOnly\)return;\s*\/\/);
+  assert.ok(render.includes('if(historyOnly)return; //'));
   assert.ok(render.indexOf('if(historyOnly)return')<render.indexOf("stable=last?.transcript"),'history-only load must exit before modifying current RU');
 });
 
