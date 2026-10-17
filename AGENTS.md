@@ -129,6 +129,27 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.2 classroom identity and locked transcription (2026-10-17)
+
+Owner changed the data semantics: **one classroom** is identified by a
+user-defined course name + local calendar date (canonical name/date
+unique key; newly created classrooms have UUID), **not by a start/stop
+recording**. The top-left classroom select loads historical transcript
+segments and shows `YYYY-MM-DD · name`, with a right-aligned plus button
+opening the add-classroom dialog. All live ASR and microphone controls
+are locked without a selected classroom. Every Start/Stop creates a
+new private recording-session UUID **inside** that classroom; its WAV,
+hypotheses, evidence manifest and independent 0-based PCM timeline are
+never reused or overwritten. The course/date identity is shared, not
+raw audio/sample offsets. Prevent classroom switching/creating during
+capture/start/stop. Keep existing v1–v3 session records untouched:
+list them in a legacy inferred course/date group, retain original
+session IDs, recordings and exports, and reject same-name/date duplicate
+course creation. Local IndexedDB v4 adds only a `classrooms` catalogue
+store. No shared API account/sync, translation, subtitle heuristic,
+or server change. Tests cover duplicate calendar dates and legacy groups.
+See `docs/v02-dated-classroom-identity.md`.
+
 ## v0.2 whole-recording local playback (explicit user request, 2026-10-17)
 
 The owner explicitly resumed **v0.2 local lesson playback and audio
