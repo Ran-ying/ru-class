@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// A tiny transaction-compatible fake for verifying the v1 -> v2 IndexedDB
+// A tiny transaction-compatible fake for verifying the v1 -> v3 IndexedDB
 // schema and browser-only evidence. It does not impersonate Safari acceptance.
 const stores=new Map<string,Map<string,any>>();
 const schemas=new Map<string,string|string[]>();
 const requestedVersions:number[]=[];
 let closeCount=0;
 let simulateBlockedOpen=false;
+let simulateHypothesisQuotaFailure=false;
 const key=(value:any)=>JSON.stringify(value);
 const keyParts=(store:string,value:any)=>{
   const path=schemas.get(store)!;
@@ -49,6 +50,7 @@ const fakeDb={
     tx.objectStore=()=>({
       get:(id:any)=>request(()=>structuredClone(table.get(key(id)))),
       add:(value:any)=>request(()=>{
+        if(name==='hypotheses'&&simulateHypothesisQuotaFailure)throw Error('QuotaExceededError');
         const k=key(keyParts(name,value));
         if(table.has(k))throw Error('ConstraintError');
         table.set(k,structuredClone(value));
@@ -95,12 +97,13 @@ const fakeDb={
 // @ts-ignore Browser JS intentionally lacks TS declarations.
 const storage = await import('../apps/web/local-store.js');
 const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
+  beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,
   saveProfile,loadProfiles,saveLesson,listLessons,clearBrowserData}=storage;
 
-test('IndexedDB v2 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
+test('IndexedDB v3 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
   const previous=await loadProfiles();
-  assert.deepEqual(requestedVersions,[2]);
-  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses']);
+  assert.deepEqual(requestedVersions,[3]);
+  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses','evidence']);
   assert.equal(previous.speech.apiKey,oldProfile.apiKey);
   assert.equal((await listLessons())[0].title,oldLesson.title);
   assert.deepEqual([...stores.get('audio')!.values()][0].data,oldAudio.data);
@@ -130,6 +133,8 @@ test('raw ASR hypotheses survive caption rewrites and are exported as private po
   const json=JSON.parse(await (await lessonHypothesesJson('course-a')).text());
   assert.equal(json.format,'ru-class-asr-windows-v1');
   assert.equal(json.sample_rate,16000);
+  assert.equal(json.metadata.status,'legacy_unverified',
+    'v2 recordings have no saved completeness manifest and cannot claim PASS');
   assert.equal(json.windows.length,2);
   assert.equal(json.windows[0].text,'Первая предварительная фраза');
   assert.ok(!JSON.stringify(json).includes('private-secret'));
@@ -155,11 +160,104 @@ test('empty evidence export is reported clearly for recordings created before sc
 });
 
 
+test('a v2 database with saved raw windows migrates to v3 without deleting records',async()=>{
+  // The v3 store is absent in the seeded v2 fixture; preserve old stores.
+  fakeDb.onversionchange!();
+  stores.delete('evidence');schemas.delete('evidence');
+  const oldRow=[...stores.get('hypotheses')!.values()][0];
+  const before=requestedVersions.length;
+  assert.equal((await lessonHypotheses('course-a')).length,2);
+  assert.equal(requestedVersions.length,before+1);
+  assert.deepEqual(stores.get('evidence')!.size,0);
+  assert.ok([...stores.get('hypotheses')!.values()].some(x=>x.text===oldRow.text));
+  assert.equal((await lessonEvidenceStatus('course-a')).status,'legacy_unverified');
+});
+
+test('a successful new recording exports truthful selected-model provenance and complete marker',async()=>{
+  await beginEvidenceSession('new-complete',{clientVersion:'0.2.2',selectedModelId:'small'});
+  const before=await lessonEvidenceStatus('new-complete');
+  assert.equal(before.status,'incomplete','an open session is never declared complete');
+  await saveHypothesis('new-complete',{text:'Первые слова',startSample:0,endSample:32000,final:false});
+  await saveHypothesis('new-complete',{text:'Последняя фраза',startSample:0,endSample:48000,final:true});
+  assert.equal(await finishEvidenceSession('new-complete',{
+    receivedCount:2,failedCount:0,frameCount:48000,completed:true
+  }),true);
+  const exported=JSON.parse(await (await lessonHypothesesJson('new-complete')).text());
+  assert.equal(exported.format,'ru-class-asr-windows-v1');
+  assert.deepEqual(exported.windows.map((x:any)=>x.window_end_sample),[32000,48000]);
+  assert.deepEqual(exported.windows.map((x:any)=>x.final),[false,true]);
+  assert.deepEqual(exported.metadata,{
+    status:'complete',clientVersion:'0.2.2',selectedModelId:'small',
+    modelSource:'user_selected_unverified',receivedCount:2,savedCount:2,
+    failedCount:0,frameCount:48000
+  });
+  assert.ok(!JSON.stringify(exported).includes('private-secret'));
+  assert.ok(!JSON.stringify(exported).includes('https://'));
+});
+
+test('write/quota failure persists an incomplete label across database reopen',async()=>{
+  await beginEvidenceSession('quota-fail',{clientVersion:'0.2.2',selectedModelId:'small'});
+  await saveHypothesis('quota-fail',{text:'Сохранено',startSample:0,endSample:32000,final:false});
+  simulateHypothesisQuotaFailure=true;
+  try{
+    await assert.rejects(saveHypothesis('quota-fail',{
+      text:'Потерянное окно',startSample:16000,endSample:48000,final:true
+    }),/QuotaExceededError/);
+  }finally{simulateHypothesisQuotaFailure=false;}
+  await markEvidenceWriteFailure('quota-fail');
+  assert.equal(await finishEvidenceSession('quota-fail',{
+    receivedCount:2,failedCount:1,frameCount:48000,completed:true
+  }),false);
+  fakeDb.onversionchange!(); // same-origin tab is re-opened: manifest survives
+  const exportRow=JSON.parse(await (await lessonHypothesesJson('quota-fail')).text());
+  assert.equal(exportRow.metadata.status,'incomplete');
+  assert.equal(exportRow.metadata.receivedCount,2);
+  assert.equal(exportRow.metadata.savedCount,1);
+  assert.equal(exportRow.metadata.failedCount,1);
+  assert.equal(exportRow.windows.length,1);
+});
+test('clean stop refuses COMPLETE if the captured WAV end or response count disagrees',async()=>{
+  await beginEvidenceSession('mismatch',{clientVersion:'0.2.2',selectedModelId:'small'});
+  await saveHypothesis('mismatch',{text:'Only one',startSample:0,endSample:32000});
+  assert.equal(await finishEvidenceSession('mismatch',{
+    receivedCount:1,failedCount:0,frameCount:48000,completed:true
+  }),false);
+  assert.equal((await lessonEvidenceStatus('mismatch')).status,'incomplete');
+  await beginEvidenceSession('interrupted',{clientVersion:'0.2.2',selectedModelId:'small'});
+  await saveHypothesis('interrupted',{text:'Some text',startSample:0,endSample:32000});
+  assert.equal(await finishEvidenceSession('interrupted',{
+    receivedCount:1,failedCount:0,frameCount:32000,completed:false
+  }),false);
+  assert.equal((await lessonEvidenceStatus('interrupted')).status,'incomplete');
+});
+test('old portable v1 exports stay compatible with both offline numeric replay tools',async()=>{
+  const rows=await lessonHypotheses('new-complete');
+  const oldExport={format:'ru-class-asr-windows-v1',sample_rate:16000,windows:rows};
+  const freshExport=JSON.parse(await (await lessonHypothesesJson('new-complete')).text());
+  const {execFileSync}=await import('node:child_process');
+  const {mkdtemp,writeFile,rm}=await import('node:fs/promises');
+  const {join}=await import('node:path');
+  const {tmpdir}=await import('node:os');
+  const dir=await mkdtemp(join(tmpdir(),'ru-class-portability-'));
+  try{
+    for(const [name,payload] of [['old',oldExport],['new',freshExport]] as const){
+      const file=join(dir,name+'.json');
+      await writeFile(file,JSON.stringify(payload));
+      const replay=JSON.parse(execFileSync(process.execPath,['scripts/replay-browser-transcript.mjs',file],{encoding:'utf8'}));
+      const numeric=JSON.parse(execFileSync(process.execPath,['scripts/audit-private-replacements.mjs',file],{encoding:'utf8'}));
+      assert.equal(replay.inputWindows,2);
+      assert.equal(numeric.inputWindows,2);
+      assert.equal(numeric.finalWordCount,replay.finalWordCount);
+    }
+  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
 test('a versionchange releases the old handle and the next operation reopens it',async()=>{
   const firstOpen=requestedVersions.length;
+  const beforeClose=closeCount;
   assert.equal(typeof fakeDb.onversionchange,'function');
   fakeDb.onversionchange!();
-  assert.equal(closeCount,1);
+  assert.equal(closeCount,beforeClose+1);
   assert.ok((await listLessons()).some((x:any)=>x.id==='course-a'));
   assert.equal(requestedVersions.length,firstOpen+1);
 });
@@ -185,4 +283,5 @@ test('validate hypotheses before writing and clear private evidence with browser
   assert.deepEqual(await lessonHypotheses('course-a'),[]);
   assert.deepEqual(await loadProfiles(),{});
   assert.deepEqual(await listLessons(),[]);
+  assert.equal(stores.get('evidence')!.size,0);
 });

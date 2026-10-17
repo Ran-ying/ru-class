@@ -1,5 +1,5 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
-import {loadProfiles,saveProfile,saveLesson,listLessons,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,clearBrowserData} from './local-store.js';
+import {loadProfiles,saveProfile,saveLesson,listLessons,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
 const kinds=['speech','image','text'];
@@ -7,6 +7,8 @@ let profiles={speech:null,image:null,text:null};
 const stages=Object.fromEntries(kinds.map(kind=>[kind,{revision:0,ready:false,manual:false}]));
 let running=false,stopping=false,stream,context,source,capture,asr,lessonId='',sampleCount=0,chunkIndex=0;
 let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve(),evidenceWarning='';
+let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
+const CLIENT_VERSION='0.2.2'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[];
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function buttons(){
@@ -36,10 +38,15 @@ function archiveRawHypothesis(entry){
   // Keep writes ordered; a failed write is visible, but does not destroy
   // access to the rest of the lesson or terminate the audio recording.
   const id=lessonId;
+  evidenceReceived++;
   evidenceWrites=evidenceWrites.then(()=>saveHypothesis(id,entry))
-    .catch(e=>{
+    .catch(async e=>{
+      evidenceFailed++;
       evidenceWarning='原始识别窗口在此浏览器保存失败：'+errorMessage(e);
       $('error').textContent=evidenceWarning;
+      // Keep a durable error flag if storage is still writable. Otherwise
+      // the initial recording state remains incomplete across reloads.
+      try{await markEvidenceWriteFailure(id);}catch{};
     });
   return evidenceWrites;
 }
@@ -66,6 +73,11 @@ async function onFailure(e){
     await cleanupMicrophone();
     await Promise.all([writing,evidenceWrites]);
     if(lessonId)await finishLesson('interrupted');
+    if(evidenceActive){
+      await finishEvidenceSession(lessonId,{receivedCount:evidenceReceived,
+        failedCount:evidenceFailed,frameCount:sampleCount,completed:false});
+      evidenceActive=false;
+    }
   }catch(storageError){$('error').textContent+='；本地保存失败：'+errorMessage(storageError);}
   stopping=false;buttons();
 }
@@ -82,6 +94,7 @@ async function start(){
   }
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
+  evidenceReceived=0;evidenceFailed=0;evidenceActive=false;
   stable='';draft='';hasTranscript=false;
   $('ru').textContent='';
   $('duration').textContent='00:00';$('error').textContent='';$('latency').textContent='—';
@@ -90,6 +103,8 @@ async function start(){
     context=new AudioContext();await context.resume();
     stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     await finishLesson('recording'); // Recovery metadata exists before audio chunks arrive.
+    await beginEvidenceSession(lessonId,{clientVersion:CLIENT_VERSION,selectedModelId:p.model});
+    evidenceActive=true;
     await context.audioWorklet.addModule('/capture-worklet.js');
     source=context.createMediaStreamSource(stream);
     capture=new AudioWorkletNode(context,'ru-capture');
@@ -134,11 +149,24 @@ async function stop(){
     // evidenceWrites promise only after its completion.
     await Promise.all([writing,evidenceWrites]);
     await finishLesson('completed');
+    if(evidenceActive){
+      const complete=await finishEvidenceSession(lessonId,{receivedCount:evidenceReceived,
+        failedCount:evidenceFailed,frameCount:sampleCount,completed:true});
+      evidenceActive=false;
+      if(!complete && !evidenceWarning)evidenceWarning='原始识别窗口记录不完整；导出将明确标注。';
+    }
     // A successful microphone stop must not clear a failed evidence-write
     // warning: the raw ASR history might be incomplete despite a saved WAV.
     $('error').textContent=evidenceWarning;
   }catch(e){
     asr?.cancel();$('error').textContent='停止或保存失败：'+errorMessage(e);
+    if(evidenceActive){
+      try{await Promise.all([writing,evidenceWrites]);
+        await finishEvidenceSession(lessonId,{receivedCount:evidenceReceived,
+          failedCount:evidenceFailed,frameCount:sampleCount,completed:false});
+        evidenceActive=false;
+      }catch{/* Keep the previous recording/incomplete manifest: fail closed. */}
+    }
   }finally{
     stopping=false;buttons();
     void renderLessons();
@@ -317,6 +345,15 @@ async function renderLessons(){
         }catch(e){$('local-feedback').textContent=errorMessage(e);}
       };
       row.append(evidenceButton);
+      // A status from persisted IndexedDB must survive a reload, not merely
+      // the in-memory warning that was shown during microphone capture.
+      const status=await lessonEvidenceStatus(item.id);
+      if(status.savedCount || status.status!=='legacy_unverified'){
+        const label=document.createElement('span');
+        label.textContent=status.status==='complete'?'原始窗口已完整保存':
+          status.status==='incomplete'?'原始窗口记录不完整':'旧记录：完整性未知';
+        row.append(label);
+      }
       holder.append(row);
       const caption=document.createElement('p');
       caption.className='saved-transcript';caption.textContent=item.transcript||'（无识别文本）';

@@ -173,6 +173,27 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## Browser-local source provenance and fail-closed completeness (Issue #33)
+
+New recordings persist a separate IndexedDB **schema v3**
+`evidence` manifest before capture, recording the browser
+application version and user-selected ASR model ID (not verified
+server-side model weights/`temperatureInc`). After normal stop,
+an evidence export may be labeled `complete` only when every
+accepted provider hypothesis was durably saved and sample-frame
+count matches the WAV. Quota/write failure, interruption,
+reloaded `recording` status or mismatched counts remain
+`incomplete`; previously exported v2 lessons retain original
+hypotheses but are `legacy_unverified`. The JSON remains
+`ru-class-asr-windows-v1` with an optional privacy-scoped
+`metadata` block, still consumed by prior replay scripts.
+No centralized account or provider metadata attestation.
+
+This is automated engineering behavior **pending real MacBook
+Safari schema upgrade, multi-tab and quota-error acceptance** in
+[Issue #28](https://github.com/Ran-ying/ru-class/issues/28).
+`SPEECH_ACCURACY_UNVERIFIED`; does not enable PR #25.
+
 ## P1 authentic new 44-window same-PCM model A/B/C (2026-10-17)
 
 The owner submitted a new physical M4 same-source report under

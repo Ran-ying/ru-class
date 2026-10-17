@@ -129,6 +129,26 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## P0 durable evidence manifests (Issue #33, 2026-10-17)
+
+Use **IndexedDB schema v3** in the unchanged
+`ru-class-local-v1` DB to persist a separate `evidence` manifest
+for new lesson recordings. Mark as `complete` only after a successful
+clean stop, all observed raw hypotheses saved, no write failures,
+actual sample-range continuity and the last window ending on WAV
+frame count. Start sessions as `recording` so browser reloads
+and quota failures fail closed to `incomplete`; v2 exports without
+a manifest are `legacy_unverified`. **Do not** claim exact WER
+or word preservation from the completeness flag. Avoid storing
+private text, audio, API keys or domains in the manifest.
+`selectedModelId` only reflects the user's browser choice; it
+does not attest engine model weights/`temperatureInc`.
+Export remains `ru-class-asr-windows-v1` with compatible
+`windows[]` and optional `metadata`; old offline tools must
+continue parsing both formats. Physical Safari v1/v2→v3 upgrades,
+multi-tab and storage-failure UX need owner's MacBook acceptance
+under Issue #28: CI simulations are not hardware validation.
+
 ## Browser-local raw hypothesis journal (integrated from PR #14)
 
 The v2 browser IndexedDB schema extends `ru-class-local-v1` with
