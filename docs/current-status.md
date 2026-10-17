@@ -99,6 +99,30 @@ PR #14 Safari IndexedDB migration/export acceptance is independent;
 P2 recording/playback/recovery stays deferred.
 Track P1 in [Issue #16](https://github.com/Ran-ying/ru-class/issues/16).
 
+## Browser raw-ASR evidence journal integrated for real Safari validation
+
+The PR #14 feature implementation has been forward-ported from its
+outdated branch to current main. Every **new** accepted ASR provider
+window is persisted in browser-local IndexedDB v2 (same database name;
+additive `hypotheses` store) before the existing
+`TranscriptBuffer` projection changes the displayed text. Users
+can download private source-window JSON under
+**Settings → Local Data → Download raw ASR windows**; old sessions
+from v1 do not acquire windows retroactively. Raw text, source sample
+start/end/final flags and elapsed inference time remain on the user's
+device, never on the RU-Class server. Storage failure should produce
+a visible warning; an incomplete journal is not a verified full
+recording.
+
+This implementation was merged to allow owner-controlled MacBook
+Safari testing, **not** because physical Safari IndexedDB migration,
+two-tab upgrades, microphone source provenance, storage quota/error
+and JSON export admission had already passed. See [evidence-journal
+documentation](asr-evidence-v0.1.md) and [Issue #28](https://github.com/Ran-ying/ru-class/issues/28)
+for the pending acceptance. The production transcript reducer algorithm
+is unchanged; Draft PR #25's automatic source-window quarantine remains
+OFF and unmerged. Prior lost C2 realtime positions are not restored.
+
 ## M4 reconstructed C1 and partial C2 small-model/PR #25 replay (2026-10-17)
 
 [Detailed operator-reported numerical results](p1-m4-c1-reconstruction-c2-focus-2026-10-17.md)
