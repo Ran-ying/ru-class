@@ -163,37 +163,106 @@ main{grid-template-rows:minmax(0,1fr)}
  .live .ru #ru{font-size:18px;margin:4px 0 10px}
 }
 
-/* v0.2 classroom identity: explicit selection gates all live transcription. */
-.workspace-top{width:100%;max-width:640px}
-.workspace-top>label{font-size:12px;margin-bottom:8px}
-.classroom-selector-row{display:flex;align-items:center;gap:12px;min-width:0}
-#classroom-select{appearance:none;flex:1;min-width:0;padding:10px 34px 10px 12px;
-  font:inherit;font-size:14px;color:#183330;background:#fffef9;border:1px solid #d8dfd7;
-  border-radius:9px;cursor:pointer}
-#classroom-select:disabled{opacity:.65;cursor:not-allowed}
-#classroom-add{flex:none;margin-left:auto;width:42px;height:42px;border-radius:9px;
-  padding:0;font-size:26px;font-weight:400;line-height:1;background:#245946}
-#classroom-add:disabled{opacity:.5}
-#classroom-feedback{font-size:12px;color:#8a5547;min-height:18px;margin:6px 0}
-#classroom-dialog{width:min(420px,calc(100% - 28px));padding:25px;
-  background:#fffef9;border-radius:14px;border:1px solid #d9e0d6}
-#classroom-dialog h2{font-size:18px;font-weight:500;margin:0 0 18px}
-#classroom-dialog label{font-size:12px}
-#classroom-dialog input{margin:5px 0 4px}
-#classroom-create-feedback{color:#ac3b28;min-height:18px;font-size:12px}
-.classroom-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
-.classroom-dialog-actions .secondary{color:#245946;background:#e9eee5}
-.transcription{position:relative}
-.transcription.is-locked .history,.transcription.is-locked .live .ru,.transcription.is-locked .live .zh{opacity:.35;pointer-events:none}
+/* v0.2: full-width transparent classroom heading, separate from a large library dialog. */
+.workspace-top{
+  width:100%;max-width:none;padding:24px 48px;
+  background:transparent;border:0;box-shadow:none
+}
+.classroom-heading{width:100%;display:flex;align-items:center;gap:18px;min-width:0}
+.classroom-heading-text{flex:1;min-width:0}
+#classroom-date{display:block;font-size:12px;line-height:1.5;color:#738579}
+#classroom-title{margin:2px 0 0;font-size:clamp(25px,2.7vw,39px);
+  line-height:1.18;font-weight:550;letter-spacing:-.6px;overflow-wrap:anywhere}
+#classroom-add{flex:none;margin-left:auto;width:44px;height:44px;border-radius:9px;
+  padding:0;background:transparent;color:#245946;font-size:32px;line-height:1}
+#classroom-add:hover{background:#e7eee6}
+#classroom-feedback{font-size:12px;color:#a44737;margin:5px 0 0}
+#classroom-feedback:empty{display:none}
+.transcription{position:relative;border:0;background:transparent}
+.transcription .live{border-top:0;background:transparent}
+.transcription .history-title{border-bottom:0}
+.transcription .bottom-toolbar{border-top:0;background:transparent}
+.transcription.is-locked .history,
+.transcription.is-locked .live .ru,
+.transcription.is-locked .live .zh{opacity:.35;pointer-events:none}
 .transcription.is-locked .bottom-toolbar #record{pointer-events:none}
 .transcription-lock{display:none}
-.transcription.is-locked .transcription-lock{display:block;position:absolute;z-index:2;
-  top:25%;left:16px;right:16px;text-align:center;padding:18px;color:#60746a;
-  font-size:14px;line-height:1.5;pointer-events:none}
+.transcription.is-locked .transcription-lock{
+  display:block;position:absolute;z-index:2;top:25%;left:16px;right:16px;
+  text-align:center;padding:18px;color:#60746a;font-size:14px;
+  line-height:1.5;pointer-events:none
+}
 #session-history{display:flex;flex-direction:column;gap:10px;padding:16px 24px}
-.session-history-item{padding:12px 14px;border:1px solid #e1e7dd;background:#fffef9;
-  border-radius:9px;overflow-wrap:anywhere}
+.session-history-item{padding:12px 14px;border-radius:9px;
+  background:#ffffff82;overflow-wrap:anywhere}
 .session-history-item time{font-size:11px;color:#60746a}
-.session-history-item p{margin:8px 0 0;font-size:14px;color:#324e42;white-space:pre-wrap;line-height:1.6}
-@media(max-width:600px){.notes{padding:35px 18px}.classroom-selector-row{gap:8px}
-#classroom-select{font-size:12px}#session-history{padding:10px}}
+.session-history-item p{margin:8px 0 0;font-size:14px;color:#324e42;
+  white-space:pre-wrap;line-height:1.6}
+
+/* Course manager: all courses on the left, scoped local recording data on the right. */
+#classroom-dialog{
+  width:min(1120px,calc(100vw - 36px));height:min(780px,calc(100dvh - 44px));
+  max-width:none;max-height:none;overflow:hidden;padding:0;
+  border:1px solid #d9e0d6;border-radius:14px;background:#fffef9
+}
+#classroom-dialog[open]{display:flex;flex-direction:column}
+.classroom-panel-heading{flex:none;display:flex;justify-content:space-between;
+  align-items:center;padding:20px 24px;border-bottom:1px solid #e2e8df}
+.classroom-panel-heading h2{font-size:20px;margin:0;font-weight:600}
+.classroom-panel-body{flex:1;display:grid;grid-template-columns:minmax(230px,36%) minmax(0,1fr);
+  min-height:0;overflow:hidden}
+.classroom-panel-list-pane{overflow-y:auto;min-width:0;padding:20px 18px;
+  border-right:1px solid #e4e9e1}
+.classroom-panel-section-heading{display:flex;gap:10px;align-items:center;
+  justify-content:space-between;margin-bottom:16px}
+.classroom-panel-section-heading h3,.classroom-panel-records h3{
+  font-size:15px;font-weight:600;margin:0;line-height:1.45}
+#classroom-new{padding:8px 12px;font-size:12px}
+#classroom-create-form{background:#f2f6f0;padding:16px;border-radius:10px;margin:0 0 16px}
+#classroom-create-form label{font-size:12px}
+#classroom-create-form input{margin-top:6px}
+#classroom-create-feedback{font-size:12px;color:#a53c2f;min-height:0}
+.classroom-dialog-actions{display:flex;gap:8px;justify-content:flex-end}
+.classroom-dialog-actions .secondary{background:#e2eae0;color:#245946}
+.classroom-panel-list{display:flex;flex-direction:column;gap:6px}
+.classroom-list-item{display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  width:100%;text-align:left;border-radius:9px;background:transparent;color:#263e33;
+  padding:13px 14px}
+.classroom-list-item:hover{background:#eef4eb}
+.classroom-list-item.is-selected{background:#e3eee4}
+.classroom-list-item time{font-size:11px;color:#718579}
+.classroom-list-item strong{font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.classroom-list-item small{font-size:11px;color:#718579}
+.classroom-list-empty,.classroom-records-empty{font-size:13px;color:#809085;line-height:1.5}
+.classroom-panel-records{min-width:0;overflow-y:auto;padding:22px 24px}
+.classroom-panel-description{font-size:12px;color:#849187;margin:8px 0 16px;line-height:1.5}
+#local-lessons{gap:12px}
+.classroom-recording{padding:12px;border-radius:9px;background:#f4f6f1}
+.classroom-recording .saved-lesson{padding:0;margin:0 0 10px;background:transparent}
+.classroom-recording .saved-transcript{margin:0;white-space:pre-wrap}
+.saved-evidence-status{font-size:11px;color:#60746a}
+#local-feedback{font-size:12px;color:#a24734;line-height:1.5}
+.classroom-panel-footer{flex:none;display:flex;align-items:center;justify-content:space-between;
+  gap:20px;padding:12px 24px;border-top:1px solid #e4e9e1}
+.classroom-panel-footer p{font-size:11px;color:#869488;margin:0;line-height:1.4}
+#clear-local.classroom-danger-link{width:auto;margin:0;padding:8px;
+  background:transparent;border:0;border-radius:0;color:#a54b3d;
+  text-decoration:underline;white-space:nowrap;font-size:12px}
+@media(max-width:760px){
+ .workspace-top{padding:16px 20px}
+ #classroom-title{font-size:24px}
+ #classroom-dialog{width:calc(100vw - 16px);height:calc(100dvh - 20px)}
+ .classroom-panel-body{grid-template-columns: minmax(130px,37%) minmax(0,1fr)}
+ .classroom-panel-list-pane{padding:14px 9px}
+ .classroom-panel-records{padding:14px 10px}
+ .classroom-panel-heading{padding:14px 16px}
+ .classroom-panel-footer{padding:12px 14px;flex-wrap:wrap;gap:9px}
+ .classroom-list-item{padding:10px 8px}
+ .classroom-recording{padding:9px}
+ .classroom-panel-section-heading{flex-wrap:wrap}
+}
+@media(max-width:440px){
+ .classroom-panel-body{grid-template-columns: minmax(116px,39%) minmax(0,1fr)}
+ .saved-lesson button{white-space:normal}
+ .classroom-panel-records h3{overflow-wrap:anywhere}
+}

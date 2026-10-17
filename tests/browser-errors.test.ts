@@ -26,7 +26,9 @@ test('public RU-Class serves static pages, never user-provider proxy or site log
       assert.equal(response.status,404,path);
     }
     const homepage=await fetch(root+'/').then(r=>r.text());
-    assert.match(homepage,/本地数据/);
+    assert.match(homepage,/课程管理/);
+    assert.match(homepage,/id="local-lessons"/);
+    assert.doesNotMatch(homepage,/id="panel-access"|id="tab-access"/);
     assert.doesNotMatch(homepage,/站点访问令牌|保存访问令牌|id="site-auth"/);
     const csp=(await fetch(root+'/')).headers.get('content-security-policy')||'';
     assert.match(csp,/connect-src 'self' https:/);

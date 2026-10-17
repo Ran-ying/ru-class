@@ -173,6 +173,30 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.2 classroom selection and two-pane course manager
+
+The user found a real UI regression after selecting a classroom:
+right-side live transcript still displayed the lock prompt.
+`renderClassroomLock()` had referenced nonexistent
+`#transcription`. The section now supplies this ID, and classroom
+selection synchronously clears the lock state, then loads saved
+session transcripts. When no classroom is selected the record
+button stays disabled; API Settings remains reachable.
+
+The upper-left course identity is now a transparent, full-width,
+borderless heading: **small `YYYY-MM-DD` above a large course
+title**, and plus right-aligned. The right transcription column
+uses transparent/no-border styling. Plus opens a wide course manager,
+with every course on the left and **selected course's recording
+sessions** and existing private WAV playback/download and original
+ASR-window export on the right. The former Settings → Local Data
+tab has been removed; the data-management actions are in the
+new course panel. Each course retains its UUID/date+name and
+separate UUID-backed recording sessions; audio/ASR data is never
+rewritten or shared across courses. Regression tests cover the
+exact live-pane ID and panel layout. Physical MacBook Safari
+interaction remains unverified.
+
 ## v0.2 dated classroom catalog and session separation
 
 The owner explicitly redefined the classroom: **course name + local

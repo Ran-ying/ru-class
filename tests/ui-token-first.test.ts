@@ -5,11 +5,14 @@ const elements=new Map<string,any>();
 function el(id:string){
   if(!elements.has(id))elements.set(id,{
     id,value:'',textContent:'',hidden:false,disabled:false,
+    className:id==='transcription'?'transcription is-locked':'',
     replaceChildren(...children:any[]){this.options=children;this.value=children[0]?.value||'';},
     setAttribute(name:string,value:string){this[name]=value;},
     showModal(){this.open=true;},
     close(){this.open=false;},
+    classList:{toggle(name:string,enabled:boolean){const node=el(id);node.className=(node.className.split(' ').filter((x:string)=>x!==name).concat(enabled?[name]:[])).join(' ');}},
     addEventListener(){},
+    focus(){},
     pause(){},
     load(){},
     removeAttribute(){},
@@ -45,14 +48,18 @@ async function clickList(kind:string){
     if(el(kind+'-discovery').hidden||el(kind+'-model-count').textContent.includes('401/403'))break;
   }
 }
-test('live ASR stays locked until a dated classroom is explicitly selected',async()=>{
+test('recording stays disabled without a selected classroom and manager opens with a course-creation form',async()=>{
   assert.equal(el('record').disabled,true);
   assert.equal(el('transcription').className,'transcription is-locked');
-  assert.equal(el('classroom-select').value,'');
   el('classroom-add').onclick();
   assert.equal(el('classroom-dialog').open,true);
+  assert.equal(el('classroom-create-form').hidden,true);
+  el('classroom-new').onclick();
+  assert.equal(el('classroom-create-form').hidden,false);
   assert.match(el('new-classroom-date').value,/^\d{4}-\d{2}-\d{2}$/);
   el('classroom-cancel').onclick();
+  assert.equal(el('classroom-create-form').hidden,true);
+  el('classroom-close').onclick();
   assert.equal(el('classroom-dialog').open,false);
 });
 
