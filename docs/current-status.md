@@ -99,6 +99,53 @@ PR #14 Safari IndexedDB migration/export acceptance is independent;
 P2 recording/playback/recovery stays deferred.
 Track P1 in [Issue #16](https://github.com/Ran-ying/ru-class/issues/16).
 
+## M4 reconstructed C1 and partial C2 small-model/PR #25 replay (2026-10-17)
+
+[Detailed operator-reported numerical results](p1-m4-c1-reconstruction-c2-focus-2026-10-17.md)
+and [Issue #26](https://github.com/Ran-ying/ru-class/issues/26).
+
+The operator re-inferred **121 policy-reconstructed C1 windows** at small
+`temperatureInc=0` versus `0.2`; all real local requests passed.
+C1 old/new baseline final hypothesis projection counts were
+**829 / 971 words**. C1 #30 changed from 3→22 tokens, with **24
+actual model fallback events**, 111/121 changed visible windows and
+20/121 changed stable-delta windows. These are substantially different
+machine captions, **not 142 confirmed newly spoken words**. Draft
+PR #25 quarantined no C1 window under either input policy.
+
+For an independently checked C2 #76/#77 consecutive focus pair,
+old small/0 C2 #76 was 164/7/53 tokens/unique/repeated trigram and
+the PR #25 guard quarantined this anomaly while preserving #77;
+new small/0.2 C2 #76 was 13/12/1 after actual fallback and the
+guard made no additional change. The guard also **did not** catch
+the 24.5s 45-token repetition candidate. A deliberately genuine
+repetition synthetic case showed a dangerous **240→0** candidate
+false positive. Thus PR #25 remains **Draft, off by default,
+unmerged**.
+
+**Hard evidence block:** original C1/C2 converted caches (historical
+SHA pinned in Draft PR #25) were missing on this Mac. The C1
+121-window timeline was reconstructed from current browser scheduling
+policy, **not** the original byte-identical historical C1 cache.
+The original C2 **106-window per-request sample coordinates, order,
+and final flags were unavailable**; only seven separately labeled C2
+focus requests per policy were conducted. Accordingly
+`ORIGINAL_WINDOW_PROVENANCE_BLOCKED`,
+`NEW_227_WINDOW_REAL_INFERENCE_NOT_RUN`,
+`CAPTION_REDUCER_REGRESSION_NOT_RUN` and
+`SPEECH_ACCURACY_UNVERIFIED` remain mandatory statuses.
+Partial 128-window stop/same-range contracts cannot substitute for
+the missing historical 227 prefixes / 45 original fixture replays.
+
+**Next prerequisite:** physically validate browser-local raw
+hypothesis journaling from PR #14 in Safari (IndexedDB v1→v2,
+two-tab upgrades, accurate per-request source coordinates, export
+without keys, and error visibility). A future **new** authentic
+captured realtime window sequence can then be replayed deterministically;
+it cannot retroactively re-create the original C2 timing. Keep
+PR #14 unmerged until that acceptance, and do not revive PR #13.
+P2 long-session recording/playback/recovery remains deferred.
+
 ## Offline P1 audio-evidence audit helper
 
 A new **offline-only** `scripts/audit-private-audio.mjs` tool accepts

@@ -107,6 +107,28 @@ establish real accuracy. Keep PR #22/#23 as drafts until their own
 release decision, not until a Russian reviewer is recruited. Do not
 re-enable or request the disabled temporary cloud key.
 
+## P1 2026-10-17 M4 reconstructed C1 and C2 provenance boundary
+
+See `docs/p1-m4-c1-reconstruction-c2-focus-2026-10-17.md` for the
+operator's private-Mac small/0 vs small/0.2 and PR #25 2x2 subset
+replay. 121 C1 windows were *policy-reconstructed* from available
+audio, not the historical exact-SHA cache; C2's original 106
+realtime positions/final flags and original 45 altered-decoding
+fixtures were unavailable. C1 829→971 final word count and 111/121
+visible-window changes are **not evidence of restored spoken words**.
+PR #25 had zero additional effect on the tested new C1 and C2 #76
+hypotheses and a synthetic genuine-repeat false positive. Keep
+PR #25 Draft/default OFF/unmerged, even if it handled old C2 #76.
+
+Required next foundation: real macOS Safari P0 evidence persistence
+from PR #14 (IndexedDB v1→v2/two-tab migration, private local raw
+hypothesis export, exact start/end/final flags, failures visible,
+key absence). Do not claim a reconstructed C2 or 227/45 full
+regression without source provenance. A newly recorded realtime
+dataset can support a **new** engineering replay, not a historical
+C2 byte-identical replacement. Do not demand Russian listening;
+`SPEECH_ACCURACY_UNVERIFIED` remains.
+
 ## Development safety and acceptance
 
 - Preserve all original recognition evidence before any destructive
