@@ -129,6 +129,36 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.4 browser-owned bilingual history (2026-10-17)
+
+The original PROJECT_SPEC v0.4 explicitly includes **real DeepSeek-
+compatible LLM calls for Russian segmentation, careful correction and
+formal Simplified Chinese translation**, appending RU/ZH sentence
+history. v0.5 is ONLY the lower live-buffer translation and remains
+out of scope. The public RU-Class site remains anonymous static and
+does not proxy text or hold provider keys; only the user's browser
+calls their configured HTTPS/CORS-compatible text API. Provider can
+receive private classroom Russian speech and charge token fees;
+document clearly.
+
+A single `SentenceWorker` uses serial `setTimeout` and only
+`StableUnitJournal.ready()` items (confirmed +8s, or final flush).
+Responses must include an **exact original `source_prefix` covering
+the first `consumed_units` whole units**, alongside nonempty RU/ZH
+sentences; reject malformed/overlong/forged consumption. A 0-unit
+empty reply is valid and must not cause tight polling. Corrections
+can change sentence punctuation/spelling but never raw ASR evidence.
+Persist accepted sentences in **separate IndexedDB v5 `sentences`**
+store keyed by recording UUID/index, atomically per response; ACK only
+AFTER durable commit and never mix concurrent recordings. Browser-
+generated original RU text remains authoritative and recoverable;
+model/provider failure cannot block ASR or hide untranslated text.
+The current background worker is per recording, NOT a durable
+guaranteed retry queue. On next recording its old worker closes;
+unfinished source stays original, not silently discarded.
+See `docs/v04-deepseek-bilingual-history.md`. Physical Safari and
+real provider validation remain pending.
+
 ## v0.3.1 local-only source audit and safe 8s watermark
 
 New v0.3 Safari recording exports retain
