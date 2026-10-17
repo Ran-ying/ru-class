@@ -199,7 +199,7 @@ async function start(){
     $('error').textContent='录音需要安全上下文（HTTPS 或 localhost）以及 AudioWorklet。';
     return;
   }
-  starting=true;buttons();
+  starting=true;classroomRevision++;buttons();
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
   evidenceReceived=0;evidenceFailed=0;evidenceActive=false;
