@@ -115,6 +115,19 @@ a known failing correctness scenario. Detailed Mac-local instructions:
 listening results are still needed for C1 #30, C2 #77 and C1 #120.
 No new Whisper inference and no P2 long-recording/playback changes.
 
+## Independent ASR cross-validation: not yet run on Mac
+
+The separate offline `scripts/cross-validate-private-asr.py` uses the
+**Qwen3-ASR** model family (not Whisper), with locally downloaded Apple MLX
+weights, to produce an optional second hypothesis for three private
+C1/C2 clips. Dry-run validates WAV/sample provenance; the full mode saves
+actual model outputs only inside a new owner-only private directory, prints
+numerical-only comparisons and runs no production code. GitHub CI uses
+**fake model responses**, not real ASR. See
+[Mac-local workflow](p1-independent-asr-crosscheck.md).
+Neither Qwen/Whisper agreement nor difference proves spoken-word truth.
+Do not mark C1 #30, C2 #77, C1 #120 human-verified based on this runner.
+
 ## Private classroom regression gate (P1)
 
 Use the *same private originals* for baseline and proposed algorithm. Raw
