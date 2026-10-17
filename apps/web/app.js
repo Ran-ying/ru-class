@@ -62,7 +62,7 @@ function renderClassroomList(){
     holder.append(empty);
   }
 }
-async function renderSelectedClassroom(){
+async function renderSelectedClassroom({historyOnly=false}={}){
   const revision=++classroomRevision;
   const holder=$('session-history');
   holder.replaceChildren();
@@ -83,13 +83,14 @@ async function renderSelectedClassroom(){
   const key=activeClassroom.key;
   try{
     const sessions=await listClassroomRecordings(key);
-    if(revision!==classroomRevision||key!==activeClassroom?.key||starting||running)return;
+    if(revision!==classroomRevision||key!==activeClassroom?.key||(!historyOnly&&(starting||running)))return;
     $('history-empty').hidden=sessions.length>0;
     const translations=await Promise.all(sessions.map(s=>loadBilingualSentences(s.id)));
     if(revision!==classroomRevision||key!==activeClassroom?.key||starting||running)return;
     for(const [index,session] of sessions.entries()){
       const article=document.createElement('article');
       article.className='session-history-item';
+      article.dataset.recordingId=session.id;
       const label=document.createElement('time');
       label.textContent='录音 '+(index+1)+' · '+
         new Date(session.startedAt).toLocaleTimeString()+
@@ -136,6 +137,7 @@ async function renderSelectedClassroom(){
       columns.append(ru,zh);
       article.append(label,columns);holder.append(article);
     }
+    if(historyOnly)return; // LLM history updates must NEVER reset live RU.
     const last=sessions.at(-1);
     stable=last?.transcript||'';draft='';
     renderCaption();
@@ -262,26 +264,10 @@ function renderCaption(){
 
 function showBilingualSentenceRows(rows,recordingId){
   if(recordingId!==lessonId||!activeClassroom)return;
-  const holder=$('session-history');
-  let group=holder.querySelector('[data-translation-recording]');
-  if(!group||group.dataset.translationRecording!==recordingId){
-    group=document.createElement('article');
-    group.className='session-history-item';
-    group.dataset.translationRecording=recordingId;
-    const heading=document.createElement('time');
-    heading.textContent='当前录音 · 双语历史';
-    group.append(heading);
-    holder.append(group);
-  }
-  for(const sentence of rows){
-    const pair=document.createElement('div');
-    pair.className='session-bilingual';
-    const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
-    const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
-    pair.append(ru,zh);group.append(pair);
-  }
-  $('history-empty').hidden=true;
-  renderCaption();
+  // Rebuild the selected classroom's ONE history row per recording.
+  // Never append a duplicate "current recording" article after stop().
+  // Preserve bottom live stable/draft while this async local read proceeds.
+  void renderSelectedClassroom({historyOnly:true});
 }
 function startSentenceWorker(){
   sentenceWorker?.close();
