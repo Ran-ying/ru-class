@@ -173,6 +173,29 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.2 local lesson replay and 30-minute synthetic WAV check
+
+The previously existing browser-origin IndexedDB v3 retained profiles,
+lesson metadata, PCM16 audio chunks, original ASR-window journal and
+completeness manifest. v0.2 now exposes **per-lesson whole-WAV
+playback in the local data settings** using one user-controlled native
+`audio` element. Switching lessons or closing the settings dialog
+revokes the old Blob URL, and recording is mutually exclusive with
+playback. Old local lessons with valid saved PCM remain playable.
+No RU-Class server stores or receives these recordings.
+
+`recordingWav` now refuses an empty record or non-contiguous/invalid
+PCM chunk list instead of exporting a misleading partial audio file.
+Automated tests generate a simulated **30-minute 16 kHz mono PCM16
+WAV (57,600,044 bytes)** and check the format and size. This is **not**
+a 30-minute physical MacBook/Safari microphone test; browser quota,
+foreground capture, full-recording playback and reload acceptance
+remain pending. Users must separately archive important WAV and
+original ASR-window JSON files. See
+[the v0.2 playback and endurance checklist](v02-local-recording-playback.md).
+No browser subtitle-reducer, ASR engine or deferred per-sentence P2
+alignment feature was changed.
+
 ## Browser-local source provenance and fail-closed completeness (Issue #33)
 
 New recordings persist a separate IndexedDB **schema v3**
