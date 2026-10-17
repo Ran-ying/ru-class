@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// A tiny transaction-compatible fake for verifying the v1 -> v4 IndexedDB
+// A tiny transaction-compatible fake for verifying the v1 -> v5 IndexedDB
 // schema and browser-only evidence. It does not impersonate Safari acceptance.
 const stores=new Map<string,Map<string,any>>();
 const schemas=new Map<string,string|string[]>();
@@ -122,12 +122,12 @@ const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
   beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,
   saveProfile,loadProfiles,saveLesson,listLessons,
   createClassroom,renameClassroom,listClassrooms,listClassroomRecordings,classroomKey,localCalendarDate,
-  clearBrowserData}=storage;
+  saveBilingualSentences,loadBilingualSentences,clearBrowserData}=storage;
 
-test('IndexedDB v4 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
+test('IndexedDB v5 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
   const previous=await loadProfiles();
-  assert.deepEqual(requestedVersions,[4]);
-  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses','evidence','classrooms']);
+  assert.deepEqual(requestedVersions,[5]);
+  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences']);
   assert.equal(previous.speech.apiKey,oldProfile.apiKey);
   assert.equal((await listLessons())[0].title,oldLesson.title);
   assert.deepEqual([...stores.get('audio')!.values()][0].data,oldAudio.data);
@@ -135,6 +135,28 @@ test('IndexedDB v4 upgrades a populated v1 DB without deleting profiles, lessons
   assert.equal((await loadProfiles()).speech.apiKey,'private-secret');
   await saveLesson({id:'course-a',startedAt:12345,title:'Local class'});
   assert.equal((await listLessons())[0].title,'Local class');
+});
+
+test('v0.4 bilingual history saves an independent per-recording batch without changing raw ASR',async()=>{
+  await saveBilingualSentences('r1',[
+    {recordingId:'r1',classroomId:'c',index:0,ru:'Фраза первая.',zh:'第一句。',
+      sourcePrefix:'Фраза первая',consumedUnitIds:['r1:0'],lastConfirmationSample:32000},
+    {recordingId:'r1',classroomId:'c',index:1,ru:'Фраза вторая.',zh:'第二句。',
+      sourcePrefix:'Фраза первая',consumedUnitIds:['r1:0'],lastConfirmationSample:32000}
+  ]);
+  await saveBilingualSentences('r2',[
+    {recordingId:'r2',classroomId:'c',index:0,ru:'Другое занятие.',zh:'另一节。',
+      sourcePrefix:'Другое занятие',consumedUnitIds:['r2:0'],lastConfirmationSample:32000}
+  ]);
+  assert.equal((await loadBilingualSentences('r1')).length,2);
+  assert.deepEqual((await loadBilingualSentences('r1')).map((r:any)=>r.zh),['第一句。','第二句。']);
+  assert.equal((await loadBilingualSentences('r2')).length,1);
+  assert.deepEqual((await lessonHypotheses('course-a')),[],
+    'translation must never create or rewrite a Whisper evidence row');
+  await assert.rejects(saveBilingualSentences('r1',[
+    {recordingId:'r1',classroomId:'c',index:0,ru:'Повтор',zh:'重复',
+      sourcePrefix:'Повтор',consumedUnitIds:['r1:0'],lastConfirmationSample:32000}
+  ]),/ConstraintError|SENTENCE_WRITE_FAILED/);
 });
 
 test('raw ASR hypotheses survive caption rewrites and are exported as private portable JSON',async()=>{
@@ -420,4 +442,5 @@ test('validate hypotheses before writing and clear private evidence with browser
   assert.deepEqual(await listLessons(),[]);
   assert.equal(stores.get('evidence')!.size,0);
   assert.equal(stores.get('classrooms')!.size,0);
+  assert.equal(stores.get('sentences')!.size,0);
 });
