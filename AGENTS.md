@@ -29,6 +29,16 @@ Historic decisions remain in `docs/decisions.md` and old acceptance reports.
 - Image/text model *configuration* exists but inference / DeepSeek / live
   translations are not implemented. Do not claim otherwise.
 
+## P1 private offline audio probe
+
+`scripts/audit-private-audio.mjs` and
+`docs/p1-private-audio-audit.md` provide a strictly offline, privacy-safe
+review workflow for possible repeat collapse. A numerical acoustic
+separation candidate is **not** proof that two identical sentences were
+spoken. Review original audio and raw private hypotheses on the user's
+machine; do not turn this signal into a live caption decision without
+the C1/C2 45/227 regression and listening gates.
+
 ## Development safety and acceptance
 
 - Preserve all original recognition evidence before any destructive
