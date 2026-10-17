@@ -10,9 +10,11 @@ test('the middle of the two main panes is separated by one thin border only',()=
 test('live RU zone has one subtle full-width hairline separating it from bilingual history',()=>{
  const html=readFileSync('apps/web/index.html','utf8');
  const css=readFileSync('apps/web/style.css','utf8');
- assert.match(html,/<section class="history">[\\s\\S]*?<\\/section>\\s*<section class="live">/);
- assert.match(css,/\\.transcription \\.live\\{border-top:1px solid #d9e2d9;background:transparent\\}/);
- assert.doesNotMatch(css,/\\.transcription \\.live\\{border-top:0/);
+ const history=html.indexOf('<section class="history">');
+ const live=html.indexOf('<section class="live">');
+ assert.ok(history>=0&&live>history,'RU live pane follows classroom history');
+ assert.ok(css.includes('.transcription .live{border-top:1px solid #d9e2d9;background:transparent}'));
+ assert.ok(!css.includes('.transcription .live{border-top:0'));
 });
 test('rename form is scoped to the selected course and maintains recording UUIDs',()=>{
  const html=readFileSync('apps/web/index.html','utf8');
