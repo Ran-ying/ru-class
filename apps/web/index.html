@@ -67,6 +67,12 @@
     <p class="settings-help">你的模型 API 地址和 Token、课堂记录和录音都只存储在当前浏览器。RU-Class 网站服务器不保存这些数据，换设备或清除网站数据不会自动恢复。</p>
     <h3>本地课堂记录</h3>
     <div id="local-lessons" aria-live="polite"></div>
+    <section id="local-playback" class="local-playback" aria-label="本地课堂录音播放器" hidden>
+      <h4 id="local-playback-title"></h4>
+      <audio id="local-player" controls preload="metadata" aria-label="完整课堂录音"></audio>
+      <p>仅播放当前浏览器保存的完整 WAV；可以暂停、拖动进度，不会上传到网站服务器。</p>
+    </section>
+    <p class="settings-help">录音保存在此浏览器，刷新后仍可查看。30 分钟原始音频约 55 MiB；空间不足或浏览器清理数据可能造成丢失，重要课程请另存 WAV 与原始识别窗口。</p>
     <button type="button" class="secondary" id="clear-local">清空此浏览器的全部数据</button>
     <p id="local-feedback" role="status"></p>
   </section>
