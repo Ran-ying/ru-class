@@ -79,6 +79,53 @@ Independent Start/Stop segments each have distinct PCM zero-time
 origins and recording UUIDs. The classroom history sorts them by
 recording metadata; it never concatenates offsets across pauses.
 
+## v0.3.1 private source-window replay and export verification
+
+Starting with newly recorded v0.3 sessions, the existing
+`ru-class-asr-windows-v1` private JSON download may include the
+**optional** `recording` identity (`recording_id`, `classroom_id`,
+`started_at_ms`) and `source_units[]` containing the original
+confirmed Russian `stable_delta` text plus its existing, estimated
+**confirmation-window** provenance. This is a backward-compatible
+extension: `windows[]` stays untouched, legacy recordings that
+never saved units omit these fields, and old replay scripts continue
+to operate. Exports contain **private classroom speech**; do not
+commit them to Git, upload them to CI, or share them publicly.
+
+A new entirely local tool:
+
+```sh
+node scripts/audit-stable-source.mjs '/private/path/asr-windows.json'
+```
+
+replays the actual browser `TranscriptBuffer` against the exported
+ordered Whisper raw windows, including the special stop case where
+the final `flush` had no additional provider window. It compares
+the resulting stable deltas with `source_units[]` and checks
+recording/classroom UUID, unit ordinal, exact confirming ASR sample
+coordinates, explicit unknown spoken-word start/end, consistent
+estimated capture-time epoch and ordinary source sample ordering.
+It prints only numerical counters and `source_units_replay_match`
+or `source_unit_mismatch`/unverified status, **never raw Russian
+text, API keys, private paths or sound**. A matching completed-session
+audit is deterministic engineering equivalence, not a verified WER
+or true individual word alignment.
+
+The `StableUnitJournal.ready()` interface now uses only internally
+recorded ASR window progress and actual final state. Callers cannot
+supply fake future audio sample values or a forged final flag to
+prematurely bypass the proposed 8-second v0.4 preparation gate.
+No scheduled DeepSeek requests, translations, text correction,
+model changes or lossy caption edits are introduced.
+
+The old private sessions lack `source_units[]` by construction:
+the audit reports `legacy_no_source_units`, **not** a fabricated
+historical PASS. Sessions with source evidence but incomplete
+raw-window journal report `source_units_match_incomplete_session`
+rather than complete-session success. CI tests use only synthetic
+Russian placeholders; real Safari recording/export/reload remains
+a separate physical-owner test.
+
 ## Acceptance
 
 - No modification to the already regression-tested text matching
