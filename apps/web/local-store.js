@@ -4,7 +4,7 @@ const DB_NAME='ru-class-local-v1';
 function openDatabase(){
   if(!globalThis.indexedDB)throw new Error('当前浏览器不支持 IndexedDB，不能保存私人数据。');
   return new Promise((resolve,reject)=>{
-    const request=indexedDB.open(DB_NAME,3);
+    const request=indexedDB.open(DB_NAME,4);
     request.onupgradeneeded=()=>{
       const db=request.result;
       if(!db.objectStoreNames.contains('profiles'))db.createObjectStore('profiles',{keyPath:'kind'});
@@ -15,6 +15,8 @@ function openDatabase(){
       if(!db.objectStoreNames.contains('hypotheses'))db.createObjectStore('hypotheses',{keyPath:['lessonId','endSample']});
       // v3: separate fail-closed session manifest; never overwrite with lesson updates.
       if(!db.objectStoreNames.contains('evidence'))db.createObjectStore('evidence',{keyPath:'lessonId'});
+      // v4: a logical classroom (name + local calendar date) owns recordings.
+      if(!db.objectStoreNames.contains('classrooms'))db.createObjectStore('classrooms',{keyPath:'key'});
     };
     // Another tab may request an upgrade while this tab holds an open handle.
     // Release the old handle rather than blocking the schema migration.
@@ -67,6 +69,82 @@ export async function saveProfile(kind,account){
   if(!['speech','image','text'].includes(kind))throw new Error('INVALID_KIND');
   await withStore('profiles','readwrite',s=>s.put({...account,kind}));
 }
+
+/**
+ * A classroom is a calendar-date/name identity. A recording is one immutable
+ * session (its own UUID and PCM/ASR coordinates). Never reuse session ids when
+ * the user presses Start again in the same classroom.
+ */
+export function classroomKey(title,date){
+  if(typeof title!=='string'||typeof date!=='string')throw Error('INVALID_CLASSROOM');
+  const name=title.normalize('NFKC').replace(/\s+/gu,' ').trim();
+  if(!name||name.length>120||!/^(\d{4})-(\d{2})-(\d{2})$/u.test(date))
+    throw Error('INVALID_CLASSROOM');
+  const [year,month,day]=date.split('-').map(Number);
+  const parsed=new Date(Date.UTC(year,month-1,day));
+  if(parsed.getUTCFullYear()!==year||parsed.getUTCMonth()+1!==month||parsed.getUTCDate()!==day)
+    throw Error('INVALID_CLASSROOM_DATE');
+  return date+'\u001f'+name.toLocaleLowerCase();
+}
+function normalizedName(title){
+  return title.normalize('NFKC').replace(/\s+/gu,' ').trim();
+}
+export function localCalendarDate(timestamp){
+  const date=new Date(timestamp);
+  if(!Number.isFinite(date.getTime()))throw Error('INVALID_CLASSROOM_DATE');
+  const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0');
+  return year+'-'+month+'-'+String(date.getDate()).padStart(2,'0');
+}
+export function recordingClassroomKey(recording){
+  if(typeof recording?.classroomKey==='string')return recording.classroomKey;
+  // V1–v3 recordings: preserve the original session, infer a grouping without
+  // changing its bytes, id, source date, PCM chunks or raw hypotheses.
+  return classroomKey(recording?.title||'未命名课堂',
+    recording?.lessonDate||localCalendarDate(recording.startedAt));
+}
+export async function listClassrooms(){
+  const [catalog,sessions]=await Promise.all([
+    withStore('classrooms','readonly',s=>s.getAll()),listLessons()
+  ]);
+  const groups=new Map();
+  for(const item of catalog)groups.set(item.key,{...item,sessionCount:0});
+  for(const session of sessions){
+    let key;
+    try{key=recordingClassroomKey(session);}catch{continue;}
+    if(!groups.has(key)){
+      const date=key.slice(0,10);
+      groups.set(key,{
+        id:'legacy:'+encodeURIComponent(key),key,date,
+        title:normalizedName(session.title||'未命名课堂'),
+        createdAt:session.startedAt,sessionCount:0,legacy:true
+      });
+    }
+    groups.get(key).sessionCount++;
+  }
+  return [...groups.values()].sort((a,b)=>
+    b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'zh-CN'));
+}
+export async function createClassroom({title,date}){
+  const key=classroomKey(title,date);
+  const existing=await listClassrooms();
+  if(existing.some(x=>x.key===key))throw Error('CLASSROOM_ALREADY_EXISTS');
+  const item={
+    id:crypto.randomUUID(),key,title:normalizedName(title),date,
+    createdAt:Date.now()
+  };
+  // Atomic add prevents two tabs creating identical name/date records.
+  await withStore('classrooms','readwrite',s=>s.add(item));
+  return item;
+}
+export async function listClassroomRecordings(classroomKeyValue){
+  if(typeof classroomKeyValue!=='string'||!classroomKeyValue)
+    throw Error('INVALID_CLASSROOM_KEY');
+  return (await listLessons()).filter(session=>{
+    try{return recordingClassroomKey(session)===classroomKeyValue;}
+    catch{return false;}
+  }).sort((a,b)=>a.startedAt-b.startedAt);
+}
+
 export async function saveLesson(lesson){
   await withStore('lessons','readwrite',s=>s.put(lesson));
 }
@@ -258,7 +336,7 @@ export async function recordingWav(lessonId){
 }
 export async function clearBrowserData(){
   const db=await connection();
-  for(const table of ['profiles','lessons','audio','hypotheses','evidence']){
+  for(const table of ['profiles','lessons','audio','hypotheses','evidence','classrooms']){
     await new Promise((resolve,reject)=>{
       const tx=db.transaction(table,'readwrite');
       tx.objectStore(table).clear();

@@ -162,3 +162,38 @@ main{grid-template-rows:minmax(0,1fr)}
  .live{flex-basis:36dvh}
  .live .ru #ru{font-size:18px;margin:4px 0 10px}
 }
+
+/* v0.2 classroom identity: explicit selection gates all live transcription. */
+.workspace-top{width:100%;max-width:640px}
+.workspace-top>label{font-size:12px;margin-bottom:8px}
+.classroom-selector-row{display:flex;align-items:center;gap:12px;min-width:0}
+#classroom-select{appearance:none;flex:1;min-width:0;padding:10px 34px 10px 12px;
+  font:inherit;font-size:14px;color:#183330;background:#fffef9;border:1px solid #d8dfd7;
+  border-radius:9px;cursor:pointer}
+#classroom-select:disabled{opacity:.65;cursor:not-allowed}
+#classroom-add{flex:none;margin-left:auto;width:42px;height:42px;border-radius:9px;
+  padding:0;font-size:26px;font-weight:400;line-height:1;background:#245946}
+#classroom-add:disabled{opacity:.5}
+#classroom-feedback{font-size:12px;color:#8a5547;min-height:18px;margin:6px 0}
+#classroom-dialog{width:min(420px,calc(100% - 28px));padding:25px;
+  background:#fffef9;border-radius:14px;border:1px solid #d9e0d6}
+#classroom-dialog h2{font-size:18px;font-weight:500;margin:0 0 18px}
+#classroom-dialog label{font-size:12px}
+#classroom-dialog input{margin:5px 0 4px}
+#classroom-create-feedback{color:#ac3b28;min-height:18px;font-size:12px}
+.classroom-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.classroom-dialog-actions .secondary{color:#245946;background:#e9eee5}
+.transcription{position:relative}
+.transcription.is-locked .history,.transcription.is-locked .live .ru,.transcription.is-locked .live .zh{opacity:.35;pointer-events:none}
+.transcription.is-locked .bottom-toolbar #record{pointer-events:none}
+.transcription-lock{display:none}
+.transcription.is-locked .transcription-lock{display:block;position:absolute;z-index:2;
+  top:25%;left:16px;right:16px;text-align:center;padding:18px;color:#60746a;
+  font-size:14px;line-height:1.5;pointer-events:none}
+#session-history{display:flex;flex-direction:column;gap:10px;padding:16px 24px}
+.session-history-item{padding:12px 14px;border:1px solid #e1e7dd;background:#fffef9;
+  border-radius:9px;overflow-wrap:anywhere}
+.session-history-item time{font-size:11px;color:#60746a}
+.session-history-item p{margin:8px 0 0;font-size:14px;color:#324e42;white-space:pre-wrap;line-height:1.6}
+@media(max-width:600px){.notes{padding:35px 18px}.classroom-selector-row{gap:8px}
+#classroom-select{font-size:12px}#session-history{padding:10px}}

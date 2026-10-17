@@ -45,6 +45,17 @@ async function clickList(kind:string){
     if(el(kind+'-discovery').hidden||el(kind+'-model-count').textContent.includes('401/403'))break;
   }
 }
+test('live ASR stays locked until a dated classroom is explicitly selected',async()=>{
+  assert.equal(el('record').disabled,true);
+  assert.equal(el('transcription').className,'transcription is-locked');
+  assert.equal(el('classroom-select').value,'');
+  el('classroom-add').onclick();
+  assert.equal(el('classroom-dialog').open,true);
+  assert.match(el('new-classroom-date').value,/^\d{4}-\d{2}-\d{2}$/);
+  el('classroom-cancel').onclick();
+  assert.equal(el('classroom-dialog').open,false);
+});
+
 test('all provider cards reveal Token immediately and pass it to model discovery',async()=>{
   el('settings-open').onclick();
   for(const kind of ['speech','image','text']){
