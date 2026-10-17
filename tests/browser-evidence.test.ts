@@ -98,7 +98,9 @@ const fakeDb={
 const storage = await import('../apps/web/local-store.js');
 const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
   beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,
-  saveProfile,loadProfiles,saveLesson,listLessons,clearBrowserData}=storage;
+  saveProfile,loadProfiles,saveLesson,listLessons,
+  createClassroom,listClassrooms,listClassroomRecordings,classroomKey,localCalendarDate,
+  clearBrowserData}=storage;
 
 test('IndexedDB v4 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
   const previous=await loadProfiles();
@@ -272,6 +274,50 @@ test('a blocked upgrade rejects clearly and closes any subsequent late success',
   assert.equal(closeCount,before+1,'Late successful open must close an unowned handle');
   assert.ok((await listLessons()).some((x:any)=>x.id==='course-a'),
     'A later, unblocked attempt should recover without losing v1 data');
+});
+
+
+test('dated classroom identity is unique per normalized course name and local day; sessions retain UUIDs',async()=>{
+  const date='2026-10-17';
+  const classroom=await createClassroom({title:'信息安全导论',date});
+  assert.match(classroom.id,/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i);
+  assert.equal(classroom.key,classroomKey(' 信息安全导论 ',date));
+  await assert.rejects(createClassroom({title:' 信息安全导论 ',date}),/CLASSROOM_ALREADY_EXISTS/);
+  const next=await createClassroom({title:'信息安全导论',date:'2026-10-18'});
+  assert.notEqual(next.key,classroom.key);
+  await assert.rejects(createClassroom({title:'安全',date:'2026-02-30'}),/INVALID_CLASSROOM_DATE/);
+  const sessions=[
+    {id:'session-uuid-1',classroomId:classroom.id,classroomKey:classroom.key,
+      title:classroom.title,lessonDate:classroom.date,startedAt:1792200000000,
+      transcript:'Первая часть',durationSeconds:120,hasAudio:true},
+    {id:'session-uuid-2',classroomId:classroom.id,classroomKey:classroom.key,
+      title:classroom.title,lessonDate:classroom.date,startedAt:1792200120000,
+      transcript:'Вторая часть',durationSeconds:60,hasAudio:true}
+  ];
+  for(const session of sessions)await saveLesson(session);
+  assert.deepEqual((await listClassroomRecordings(classroom.key)).map((s:any)=>s.id),
+    ['session-uuid-1','session-uuid-2']);
+  assert.equal((await listClassroomRecordings(next.key)).length,0,
+    'another day with the same name must not include previous audio sessions');
+  const grouped=await listClassrooms();
+  assert.equal(grouped.find((x:any)=>x.id===classroom.id)?.sessionCount,2);
+  assert.equal(grouped.find((x:any)=>x.id===next.id)?.sessionCount,0);
+  assert.equal((await listLessons()).filter((s:any)=>s.classroomKey===classroom.key).length,2);
+});
+
+test('v1-v3 recordings group into date/name classrooms WITHOUT overwriting original records',async()=>{
+  const before=structuredClone((await listLessons()).find((x:any)=>x.id==='v1-course'));
+  assert.ok(before);
+  const catalog=await listClassrooms();
+  const date=localCalendarDate(before.startedAt);
+  const key=classroomKey(before.title,date);
+  const grouped=catalog.find((x:any)=>x.key===key);
+  assert.ok(grouped?.id.startsWith('legacy:'));
+  assert.ok((await listClassroomRecordings(key)).some((x:any)=>x.id==='v1-course'));
+  await assert.rejects(createClassroom({title:before.title,date}),/CLASSROOM_ALREADY_EXISTS/);
+  assert.deepEqual((await listLessons()).find((x:any)=>x.id==='v1-course'),before);
+  assert.ok([...stores.get('audio')!.values()].some((a:any)=>a.lessonId==='v1-course'),
+    'old WAV chunks must retain their original session UUID');
 });
 
 test('validate hypotheses before writing and clear private evidence with browser data',async()=>{
