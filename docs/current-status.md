@@ -41,10 +41,62 @@ public provider default or automatic cross-device synchronization.
   the lossy subtitle projection. Its storage migration and export still need
   real Safari testing. Do not merge without its documented review gate in
   `docs/asr-evidence-v0.1.md` on that PR branch.
-- This branch adds **non-destructive diagnostic counters** for unrelated
+- Main includes **non-destructive diagnostic counters** for unrelated
   unmatched-window replacements, exposed only in the local replay report.
   These count ambiguity, not confirmed lost speech; the live text algorithm
   has deliberately not been replaced.
+
+## 2026-10-17 private C1/C2 revalidation (reported by Codex)
+
+**Verdict: `BASELINE_NON_REGRESSION_PASS`; `CLASSROOM_ACCURACY_NOT_ACCEPTED`.**
+The operator replayed private original windows against main
+`8ec4356ef74b87bc2700c67e04faf298765a2398` and previously checked
+`43eea553d613b9f85a969ed4e42550c3a144ed10`. A local reconstruction
+of the new main was checked against its Git blobs; this was not a live
+Whisper run or a true clone at that HEAD. No audio or private hypotheses
+were committed.
+
+| Regression check | C1 | C2 |
+| --- | ---: | ---: |
+| Raw ASR windows | 121 | 106 |
+| Window-for-window stable/draft/visible/final differences vs baseline | 0 | 0 |
+| Final normalized word count (unchanged, **not** WER) | 828 | 717 |
+| Long lexical repeat candidate spans (not proven duplicates) | 36 | 32 |
+| Ambiguous unanchored candidate replacements | 23 | 20 |
+| Ambiguous candidate tokens counted (not proven lost words) | 211 | 347 |
+
+Original 45 same-sample replay counterexamples: **0 remaining**.
+Every 227/227 first-stop prefix checks matched the visible text before stop;
+replayed same-sample updates did not generate extra stable text or change
+visible output. Second flush and plain-vs-injected final output matched.
+These prove the new diagnostic counters are non-regressive for those private
+fixtures, not that the displayed sentences match what was spoken.
+
+**Private listening review queue:** C1 index 30 (24–32 s, an earlier visible
+25-token tentative candidate disappeared), C2 index 77 (82.2–90.2 s,
+164-token candidate inside an eight-second window containing obvious
+repetition, suggesting an ASR hallucination/decode loop), and the final C1
+index 120 (short correction still triggered the diagnostic). Review
+original WAV and nearby raw hypotheses locally. The same candidate may be
+counted more than once, or be entirely erroneous; do not call 43 events
+43 lost phrases.
+
+**Confirmed synthetic counterexample to the lexical overlap algorithm:**
+two identical genuine utterances at 1–2 s and 10–11 s appear in ASR windows
+`[0,8]` and `[4,12]`. The windows overlap during silence (4–8 s), but
+text-only matching collapses both recognized sentences to one. The old
+baseline fails the same test. This demonstrates a correctness limitation;
+it does not prove that this particular error occurred in C1/C2. Resolving
+it reliably needs better audio-time evidence, e.g. speech regions or
+timed tokens from a compatible provider, not merely more aggressive lexical
+deduplication.
+
+**Remaining admission:** complete private audio listening and a
+separately measured candidate algorithm against both caches before any
+caption reducer replacement. Retain raw hypotheses (PR #14 is still
+awaiting Safari IndexedDB migration/export acceptance) and exclude
+deferred P2 recording/playback/recovery from this work. Track the
+remaining P1 work in [Issue #16](https://github.com/Ran-ying/ru-class/issues/16).
 
 ## Private classroom regression gate (P1)
 
