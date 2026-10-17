@@ -129,6 +129,28 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.2 wide classroom manager and heading regression fix
+
+The original dated-classroom selector created in PR #37 had a
+concrete DOM wiring bug: `renderClassroomLock()` queried
+`#transcription`, but the section was missing `id="transcription"`,
+so choosing a course could leave the live right-side pane locked.
+Keep the matching element ID and synchronously update its
+`is-locked` class plus hidden prompt **before** async session reads.
+
+The owner replaced the top-left dropdown with **small date on first
+line, prominent course title on second, right-aligned plus**; use the
+entire left pane width, transparent/no border. Right transcription
+background and boundary are also transparent/borderless. Plus opens
+a large two-column *classroom manager*: every dated course on the left,
+**only that course's** independent recording sessions (WAV playback,
+download, original ASR-window export and status) on the right.
+Model Settings no longer contains a "本地数据" page; its
+data/clear functions are hosted in the course manager. Empty selection
+still gates microphone ASR, but must not block the API Settings button.
+Do not merge recording sessions or migrate/rewrite old PCM/ASR evidence.
+See `docs/v02-dated-classroom-identity.md` and UI regression tests.
+
 ## v0.2 classroom identity and locked transcription (2026-10-17)
 
 Owner changed the data semantics: **one classroom** is identified by a
