@@ -129,6 +129,31 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## Browser-local raw hypothesis journal (integrated from PR #14)
+
+The v2 browser IndexedDB schema extends `ru-class-local-v1` with
+a per-lesson `hypotheses` journal. Preserve the *exact* provider
+response text (including surrounding whitespace), source `startSample`/
+`endSample`, final flag and inference time **before** lossy
+`TranscriptBuffer` projection. Never send raw windows or keys to
+the RU-Class static server. `设置 → 本地数据 → 下载原始识别窗口`
+exports user-selected per-lesson private JSON. Old recordings do not
+retroactively gain windows. Failures in browser evidence persistence
+must remain visible and must not be reported as a complete journal.
+Keep the current transcript reducer unmodified; this feature records
+source evidence rather than solving P1 accuracy problems.
+
+Functional code was carried forward from prior PR #14 onto latest
+main because the old pull-request branch diverged; it is integrated
+for direct user testing. **Automated tests cannot establish physical
+Safari IndexedDB v1→v2 migration/multi-tab/export correctness**; retain
+[Issue #28](https://github.com/Ran-ying/ru-class/issues/28)
+as the real-browser acceptance gate. In particular, do not claim
+restoration of historical C2 missing request-window times.
+PR #25 remains Draft/off, as does the original P1 evidence
+acceptance; do not enable its quarantine merely because the raw
+journal now exists.
+
 ## Development safety and acceptance
 
 - Preserve all original recognition evidence before any destructive
