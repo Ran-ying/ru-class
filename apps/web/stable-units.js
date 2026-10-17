@@ -56,12 +56,12 @@ export class StableUnitJournal{
     return additions;
   }
   /** Stable immutable units only. Future v0.4 may use these as LLM input. */
-  ready({currentEndSample=this.lastWindowEnd,finalized=this.finalized}={}){
-    if(!Number.isSafeInteger(currentEndSample)||currentEndSample<this.lastWindowEnd)
-      throw Error('INVALID_UNIT_WATERMARK');
-    // A stopped session can release final-flush stable units, but a live
-    // session may only release units confirmed >=8 seconds in the past.
-    const cutoff=finalized?Number.POSITIVE_INFINITY:currentEndSample-STABLE_AGE_SAMPLES;
+  ready(){
+    // Never accept a caller-supplied "future" audio position or finalized
+    // override: advancing either would silently bypass the eight-second gate.
+    // Only processed ASR windows, or the actual final flush, move the clock.
+    const cutoff=this.finalized?Number.POSITIVE_INFINITY:
+      this.lastWindowEnd-STABLE_AGE_SAMPLES;
     return this.units.filter(u=>
       !this.delivered.has(u.id)&&u.confirmedWindowEndSample<=cutoff
     );

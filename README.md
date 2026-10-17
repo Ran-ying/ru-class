@@ -41,6 +41,23 @@
 仍由 [Issue #28](https://github.com/Ran-ying/ru-class/issues/28)
 验收。
 
+## v0.3 本地文字来源复核
+
+新的课堂识别窗口 JSON 导出会增加**可选的**稳定文字来源单元
+与对应录音 ID（旧记录不生成历史上不存在的证据），保持
+`ru-class-asr-windows-v1` 与 `windows[]` 兼容。可以在本机运行：
+
+```sh
+node scripts/audit-stable-source.mjs '/你的私人录音-asr-windows.json'
+```
+
+程序在本机重放真实 `TranscriptBuffer`，对照稳定文字单元
+以及确认窗口的采样位置，只输出数量/异常状态，**不会显示
+俄语原文、私有路径或 Token**。完整会话成功重放只能证明
+来源记录与字幕程序一致，**不是**证明 Whisper 逐词准确。
+不应把私人导出文件上传到公开 GitHub。详见
+[来源复核说明](docs/v03-stable-source-watermark.md)。
+
 ## v0.3 稳定字幕、来源时间与后续 DeepSeek 输入
 
 RU 实时字幕现在区分**已稳定文字**（深色）与**临时文字**

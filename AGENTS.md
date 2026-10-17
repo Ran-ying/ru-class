@@ -129,6 +129,31 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.3.1 local-only source audit and safe 8s watermark
+
+New v0.3 Safari recording exports retain
+`ru-class-asr-windows-v1` and unchanged `windows[]`,
+optionally adding `recording` and `source_units[]` copied
+from the locally persisted `lessons.stableUnits` field.
+Never include these in CI fixtures sourced from real classes:
+stable units contain private Russian transcript text. Historic
+recordings lacking saved units remain `legacy_no_source_units`.
+Use `node scripts/audit-stable-source.mjs <private-export>`
+for on-device numerical replay against the **unchanged**
+browser `TranscriptBuffer`, including final-flush-without-new-
+raw-window behavior. Only numerical differences and statuses
+may leave the owner's computer. Absolute clock values are
+estimates of confirming ASR *window end*, not actual word time;
+real spoken start/end remains null. Source matches cannot
+establish Russian WER or missing true repeated speech.
+
+`StableUnitJournal.ready()` must not allow callers to fake
+`finalized:true` or `currentEndSample` values: it derives
+eligibility from its own last processed ASR window and final flush.
+No DeepSeek calls, pseudo word alignment or caption heuristic
+changes in v0.3. Physical MacBook Safari export/reload acceptance
+is pending.
+
 ## v0.3 stable source-window units and LLM cutoff rule
 
 The user proposed processing text 'older than 8 seconds' with
