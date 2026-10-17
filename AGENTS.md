@@ -39,6 +39,20 @@ spoken. Review original audio and raw private hypotheses on the user's
 machine; do not turn this signal into a live caption decision without
 the C1/C2 45/227 regression and listening gates.
 
+## P1 official Beijing-region cloud option
+
+The user also authorized the **official Alibaba Cloud Beijing**
+`qwen3-asr-flash` API path in
+`scripts/cross-validate-dashscope-asr.py` and
+`docs/p1-dashscope-official-asr.md`, as an alternative to downloading
+and running the Qwen3 model locally. This option explicitly uploads
+six private 8–12-second audio samples to the user's selected provider.
+Read the API Key only from `DASHSCOPE_API_KEY` environment; do not
+print it, disclose raw provider response text, or submit the samples
+through GitHub Actions. A real API inference still has to be
+performed on a key-holding machine; GitHub tests mock all calls.
+Do not confuse this API path with the strictly offline MLX path.
+
 ## P1 independent Russian ASR cross-check
 
 `scripts/cross-validate-private-asr.py` and
