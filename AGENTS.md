@@ -239,9 +239,12 @@ window JSON remain owner-local. Read
   `src/protocol.ts` and `docs/protocol.md` must remain byte-for-byte equal;
   document deprecation in separate pages, not in the mirrored files.
   GitHub CI is not physical Safari/M1/M4/five-minute classroom acceptance.
-- M1 synthetic/Metal development smoke is recorded; M4 is deferred.
-  **P2 full recording recovery, in-app replay and endurance work is deferred
-  by the user.** Do not modify these features as an incidental refactor.
+- M1 synthetic/Metal development smoke and real M4 inference evidence are
+  recorded separately. **Owner explicitly resumed v0.2 whole-recording
+  in-browser playback**; its bounded scope is documented above. P2
+  automatic recovery, sentence-aligned replay, 90-minute endurance and
+  background recording remain deferred. Do not modify those features
+  incidentally.
 - Do not deploy or publish private classroom data as part of a test.
   Use focused branches and explicit PR review for meaningful changes.
 
