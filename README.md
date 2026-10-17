@@ -5,6 +5,7 @@
 ## 当前维护与验收入口
 
 - [当前权威架构、项目状态与 P0/P1/P2/P3 验收门槛](docs/current-status.md)
+- [P1：C1/C2 私有音频定点审查工具与使用方法](docs/p1-private-audio-audit.md)
 - [浏览器直连 BYOK 设计](docs/browser-direct-byok.md)
 - [维护者工作规范](AGENTS.md)
 
