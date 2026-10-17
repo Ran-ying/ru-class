@@ -31,15 +31,16 @@ function fixture(intervals:[[number,number],...Array<[number,number]>],duration=
   return {dir,wav,windows,clean(){rmSync(dir,{recursive:true,force:true});}};
 }
 
-test('known limitation: lexical reducer merges two separate spoken copies when rolling windows overlap only in silence',()=>{
+test.todo('known limitation: two spoken copies in overlapping windows should remain two utterances',()=>{
   const buf=new TranscriptBuffer();
   const original=buf.update(PHRASE,0,8*RATE);
   const repeated=buf.update(PHRASE,4*RATE,12*RATE);
   const end=buf.flush();
   const visible=[original.stable_delta,repeated.stable_delta,end.stable_delta,end.partial_text]
     .filter(Boolean).join(' ');
-  assert.equal(visible,PHRASE,'Record the existing behavior, not a correctness PASS');
-  assert.notEqual(visible,PHRASE+' '+PHRASE,'Two spoken occurrences are mistakenly collapsed');
+  // This assertion currently fails by design and stays TODO until a
+  // time-grounded reducer is independently validated on private C1/C2 audio.
+  assert.equal(visible,PHRASE+' '+PHRASE);
 });
 
 test('separate audible regions on exclusive sides of overlapping windows are flagged, not silently equated',()=>{
