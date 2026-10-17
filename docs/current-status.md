@@ -98,6 +98,23 @@ awaiting Safari IndexedDB migration/export acceptance) and exclude
 deferred P2 recording/playback/recovery from this work. Track the
 remaining P1 work in [Issue #16](https://github.com/Ran-ying/ru-class/issues/16).
 
+## Offline P1 audio-evidence audit helper
+
+A new **offline-only** `scripts/audit-private-audio.mjs` tool accepts
+a matching private 16-kHz PCM16 WAV and original window JSON. It flags
+adjacent equal-text hypotheses when both exclusive audio regions contain
+sustained sound but their shared region appears silent, and can export
+selected 8-second windows with ±2 seconds and neighboring hypotheses to
+a *new, owner-only private directory* for manual review. This is acoustic
+**risk evidence**, not word alignment, recognized-speech proof or a
+production subtitle fix. The synthetic duplicate-utterance case remains
+a known failing correctness scenario. Detailed Mac-local instructions:
+[docs/p1-private-audio-audit.md](p1-private-audio-audit.md).
+
+**C1/C2 private source audio is not accessible from GitHub CI.** Real
+listening results are still needed for C1 #30, C2 #77 and C1 #120.
+No new Whisper inference and no P2 long-recording/playback changes.
+
 ## Private classroom regression gate (P1)
 
 Use the *same private originals* for baseline and proposed algorithm. Raw
