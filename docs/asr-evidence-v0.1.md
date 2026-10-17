@@ -1,4 +1,4 @@
-# v0.1 classroom ASR evidence journal (browser-local)
+# Browser-local ASR source-window evidence journal (integrated; Safari acceptance pending)
 
 ## Why this exists
 
@@ -54,7 +54,10 @@ export, explicit clear, and connections released on `versionchange`.
 A delayed `onsuccess` after a blocked open must be closed; the user receives
 a retryable error rather than a silently owned handle.
 
-**These simulated tests are not a Safari or iPad acceptance.** Before merging:
+**These simulated tests are not a Safari or iPad acceptance.**
+The code has been forward-ported into main at the owner's explicit
+request; the following is the **pending physical-browser acceptance
+checklist**, not a pre-merge claim:
 
 1. In real macOS Safari create a **v1** database containing a speech
    profile, an existing lesson and audio samples. Upgrade to this PR;
@@ -71,6 +74,9 @@ a retryable error rather than a silently owned handle.
 5. Re-run C1 (121 windows), C2 (106 windows), 45 exact-range replays and all
    227 stop-prefix checks with unchanged main subtitle projection.
 
-**Decision:** keep PR #14 unmerged until browser storage and recovery are
-verified. Even after merging, treat its journal as a recoverability feature,
-not validation of Russian caption accuracy.
+**Decision:** The previous PR #14 branch diverged from current main, so
+its implementation was forward-ported onto a clean main branch and
+integrated at the owner's request. **This does not establish a Safari
+hardware pass**. Keep Issue #28 open to verify browser-local storage
+and export. Treat the journal as a recoverability feature, not
+validation of Russian caption accuracy.
