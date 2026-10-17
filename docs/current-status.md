@@ -173,6 +173,29 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.2 dated classroom catalog and session separation
+
+The owner explicitly redefined the classroom: **course name + local
+calendar date uniquely identifies a selected classroom**. A top-left
+selector shows these identities; the adjacent right-aligned plus opens
+a name/date entry dialog. The entire live RU caption surface and
+record button remain unavailable until a classroom is selected. The
+selected classroom loads previously stored recording transcripts
+from its date/name group; multiple microphone Start/Stop cycles
+generate separate UUID-backed sessions within that logical classroom.
+Their PCM chunk indices, raw ASR window boundaries, manifest IDs,
+WAV/JSON exports and timestamps remain independent and non-overwriting.
+Catalog entries are UUID based, with a normalized case-insensitive
+course-name/date uniqueness key; v1–v3 historical recordings are
+displayed through a non-destructive computed legacy grouping. The
+new IndexedDB v4 store only adds a `classrooms` catalogue; current
+browser ASR and translation placeholders are unchanged.
+
+Full API/CI contract and browser DOM tests do not claim physical MacBook
+Safari v3→v4 migration/sign-off. New use and old-data preservation
+remain to be confirmed in Safari; see
+[dated classroom behavior](v02-dated-classroom-identity.md).
+
 ## v0.2 local lesson replay and 30-minute synthetic WAV check
 
 The previously existing browser-origin IndexedDB v3 retained profiles,
