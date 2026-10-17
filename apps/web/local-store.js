@@ -334,11 +334,24 @@ export async function lessonHypothesesJson(lessonId){
   const windows=await lessonHypotheses(lessonId);
   if(!windows.length)throw Error('此课程没有原始 ASR 窗口记录（可能是升级前的课程）。');
   const metadata=await lessonEvidenceStatus(lessonId);
+  const lesson=await withStore('lessons','readonly',s=>s.get(lessonId));
+  // v0.3 extension is optional, and only present for actual v0.3 sessions.
+  // Older exports retain their exact prior shape. This portable copy remains
+  // PRIVATE: the already exported window text and the stable deltas are speech.
+  const sourceUnits=Array.isArray(lesson?.stableUnits)?
+    {source_units:lesson.stableUnits.map(unit=>({...unit}))}:{};
+  const recording=Array.isArray(lesson?.stableUnits)?{
+    recording_id:lessonId,
+    classroom_id:typeof lesson.classroomId==='string'?lesson.classroomId:null,
+    started_at_ms:Number.isFinite(lesson.startedAt)?lesson.startedAt:null
+  }:null;
   return new Blob([JSON.stringify({
     format:'ru-class-asr-windows-v1',
     sample_rate:16000,
     // Optional backwards-compatible metadata; old replay scripts read windows[].
     metadata,
+    ...(recording?{recording}:{}),
+    ...sourceUnits,
     windows
   },null,2)],{type:'application/json'});
 }
