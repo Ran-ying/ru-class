@@ -97,7 +97,7 @@ async function renderSelectedClassroom(){
         (session.outcome==='interrupted'?' · 中断':'');
       const columns=document.createElement('div');
       columns.className='session-bilingual';
-      const ru=document.createElement('p');
+      const ru=document.createElement('div');
       ru.lang='ru';ru.textContent=session.transcript||'（这段录音没有识别文本）';
       if(Array.isArray(session.stableUnits)&&session.stableUnits.length){
         // Show only *confirmation* window time, never fake word timestamps.
@@ -110,7 +110,7 @@ async function renderSelectedClassroom(){
         columns.dataset.confirmedWindowEndSample=String(last.confirmedWindowEndSample);
         columns.append(provenance);
       }
-      const zh=document.createElement('p');
+      const zh=document.createElement('div');
       zh.lang='zh-CN';
       zh.textContent=session.translation||'（中文翻译尚未生成）';
       const rows=translations[index];
@@ -123,7 +123,8 @@ async function renderSelectedClassroom(){
           ru.append(ruLine);zh.append(zhLine);
         }
         const consumed=rows.filter((row,i)=>!i||
-          row.sourcePrefix!==rows[i-1].sourcePrefix).map(row=>row.sourcePrefix).join(' ');
+          row.consumedUnitIds.join('|')!==rows[i-1].consumedUnitIds.join('|'))
+          .map(row=>row.sourcePrefix).join(' ');
         const remaining=session.transcript?.startsWith(consumed)?
           session.transcript.slice(consumed.length).trimStart():session.transcript;
         if(remaining){
