@@ -362,6 +362,10 @@ async function renderLessons(){
       label.textContent=new Date(item.startedAt).toLocaleString()+' · '+(item.title||'未命名课堂')+' · '+Math.round(item.durationSeconds)+' 秒';
       row.append(label);
       if(item.hasAudio){
+        const estimatedMiB=(Math.max(0,Number(item.durationSeconds)||0)*32000/(1024*1024)).toFixed(1);
+        const audioInfo=document.createElement('span');
+        audioInfo.textContent='本地音频分块 · 约 '+estimatedMiB+' MiB（未校验完整性）';
+        row.append(audioInfo);
         const playButton=document.createElement('button');
         playButton.type='button';playButton.textContent='播放录音';
         playButton.disabled=running||stopping;
