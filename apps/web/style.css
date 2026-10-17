@@ -285,3 +285,9 @@ main>.transcription{border-left:1px solid #d9e2d9}
  main>.transcription{border-left:0;border-top:1px solid #d9e2d9}
  .session-bilingual{gap:12px}
 }
+
+/* v0.3: LocalAgreement stable prefix versus replaceable draft. */
+#ru-stable{color:#233f32;white-space:pre-wrap}
+#ru-draft{color:#84918a;white-space:pre-wrap;font-style:normal}
+#ru-draft:not(:empty){border-bottom:1px dotted #bac8b8}
+.history-provenance{display:block;margin:8px 0 0;color:#84958c;font-size:11px}

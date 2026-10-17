@@ -1,4 +1,5 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
+import {StableUnitJournal} from './stable-units.js';
 import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
@@ -10,7 +11,7 @@ let activeClassroom=null,classroomOptions=[],classroomRevision=0;
 let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve(),evidenceWarning='';
 let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 const CLIENT_VERSION='0.2.2'; // Selected frontend build label, not attested ASR engine metadata.
-let stable='',draft='',hasTranscript=false,marks=[];
+let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null;
 let playbackUrl=null,playbackRevision=0;
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function renderClassroomLock(){
@@ -66,7 +67,7 @@ async function renderSelectedClassroom(){
   holder.replaceChildren();
   renderClassroomLock();
   if(!activeClassroom){
-    $('ru').textContent='';$('duration').textContent='00:00';
+    renderCaption();$('duration').textContent='00:00';
     $('latency').textContent='—';stable='';draft='';return;
   }
   const key=activeClassroom.key;
@@ -86,6 +87,17 @@ async function renderSelectedClassroom(){
       columns.className='session-bilingual';
       const ru=document.createElement('p');
       ru.lang='ru';ru.textContent=session.transcript||'（这段录音没有识别文本）';
+      if(Array.isArray(session.stableUnits)&&session.stableUnits.length){
+        // Show only *confirmation* window time, never fake word timestamps.
+        const last=session.stableUnits.at(-1);
+        const provenance=document.createElement('small');
+        provenance.className='history-provenance';
+        provenance.textContent='已保存 '+session.stableUnits.length+
+          ' 个稳定文字单元 · 最近确认窗口末端 '+
+          (last.confirmedWindowEndSample/16000).toFixed(1)+' 秒（非逐词时间）';
+        columns.dataset.confirmedWindowEndSample=String(last.confirmedWindowEndSample);
+        columns.append(provenance);
+      }
       const zh=document.createElement('p');
       zh.lang='zh-CN';
       zh.textContent=session.translation||'（中文翻译尚未生成）';
@@ -94,7 +106,7 @@ async function renderSelectedClassroom(){
     }
     const last=sessions.at(-1);
     stable=last?.transcript||'';draft='';
-    $('ru').textContent=stable;
+    renderCaption();
     $('duration').textContent=last?
       String(Math.floor((last.durationSeconds||0)/60)).padStart(2,'0')+':'+
       String(Math.floor((last.durationSeconds||0)%60)).padStart(2,'0'):'00:00';
@@ -206,19 +218,29 @@ function buttons(){
   for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh'])
     $(id).disabled=starting||running||stopping;
 }
+function renderCaption(){
+  // Separate immutable LocalAgreement prefix and replaceable hypothesis tail.
+  // These are text containers only; no CSS-driven suppression of raw evidence.
+  $('ru-stable').textContent=stable;
+  $('ru-draft').textContent=draft?(stable?' '+draft:draft):'';
+}
+
 function showTranscript(update){
   const panel=$('ru');
   const follow=panel.scrollHeight-panel.clientHeight-panel.scrollTop<64;
+  // The source journal reads the exact same append-only stable delta but
+  // never changes the existing LocalAgreement reducer's decision.
+  sourceJournal?.add(update);
   if(update.stable_delta?.trim())stable=stable?[stable,update.stable_delta.trim()].join(' '):update.stable_delta.trim();
   draft=update.partial_text?.trim()||'';
   const text=[stable,draft].filter(Boolean).join(' ');
   // Silence or an empty ASR window leaves the reserved RU region blank.
-  panel.textContent=text;
+  renderCaption();
   if(text)hasTranscript=true;
   if(follow)panel.scrollTop=panel.scrollHeight;
   const point=marks.find(m=>m.end>=update.window_end_sample);
   const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
-  $('latency').textContent='窗口 '+((update.window_end_sample-update.window_start_sample)/16000).toFixed(1)+' s · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
+  $('latency').textContent='识别窗 '+(update.window_start_sample/16000).toFixed(1)+'–'+(update.window_end_sample/16000).toFixed(1)+' s（非逐词时间） · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
   if(lessonId)void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
 }
 function archiveRawHypothesis(entry){
@@ -251,7 +273,10 @@ function finishLesson(outcome){
   const record={id:lessonId,title:activeClassroom.title,lessonDate:activeClassroom.date,
     classroomId:activeClassroom.id,classroomKey:activeClassroom.key,
     startedAt,durationSeconds:sampleCount/16000,
-    transcript:[stable,draft].filter(Boolean).join(' '),outcome,hasAudio:chunkIndex>0};
+    transcript:[stable,draft].filter(Boolean).join(' '),
+    stableUnits:sourceJournal?.export()||[],
+    sourceTimeBasis:'window_confirmation_not_word_alignment',
+    outcome,hasAudio:chunkIndex>0};
   lessonWrites=lessonWrites.catch(()=>{}).then(()=>saveLesson(record));
   return lessonWrites;
 }
@@ -279,7 +304,7 @@ async function start(){
   const p=profiles.speech;
   if(!p?.baseUrl||!p?.model||!p?.apiKey){
     $('error').textContent='请先在“设置 → 模型 → 语音”中填写自己的 API 地址、模型和 Token。';
-    $('settings').showModal();setTab('models');return;
+    $('settings').showModal();return;
   }
   if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!window.AudioWorkletNode){
     $('error').textContent='录音需要安全上下文（HTTPS 或 localhost）以及 AudioWorklet。';
@@ -290,7 +315,9 @@ async function start(){
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
   evidenceReceived=0;evidenceFailed=0;evidenceActive=false;
   stable='';draft='';hasTranscript=false;
-  $('ru').textContent='';
+  sourceJournal=new StableUnitJournal({classroomId:activeClassroom.id,
+    recordingId:lessonId,startedAt});
+  renderCaption();
   $('duration').textContent='00:00';$('error').textContent='';$('latency').textContent='—';
   try{
     // Safari: construct/resume audio inside the user's click handler.
@@ -309,6 +336,10 @@ async function start(){
       const samples=data.samples;
       const index=chunkIndex++;
       sampleCount+=samples.length;
+      // The first actual PCM callback anchors approximate absolute times.
+      // No word-level speech timestamps are implied.
+      if(chunkIndex===1&&sourceJournal)
+        sourceJournal.startedAt=Date.now()-sampleCount/16000*1000;
       marks.push({end:sampleCount,time:performance.now()});if(marks.length>100)marks.shift();
       writing=writing.then(()=>saveAudioChunk(lessonId,index,samples))
         .catch(e=>{void onFailure(new Error('浏览器录音存储失败：'+errorMessage(e)));throw e;});

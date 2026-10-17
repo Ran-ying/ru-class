@@ -173,6 +173,31 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.3 stable source units and conservative 8-second LLM eligibility
+
+The current browser-direct Whisper `TranscriptBuffer` and its
+existing LocalAgreement heuristics are unchanged. The RU live
+caption UI now renders stable `stable_delta` text independently
+from the lighter replaceable `partial_text` tail. Newly confirmed
+deltas are recorded with session UUID, classroom UUID, source
+ASR window sample interval and estimated confirmation wall time
+in a `StableUnitJournal`; the existing `lessons` record persists
+`stableUnits[]`. No exact word/sentence speech timestamps are
+claimed and `speechStartSample/speechEndSample` remain null.
+Previously recorded lessons without these fields are valid.
+
+An **eligibility helper**, not a live DeepSeek processor, exposes
+only already confirmed stable units whose *confirmation-window*
+end is at least 128000 PCM samples behind the current processed
+window end; a clean final `flush` releases the remainder. It
+does not automatically stabilize a draft older than 8s, nor
+declare each stable delta a grammatical sentence. Actual user
+API calls, sentence splitting, prefix validation and stale-job
+handling remain v0.4. See
+[v0.3 scope and time limits](v03-stable-source-watermark.md).
+Browser UI and unit tests are not a physical Safari or Russian WER
+acceptance. No ASR service/model changes or PR #25 merge.
+
 ## v0.2 editable course names and unified classroom history
 
 A 1px central divider separates the equal-width main panes.

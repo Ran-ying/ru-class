@@ -70,13 +70,15 @@ test('RU caption area stays mounted and blank until actual Russian text arrives'
   const html=readFileSync('apps/web/index.html','utf8');
   const css=readFileSync('apps/web/style.css','utf8');
   const js=readFileSync('apps/web/app.js','utf8');
-  assert.match(html,/<div class="ru"><span class="label">RU<\/span><p id="ru" lang="ru" aria-live="polite"><\/p><\/div>/);
+  assert.match(html,/<div class="ru"><span class="label">RU<\/span><p id="ru" lang="ru" aria-live="polite"><span id="ru-stable" class="ru-stable"><\/span><span id="ru-draft" class="ru-draft"><\/span><\/p><\/div>/);
   assert.doesNotMatch(html,/id="connection-state"|id="status"|id="worker"/);
   assert.match(css,/\.live\{flex:0 0 clamp\(190px,36dvh,370px\);max-height:60%\}/);
   assert.match(css,/\.live \.ru\{flex:1;min-height:0;display:flex;flex-direction:column\}/);
   assert.match(css,/\.live \.ru #ru\{[\s\S]*?flex:1;min-height:0;max-height:none;/);
-  assert.match(js,/\$\('ru'\)\.textContent='';/);
-  assert.match(js,/panel\.textContent=text;/);
+  assert.match(js,/function renderCaption\(\)/);
+  assert.match(js,/\$\('ru-stable'\)\.textContent=stable/);
+  assert.match(js,/\$\('ru-draft'\)\.textContent=/);
+  assert.match(js,/renderCaption\(\);/);
   assert.doesNotMatch(js,/\$\('ru'\)\.hidden\s*=|panel\.hidden\s*=/);
   for(const placeholder of ['尚未连接','等待语音识别 API','录音中 · 俄语识别',
     '等待俄语语音…','开始录音后，俄语字幕将在这里更新。']){

@@ -129,6 +129,27 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.3 stable source-window units and LLM cutoff rule
+
+The user proposed processing text 'older than 8 seconds' with
+DeepSeek. Treat this as a **conservative eligibility boundary**,
+not proof of transcription accuracy or automatic stabilization:
+new rolling 8s windows no longer cover older samples, but
+unanchored hypotheses can still be ambiguous and no word
+timestamps are available. Use only existing `stable_delta`
+emissions as immutable source units, each with actual source
+confirmation-window sample bounds and recording/classroom IDs.
+`StableUnitJournal.ready()` requires **8 seconds after the
+confirmation window end** during capture, or a completed session
+flush; never promote `partial_text` just because time elapsed.
+Persist the source units only in existing local recording metadata;
+old lessons may lack them. Word/sentence speech time stays null.
+Different Start/Stop segments have independent source timebases.
+Do not make real DeepSeek calls or invent sentence boundaries
+during v0.3: the user-selected API, serial job queue, verified
+prefix matching and bilingual sentence output belong to v0.4.
+Read `docs/v03-stable-source-watermark.md` before expanding scope.
+
 ## v0.2 course renaming and shared bilingual history
 
 Course title is editable *within a fixed local date*, while its
