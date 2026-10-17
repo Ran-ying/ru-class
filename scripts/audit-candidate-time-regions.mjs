@@ -42,7 +42,7 @@ function spans(mask){
   return result;
 }
 function append(left,right){return [left,right].filter(Boolean).join(' ');}
-function capturedState(windows,focus){
+export function capturedState(windows,focus){
   const buffer=new TranscriptBuffer();
   let origin=null,stable='',partial='',candidate=null,sourceIndex=null,events=null;
   for(let i=0;i<windows.length;i++){
