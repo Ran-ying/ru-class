@@ -6,6 +6,7 @@
 
 - [当前权威架构、项目状态与 P0/P1/P2/P3 验收门槛](docs/current-status.md)
 - [P1：C1/C2 私有音频定点审查工具与使用方法](docs/p1-private-audio-audit.md)
+- [P1：Mac 离线独立 Qwen3-ASR 交叉验证（不上传课堂录音）](docs/p1-independent-asr-crosscheck.md)
 - [浏览器直连 BYOK 设计](docs/browser-direct-byok.md)
 - [维护者工作规范](AGENTS.md)
 
