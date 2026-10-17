@@ -115,6 +115,23 @@ a known failing correctness scenario. Detailed Mac-local instructions:
 listening results are still needed for C1 #30, C2 #77 and C1 #120.
 No new Whisper inference and no P2 long-recording/playback changes.
 
+## Official Alibaba Cloud Beijing Qwen3-ASR cross-check
+
+The user has an official Alibaba Cloud Model Studio API key for the
+**Beijing** region, so an alternative to downloading the local MLX model
+is now available: `scripts/cross-validate-dashscope-asr.py` sends only
+six focused/context audio samples to the official HTTPS
+`qwen3-asr-flash` API, and saves comparative private hypotheses
+locally. The secret is loaded from `DASHSCOPE_API_KEY` and is never
+printed or committed. An explicit dry-run sends **zero** requests.
+See [Beijing cross-check workflow](p1-dashscope-official-asr.md).
+
+**Privacy distinction:** unlike the offline MLX route, running this
+official API workflow uploads the three classroom clips (twice each)
+to Alibaba Cloud. The six calls need suitable consent and may incur
+charges. Synthetic CI is not a real provider run, and a second-model
+output is not a human-approved transcript. P1 Issue #16 remains open.
+
 ## Independent ASR cross-validation: not yet run on Mac
 
 The separate offline `scripts/cross-validate-private-asr.py` uses the
