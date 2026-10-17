@@ -9,6 +9,10 @@ function el(id:string){
     setAttribute(name:string,value:string){this[name]=value;},
     showModal(){this.open=true;},
     close(){this.open=false;},
+    addEventListener(){},
+    pause(){},
+    load(){},
+    removeAttribute(){},
     append(){},
   });
   return elements.get(id)!;
