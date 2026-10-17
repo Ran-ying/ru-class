@@ -154,6 +154,18 @@ PR #25 remains Draft/off, as does the original P1 evidence
 acceptance; do not enable its quarantine merely because the raw
 journal now exists.
 
+## P1 numeric-only replacement provenance (2026-10-17)
+
+`scripts/audit-private-replacements.mjs` provides a read-only offline
+source/replacement-window trace for the existing `unanchoredReplacement*`
+counters. It **does not modify** the browser `TranscriptBuffer`, call a
+provider, export any token strings, or prove words were spoken/lost.
+Metrics for lexical matches to final/later windows are weaker than
+phonetic/acoustic alignment; don't translate candidate counts into WER
+or enable Draft PR #25 from numerical diagnostics. Private WAV and raw
+window JSON remain owner-local. Read
+`docs/p1-private-replacement-audit.md` before interpreting its output.
+
 ## Development safety and acceptance
 
 - Preserve all original recognition evidence before any destructive
