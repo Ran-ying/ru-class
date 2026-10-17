@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// A tiny transaction-compatible fake for verifying the v1 -> v3 IndexedDB
+// A tiny transaction-compatible fake for verifying the v1 -> v4 IndexedDB
 // schema and browser-only evidence. It does not impersonate Safari acceptance.
 const stores=new Map<string,Map<string,any>>();
 const schemas=new Map<string,string|string[]>();
@@ -100,10 +100,10 @@ const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
   beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,
   saveProfile,loadProfiles,saveLesson,listLessons,clearBrowserData}=storage;
 
-test('IndexedDB v3 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
+test('IndexedDB v4 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
   const previous=await loadProfiles();
-  assert.deepEqual(requestedVersions,[3]);
-  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses','evidence']);
+  assert.deepEqual(requestedVersions,[4]);
+  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses','evidence','classrooms']);
   assert.equal(previous.speech.apiKey,oldProfile.apiKey);
   assert.equal((await listLessons())[0].title,oldLesson.title);
   assert.deepEqual([...stores.get('audio')!.values()][0].data,oldAudio.data);
@@ -284,4 +284,5 @@ test('validate hypotheses before writing and clear private evidence with browser
   assert.deepEqual(await loadProfiles(),{});
   assert.deepEqual(await listLessons(),[]);
   assert.equal(stores.get('evidence')!.size,0);
+  assert.equal(stores.get('classrooms')!.size,0);
 });
