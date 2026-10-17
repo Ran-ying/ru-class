@@ -254,9 +254,10 @@ test('old portable v1 exports stay compatible with both offline numeric replay t
 
 test('a versionchange releases the old handle and the next operation reopens it',async()=>{
   const firstOpen=requestedVersions.length;
+  const beforeClose=closeCount;
   assert.equal(typeof fakeDb.onversionchange,'function');
   fakeDb.onversionchange!();
-  assert.equal(closeCount,1);
+  assert.equal(closeCount,beforeClose+1);
   assert.ok((await listLessons()).some((x:any)=>x.id==='course-a'));
   assert.equal(requestedVersions.length,firstOpen+1);
 });
