@@ -4,7 +4,7 @@ const DB_NAME='ru-class-local-v1';
 function openDatabase(){
   if(!globalThis.indexedDB)throw new Error('当前浏览器不支持 IndexedDB，不能保存私人数据。');
   return new Promise((resolve,reject)=>{
-    const request=indexedDB.open(DB_NAME,4);
+    const request=indexedDB.open(DB_NAME,5);
     request.onupgradeneeded=()=>{
       const db=request.result;
       if(!db.objectStoreNames.contains('profiles'))db.createObjectStore('profiles',{keyPath:'kind'});
@@ -17,6 +17,8 @@ function openDatabase(){
       if(!db.objectStoreNames.contains('evidence'))db.createObjectStore('evidence',{keyPath:'lessonId'});
       // v4: a logical classroom (name + local calendar date) owns recordings.
       if(!db.objectStoreNames.contains('classrooms'))db.createObjectStore('classrooms',{keyPath:'key'});
+      // v5: durable, recording-scoped LLM sentence history, independent from ASR.
+      if(!db.objectStoreNames.contains('sentences'))db.createObjectStore('sentences',{keyPath:['recordingId','index']});
     };
     // Another tab may request an upgrade while this tab holds an open handle.
     // Release the old handle rather than blocking the schema migration.
@@ -201,6 +203,34 @@ export async function listClassroomRecordings(classroomKeyValue){
     try{return recordingClassroomKey(session)===classroomKeyValue;}
     catch{return false;}
   }).sort((a,b)=>a.startedAt-b.startedAt);
+}
+
+export async function saveBilingualSentences(recordingId,rows){
+  if(typeof recordingId!=='string'||!recordingId||!Array.isArray(rows)||
+     !rows.length||rows.length>12)throw Error('INVALID_SENTENCE_BATCH');
+  for(const row of rows){
+    if(row?.recordingId!==recordingId||!Number.isSafeInteger(row.index)||
+       row.index<0||typeof row.ru!=='string'||!row.ru.trim()||
+       typeof row.zh!=='string'||!row.zh.trim()||
+       !Array.isArray(row.consumedUnitIds)||!row.consumedUnitIds.length)
+      throw Error('INVALID_SENTENCE_RECORD');
+  }
+  const db=await connection();
+  await new Promise((resolve,reject)=>{
+    const tx=db.transaction('sentences','readwrite'),store=tx.objectStore('sentences');
+    // One atomic transaction for ALL sentences from a single provider reply.
+    for(const row of rows)store.add({...row});
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error||Error('SENTENCE_WRITE_FAILED'));
+    tx.onabort=()=>reject(tx.error||Error('SENTENCE_WRITE_FAILED'));
+  });
+}
+export async function loadBilingualSentences(recordingId){
+  if(typeof recordingId!=='string'||!recordingId)throw Error('INVALID_RECORDING_ID');
+  const rows=await withStore('sentences','readonly',store=>store.getAll(
+    IDBKeyRange.bound([recordingId,0],[recordingId,Number.MAX_SAFE_INTEGER])
+  ));
+  return rows.sort((a,b)=>a.index-b.index);
 }
 
 export async function saveLesson(lesson){
@@ -407,7 +437,7 @@ export async function recordingWav(lessonId){
 }
 export async function clearBrowserData(){
   const db=await connection();
-  for(const table of ['profiles','lessons','audio','hypotheses','evidence','classrooms']){
+  for(const table of ['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences']){
     await new Promise((resolve,reject)=>{
       const tx=db.transaction(table,'readwrite');
       tx.objectStore(table).clear();

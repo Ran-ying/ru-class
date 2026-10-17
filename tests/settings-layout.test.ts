@@ -76,7 +76,7 @@ test('RU caption area stays mounted and blank until actual Russian text arrives'
   assert.match(css,/\.live \.ru\{flex:1;min-height:0;display:flex;flex-direction:column\}/);
   assert.match(css,/\.live \.ru #ru\{[\s\S]*?flex:1;min-height:0;max-height:none;/);
   assert.match(js,/function renderCaption\(\)/);
-  assert.match(js,/\$\('ru-stable'\)\.textContent=stable/);
+  assert.match(js,/\$\('ru-stable'\)\.textContent=pending/);
   assert.match(js,/\$\('ru-draft'\)\.textContent=/);
   assert.match(js,/renderCaption\(\);/);
   assert.doesNotMatch(js,/\$\('ru'\)\.hidden\s*=|panel\.hidden\s*=/);

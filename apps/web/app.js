@@ -1,6 +1,7 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
-import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,clearBrowserData} from './local-store.js';
+import {SentenceWorker} from './sentence-worker.js';
+import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
 const kinds=['speech','image','text'];
@@ -11,7 +12,7 @@ let activeClassroom=null,classroomOptions=[],classroomRevision=0,renderedClassro
 let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve(),evidenceWarning='';
 let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 const CLIENT_VERSION='0.2.2'; // Selected frontend build label, not attested ASR engine metadata.
-let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null;
+let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
 let playbackUrl=null,playbackRevision=0;
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function renderClassroomLock(){
@@ -84,6 +85,8 @@ async function renderSelectedClassroom(){
     const sessions=await listClassroomRecordings(key);
     if(revision!==classroomRevision||key!==activeClassroom?.key||starting||running)return;
     $('history-empty').hidden=sessions.length>0;
+    const translations=await Promise.all(sessions.map(s=>loadBilingualSentences(s.id)));
+    if(revision!==classroomRevision||key!==activeClassroom?.key||starting||running)return;
     for(const [index,session] of sessions.entries()){
       const article=document.createElement('article');
       article.className='session-history-item';
@@ -94,7 +97,7 @@ async function renderSelectedClassroom(){
         (session.outcome==='interrupted'?' · 中断':'');
       const columns=document.createElement('div');
       columns.className='session-bilingual';
-      const ru=document.createElement('p');
+      const ru=document.createElement('div');
       ru.lang='ru';ru.textContent=session.transcript||'（这段录音没有识别文本）';
       if(Array.isArray(session.stableUnits)&&session.stableUnits.length){
         // Show only *confirmation* window time, never fake word timestamps.
@@ -107,9 +110,29 @@ async function renderSelectedClassroom(){
         columns.dataset.confirmedWindowEndSample=String(last.confirmedWindowEndSample);
         columns.append(provenance);
       }
-      const zh=document.createElement('p');
+      const zh=document.createElement('div');
       zh.lang='zh-CN';
       zh.textContent=session.translation||'（中文翻译尚未生成）';
+      const rows=translations[index];
+      if(rows.length){
+        ru.textContent='';
+        zh.textContent='';
+        for(const sentence of rows){
+          const ruLine=document.createElement('p');ruLine.lang='ru';ruLine.textContent=sentence.ru;
+          const zhLine=document.createElement('p');zhLine.lang='zh-CN';zhLine.textContent=sentence.zh;
+          ru.append(ruLine);zh.append(zhLine);
+        }
+        const consumed=rows.filter((row,i)=>!i||
+          row.consumedUnitIds.join('|')!==rows[i-1].consumedUnitIds.join('|'))
+          .map(row=>row.sourcePrefix).join(' ');
+        const remaining=session.transcript?.startsWith(consumed)?
+          session.transcript.slice(consumed.length).trimStart():session.transcript;
+        if(remaining){
+          const leftover=document.createElement('p');
+          leftover.textContent=remaining;leftover.className='history-untranslated';
+          ru.append(leftover);
+        }
+      }
       columns.append(ru,zh);
       article.append(label,columns);holder.append(article);
     }
@@ -230,8 +253,60 @@ function buttons(){
 function renderCaption(){
   // Separate immutable LocalAgreement prefix and replaceable hypothesis tail.
   // These are text containers only; no CSS-driven suppression of raw evidence.
-  $('ru-stable').textContent=stable;
+  const delivered=sourceJournal?.units.filter(unit=>sourceJournal.delivered.has(unit.id)).map(unit=>unit.text).join(' ')||'';
+  const pending=delivered && (stable===delivered||stable.startsWith(delivered+' '))?
+    stable.slice(delivered.length).trimStart():stable;
+  $('ru-stable').textContent=pending;
   $('ru-draft').textContent=draft?(stable?' '+draft:draft):'';
+}
+
+function showBilingualSentenceRows(rows,recordingId){
+  if(recordingId!==lessonId||!activeClassroom)return;
+  const holder=$('session-history');
+  let group=holder.querySelector('[data-translation-recording]');
+  if(!group||group.dataset.translationRecording!==recordingId){
+    group=document.createElement('article');
+    group.className='session-history-item';
+    group.dataset.translationRecording=recordingId;
+    const heading=document.createElement('time');
+    heading.textContent='当前录音 · 双语历史';
+    group.append(heading);
+    holder.append(group);
+  }
+  for(const sentence of rows){
+    const pair=document.createElement('div');
+    pair.className='session-bilingual';
+    const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
+    const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
+    pair.append(ru,zh);group.append(pair);
+  }
+  $('history-empty').hidden=true;
+  renderCaption();
+}
+function startSentenceWorker(){
+  sentenceWorker?.close();
+  sentenceWorker=null;
+  const p=profiles.text;
+  if(!p?.baseUrl||!p?.model||!p?.apiKey){
+    $('translation-status').textContent='未配置文字模型：继续仅显示俄语。';
+    return;
+  }
+  const id=lessonId,journal=sourceJournal,selectedClass=activeClassroom.id;
+  const worker=new SentenceWorker({
+    journal,profile:{...p},
+    save:rows=>saveBilingualSentences(id,rows),
+    onCommit:rows=>{
+      if(sentenceWorker===worker&&lessonId===id&&activeClassroom?.id===selectedClass)
+        showBilingualSentenceRows(rows,id);
+    },
+    onError:code=>{
+      if(sentenceWorker===worker&&lessonId===id)
+        $('translation-status').textContent='翻译暂不可用（'+code+'），俄语识别继续。';
+    }
+  });
+  sentenceWorker=worker;
+  $('translation-status').textContent='已启用正式双语历史处理';
+  worker.start();
 }
 
 function showTranscript(update){
@@ -293,6 +368,7 @@ async function onFailure(e){
   const message=errorMessage(e);
   if(!running&&!stopping&&!context){starting=false;$('error').textContent=message;buttons();return;}
   asr?.cancel();
+  sentenceWorker?.close();sentenceWorker=null;
   $('error').textContent=message;
   try{
     await cleanupMicrophone();
@@ -309,6 +385,7 @@ async function onFailure(e){
 async function start(){
   if(running||stopping||starting)return;
   if(!activeClassroom){$('error').textContent='请先在左侧添加并选择课程。';buttons();return;}
+  sentenceWorker?.close();sentenceWorker=null;
   releasePlayback(); // Never play existing audio into a new microphone recording.
   const p=profiles.speech;
   if(!p?.baseUrl||!p?.model||!p?.apiKey){
@@ -357,6 +434,7 @@ async function start(){
       $('duration').textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
     };
     running=true;starting=false;buttons();
+    startSentenceWorker();
     source.connect(capture);capture.connect(context.destination);
     const track=stream.getAudioTracks()[0];
     if(!track||track.readyState!=='live')throw Error('麦克风不可用');
@@ -379,6 +457,9 @@ async function stop(){
     ]);
     await cleanupMicrophone();
     await asr.stop();
+    // The ASR final flush is independent of LLM latency and may release
+    // confirmed end-of-class fragments for the history worker.
+    sentenceWorker?.finish();
     // stop() may emit the final raw hypothesis, so capture the latest
     // evidenceWrites promise only after its completion.
     await Promise.all([writing,evidenceWrites]);
@@ -409,6 +490,7 @@ async function stop(){
 }
 $('record').onclick=()=>running?void stop():void start();
 window.addEventListener('pagehide',()=>{
+  sentenceWorker?.close();
   releasePlayback();
   stream?.getTracks().forEach(t=>t.stop());
   asr?.cancel();
