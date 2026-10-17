@@ -125,7 +125,6 @@ export function auditAttribution(windows,model,caseName,index){
   const reducer=new TranscriptBuffer();
   let stable='',partial='',candidate=null,source=null;
   let origin=null;
-  let lastUnanchored=undefined;
   let sourceIndex=null;
   const snapshots=[];
   for(let i=0;i<windows.length;i++){
@@ -147,7 +146,6 @@ export function auditAttribution(windows,model,caseName,index){
     if(reducer.unanchored&&reducer.unanchored!==before){
       origin=i;
     }else if(!reducer.unanchored)origin=null;
-    lastUnanchored=reducer.unanchored;
     if(i===index||i===index+1||i===index+2||i===windows.length-1){
       snapshots.push({index:i,text:visible(stable,partial)});
     }
@@ -159,19 +157,24 @@ export function auditAttribution(windows,model,caseName,index){
   const candidateTokens=tokens(candidate);
   const firstWindow=windows[index];
   const next=windows.slice(index+1,index+LOOKAHEAD_WINDOWS+1);
-  const laterRawTokens=tokens(next.map(x=>x.text).join(' '));
+  // A concatenated sequence could invent a match crossing two separate
+  // hypotheses. Match each actual later window independently.
+  const laterTokens=next.map(x=>tokens(x.text));
   const focused=matchedWordMask(candidateTokens,tokens(model.focus));
   const context=matchedWordMask(candidateTokens,tokens(model.context));
   const modelMask=union(focused.mask,context.mask);
-  const later=matchedWordMask(candidateTokens,laterRawTokens);
+  const laterMatches=laterTokens.map(x=>matchedWordMask(candidateTokens,x));
+  const laterMask=laterMatches.reduce((acc,x)=>union(acc,x.mask),
+    Array(candidateTokens.length).fill(false));
+  const laterMaxRun=Math.max(0,...laterMatches.map(x=>x.maxContiguousRun));
   const final=matchedWordMask(candidateTokens,tokens(finalText));
   // A word matched lexically somewhere in the final document is NOT
   // necessarily the same occurrence or even the same utterance.
   const modelWords=modelMask.filter(Boolean).length;
-  const doubleSupported=countBoth(modelMask,later.mask);
+  const doubleSupported=countBoth(modelMask,laterMask);
   const notCovered=countSupportedButMissing(modelMask,final.mask);
   const independentlyAndLaterSupportedButFinalUnmatched=
-    modelMask.reduce((n,x,i)=>n+(x&&later.mask[i]&&!final.mask[i]?1:0),0);
+    modelMask.reduce((n,x,i)=>n+(x&&laterMask[i]&&!final.mask[i]?1:0),0);
   const sourceInterval=source?{windowIndex:sourceIndex,
     windowStartSample:source.start,windowEndSample:source.end}:null;
   return {
@@ -192,8 +195,8 @@ export function auditAttribution(windows,model,caseName,index){
     subsequentWindows:{
       examined:next.length,
       lastIndex:next.length?index+next.length:null,
-      maxContiguousMatch:later.maxContiguousRun,
-      matchedCandidateWords:later.matchedCandidateWords,
+      maxContiguousMatch:laterMaxRun,
+      matchedCandidateWords:laterMask.filter(Boolean).length,
       modelAndLaterSupportedWords:doubleSupported
     },
     finalVisibility:{
@@ -202,7 +205,7 @@ export function auditAttribution(windows,model,caseName,index){
       modelSupportedButNotLexicallyCoveredWords:notCovered,
       modelAndLaterSupportedButNotLexicallyCoveredWords:
         independentlyAndLaterSupportedButFinalUnmatched,
-      modelLaterAndCoveredWords:countTriple(modelMask,later.mask,final.mask)
+      modelLaterAndCoveredWords:countTriple(modelMask,laterMask,final.mask)
     },
     limitedPostWindowSnapshots:snapshots.filter(x=>x.index!==windows.length-1)
       .map(x=>({index:x.index,
