@@ -484,73 +484,100 @@ $('local-player').addEventListener('error',()=>{
   if(playbackUrl)$('local-feedback').textContent='本地音频解码失败，请下载 WAV 检查数据是否完整。';
 });
 
+let recordsRevision=0;
 async function renderLessons(){
+  const revision=++recordsRevision;
   const holder=$('local-lessons');
-  if(!holder)return;
+  const key=activeClassroom?.key;
+  const classroom=activeClassroom;
+  $('classroom-records-title').textContent=classroom?
+    classroom.date+' · '+classroom.title:'请选择左侧课程';
+  holder.replaceChildren();
+  if(!key){
+    releasePlayback();
+    $('local-feedback').textContent='';
+    return;
+  }
   try{
-    const lessons=await listLessons();
-    holder.replaceChildren();
+    const lessons=await listClassroomRecordings(key);
+    if(revision!==recordsRevision||key!==activeClassroom?.key)return;
+    if(!lessons.length){
+      const blank=document.createElement('p');
+      blank.className='classroom-records-empty';
+      blank.textContent='这节课还没有录音。选择后可以在主页面开始录音。';
+      holder.append(blank);
+      return;
+    }
     for(const item of lessons){
+      if(revision!==recordsRevision||key!==activeClassroom?.key)return;
       const row=document.createElement('div');
       row.className='saved-lesson';
       const label=document.createElement('span');
-      label.textContent=new Date(item.startedAt).toLocaleString()+' · '+(item.title||'未命名课堂')+' · '+Math.round(item.durationSeconds)+' 秒';
+      label.textContent=new Date(item.startedAt).toLocaleString()+
+        ' · '+Math.round(item.durationSeconds||0)+' 秒';
       row.append(label);
       if(item.hasAudio){
         const estimatedMiB=(Math.max(0,Number(item.durationSeconds)||0)*32000/(1024*1024)).toFixed(1);
         const audioInfo=document.createElement('span');
-        audioInfo.textContent='本地音频分块 · 约 '+estimatedMiB+' MiB（未校验完整性）';
+        audioInfo.textContent='录音约 '+estimatedMiB+' MiB（未校验完整性）';
         row.append(audioInfo);
         const playButton=document.createElement('button');
         playButton.type='button';playButton.textContent='播放录音';
-        playButton.disabled=running||stopping;
+        playButton.disabled=running||stopping||starting;
         playButton.onclick=()=>void loadPlayback(item);
         row.append(playButton);
-        const button=document.createElement('button');button.type='button';
-        button.textContent='下载 WAV';
+        const button=document.createElement('button');
+        button.type='button';button.textContent='下载 WAV';
         button.onclick=async()=>{
           try{
             const wav=await recordingWav(item.id);
             const url=URL.createObjectURL(wav);
-            const link=document.createElement('a');link.href=url;link.download='ru-class-'+item.id+'.wav';
+            const link=document.createElement('a');
+            link.href=url;link.download='ru-class-'+item.id+'.wav';
             link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
           }catch(e){$('local-feedback').textContent=errorMessage(e);}
         };
         row.append(button);
       }
       const evidenceButton=document.createElement('button');
-      evidenceButton.type='button';
-      evidenceButton.textContent='下载原始识别窗口';
-      evidenceButton.title='导出此浏览器保存的原始 ASR 窗口，不是人工校对文本；包含课堂原话，请妥善保管';
+      evidenceButton.type='button';evidenceButton.textContent='下载原始识别窗口';
+      evidenceButton.title='仅导出该录音会话保存的原始 ASR 窗口，包含私人课堂原话';
       evidenceButton.onclick=async()=>{
         try{
           const data=await lessonHypothesesJson(item.id);
           const url=URL.createObjectURL(data);
-          const link=document.createElement('a');link.href=url;link.download='ru-class-'+item.id+'-asr-windows.json';
+          const link=document.createElement('a');
+          link.href=url;link.download='ru-class-'+item.id+'-asr-windows.json';
           link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
         }catch(e){$('local-feedback').textContent=errorMessage(e);}
       };
       row.append(evidenceButton);
-      // A status from persisted IndexedDB must survive a reload, not merely
-      // the in-memory warning that was shown during microphone capture.
       const status=await lessonEvidenceStatus(item.id);
-      if(status.savedCount || status.status!=='legacy_unverified'){
-        const label=document.createElement('span');
-        label.textContent=status.status==='complete'?'原始窗口已完整保存':
+      if(revision!==recordsRevision||key!==activeClassroom?.key)return;
+      if(status.savedCount||status.status!=='legacy_unverified'){
+        const badge=document.createElement('span');
+        badge.className='saved-evidence-status';
+        badge.textContent=status.status==='complete'?'原始窗口已完整保存':
           status.status==='incomplete'?'原始窗口记录不完整':'旧记录：完整性未知';
-        row.append(label);
+        row.append(badge);
       }
-      holder.append(row);
       const caption=document.createElement('p');
-      caption.className='saved-transcript';caption.textContent=item.transcript||'（无识别文本）';
-      holder.append(caption);
+      caption.className='saved-transcript';
+      caption.textContent=item.transcript||'（无识别文本）';
+      const wrapper=document.createElement('article');
+      wrapper.className='classroom-recording';
+      wrapper.append(row,caption);
+      holder.append(wrapper);
     }
-  }catch(e){$('local-feedback').textContent=errorMessage(e);}
+  }catch(e){
+    if(revision===recordsRevision)
+      $('local-feedback').textContent='读取课堂记录失败：'+errorMessage(e);
+  }
 }
 $('clear-local').onclick=async()=>{
   if(running||stopping||starting){$('local-feedback').textContent='请先停止录音，再清空浏览器数据。';return;}
   if(!confirm('确定清空此浏览器里所有 API 配置、课堂文本和录音吗？此操作无法撤销。'))return;
-  try{releasePlayback();await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();await renderLessons();activeClassroom=null;lessonId='';await refreshClassrooms();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
+  try{releasePlayback();await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();activeClassroom=null;lessonId='';await refreshClassrooms();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
   catch(e){$('local-feedback').textContent='清空失败：'+errorMessage(e);}
 };
 try{profiles={speech:null,image:null,text:null,...await loadProfiles()};}
