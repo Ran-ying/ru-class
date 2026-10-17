@@ -37,10 +37,12 @@ public provider default or automatic cross-device synchronization.
 - Existing baseline corrected same-range replay idempotence, non-consecutive
   silence handling and first-stop prefix consistency. Genuine rolling
   overlap repetition, ambiguous spoken repetition, and lost phrases remain.
-- An independent PR #14 adds *browser-local raw ASR window evidence* before
-  the lossy subtitle projection. Its storage migration and export still need
-  real Safari testing. Do not merge without its documented review gate in
-  `docs/asr-evidence-v0.1.md` on that PR branch.
+- The raw-window journal originally developed in PR #14 has been
+  forward-ported into main on the user's request. It saves raw ASR evidence
+  before lossy subtitle projection. Its Safari storage migration/export
+  still needs real-device testing under `docs/asr-evidence-v0.1.md` and
+  Issue #28; merging this recoverability feature was not a claim of
+  physical-browser acceptance.
 - Main includes **non-destructive diagnostic counters** for unrelated
   unmatched-window replacements, exposed only in the local replay report.
   These count ambiguity, not confirmed lost speech; the live text algorithm
@@ -99,6 +101,30 @@ PR #14 Safari IndexedDB migration/export acceptance is independent;
 P2 recording/playback/recovery stays deferred.
 Track P1 in [Issue #16](https://github.com/Ran-ying/ru-class/issues/16).
 
+## Browser raw-ASR evidence journal integrated for real Safari validation
+
+The PR #14 feature implementation has been forward-ported from its
+outdated branch to current main. Every **new** accepted ASR provider
+window is persisted in browser-local IndexedDB v2 (same database name;
+additive `hypotheses` store) before the existing
+`TranscriptBuffer` projection changes the displayed text. Users
+can download private source-window JSON under
+**Settings → Local Data → Download raw ASR windows**; old sessions
+from v1 do not acquire windows retroactively. Raw text, source sample
+start/end/final flags and elapsed inference time remain on the user's
+device, never on the RU-Class server. Storage failure should produce
+a visible warning; an incomplete journal is not a verified full
+recording.
+
+This implementation was merged to allow owner-controlled MacBook
+Safari testing, **not** because physical Safari IndexedDB migration,
+two-tab upgrades, microphone source provenance, storage quota/error
+and JSON export admission had already passed. See [evidence-journal
+documentation](asr-evidence-v0.1.md) and [Issue #28](https://github.com/Ran-ying/ru-class/issues/28)
+for the pending acceptance. The production transcript reducer algorithm
+is unchanged; Draft PR #25's automatic source-window quarantine remains
+OFF and unmerged. Prior lost C2 realtime positions are not restored.
+
 ## M4 reconstructed C1 and partial C2 small-model/PR #25 replay (2026-10-17)
 
 [Detailed operator-reported numerical results](p1-m4-c1-reconstruction-c2-focus-2026-10-17.md)
@@ -142,8 +168,9 @@ hypothesis journaling from PR #14 in Safari (IndexedDB v1→v2,
 two-tab upgrades, accurate per-request source coordinates, export
 without keys, and error visibility). A future **new** authentic
 captured realtime window sequence can then be replayed deterministically;
-it cannot retroactively re-create the original C2 timing. Keep
-PR #14 unmerged until that acceptance, and do not revive PR #13.
+it cannot retroactively re-create the original C2 timing. The
+raw-window recording feature is now integrated, while Issue #28
+remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
 ## Offline P1 audio-evidence audit helper
