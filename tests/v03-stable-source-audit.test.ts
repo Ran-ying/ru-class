@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 // @ts-ignore Browser ESM JavaScript intentionally has no TypeScript declarations.
 import {TranscriptBuffer} from '../apps/web/transcript.js';
 // @ts-ignore
@@ -98,6 +99,14 @@ test('source frames out of order or malformed are refused before projection comp
   changed.windows[1].window_end_sample=48000;
   changed.sample_rate=8000;
   assert.throws(()=>auditStableSourceExport(changed),/UNSUPPORTED_SOURCE_SAMPLE_RATE/);
+});
+test('switching classrooms clears stale live subtitles before async IndexedDB finishes',()=>{
+  const code=readFileSync('apps/web/app.js','utf8');
+  const start=code.indexOf('async function renderSelectedClassroom(){');
+  const fetch=code.indexOf('const sessions=await listClassroomRecordings(key);',start);
+  const clear=code.indexOf("if(selectedKey!==renderedClassroomKey){",start);
+  assert.ok(start>=0&&clear>start&&clear<fetch);
+  assert.ok(code.slice(clear,fetch).includes("stable='';draft='';renderCaption();"));
 });
 test('eight-second cut-off cannot be bypassed with a forged external finalized/clock override',()=>{
   const j=new StableUnitJournal({
