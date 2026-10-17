@@ -52,6 +52,27 @@ Do not turn its thresholds or risk counters into automatic deletion,
 freezing of corrections, or stable transcript rewrites. No raw classroom
 text, voice or prior temporary cloud Key belongs in GitHub or CI.
 
+## P1 browser-session loop canary — default OFF (draft)
+
+`apps/web/asr-loop-risk.js` and
+`apps/web/caption-loop-guard.js` expose a conservative lexically
+abnormal-ASR-window quarantine candidate. It is reachable only via an
+explicit developer-only fourth `BrowserAsrSession` constructor
+argument `{captionPolicy:'extreme-loop-quarantine'}` for a **new
+session**. The existing website, persisted profiles and user controls
+do NOT select it; the default remains original `TranscriptBuffer`.
+Read `docs/p1-browser-loop-canary.md`.
+
+This is a research opt-in, NOT a production-recommended setting.
+Possible genuine repeated speech can be falsely quarantined. A running
+session must never switch reducer strategy after sending append-only
+`stable_delta`. The Mac must replay this new browser canary over all
+private C1/C2 original windows and inherited duplicate/stop gates;
+the earlier PR #22 results do NOT constitute acceptance of this
+separate implementation. Preserve original ASR-window evidence (PR #14
+Safari gate) before any public canary. No Russian human listening or
+further revoked-key cloud call is required.
+
 ## P1 official Beijing-region cloud option
 
 The user also authorized the **official Alibaba Cloud Beijing**

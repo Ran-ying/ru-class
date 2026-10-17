@@ -1,5 +1,6 @@
 import {wavHeader} from './local-store.js';
 import {TranscriptBuffer} from './transcript.js';
+import {LoopQuarantineTranscript} from './caption-loop-guard.js';
 
 export const RATE=16000;
 export const WINDOW_SECONDS=8;
@@ -94,11 +95,18 @@ export function wavBlob(samples){
 }
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export class BrowserAsrSession {
-  constructor(profile,onUpdate,onError){
+  constructor(profile,onUpdate,onError,options={}){
+    // Internal opt-in for a NEW session only. No persisted setting or public
+    // UI exposes this experimental policy; running sessions cannot switch.
+    const policy=options?.captionPolicy??'baseline';
+    if(policy!=='baseline'&&policy!=='extreme-loop-quarantine')
+      throw Error('INVALID_CAPTION_POLICY');
+    this.captionPolicy=policy;
     this.profile=validateProfile(profile);
     this.onUpdate=onUpdate;this.onError=onError;
     this.ring=new AudioRing();
-    this.transcript=new TranscriptBuffer();
+    this.transcript=policy==='extreme-loop-quarantine'
+      ?new LoopQuarantineTranscript():new TranscriptBuffer();
     this.latestEnd=0;
     this.active=true;
     this.inFlight=null;
