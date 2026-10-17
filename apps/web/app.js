@@ -14,23 +14,64 @@ let stable='',draft='',hasTranscript=false,marks=[];
 let playbackUrl=null,playbackRevision=0;
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function renderClassroomLock(){
-  $('transcription').className='transcription'+(activeClassroom?'':' is-locked');
-  $('transcription-lock').hidden=!!activeClassroom;
+  // Older markup lacked id="transcription", causing a null access and
+  // leaving the right-hand caption pane permanently locked after selection.
+  $('transcription').classList.toggle('is-locked',!activeClassroom);
+  $('transcription-lock').hidden=Boolean(activeClassroom);
   $('session-history').hidden=!activeClassroom;
+  $('classroom-date').textContent=activeClassroom?.date||'尚未选择课程';
+  $('classroom-title').textContent=activeClassroom?.title||'请选择一节课';
   buttons();
+}
+function renderClassroomList(){
+  const holder=$('classroom-list');
+  holder.replaceChildren();
+  for(const item of classroomOptions){
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='classroom-list-item'+(item.key===activeClassroom?.key?' is-selected':'');
+    button.setAttribute('aria-current',item.key===activeClassroom?.key?'true':'false');
+    const date=document.createElement('time');
+    date.textContent=item.date;
+    const name=document.createElement('strong');
+    name.textContent=item.title;
+    const meta=document.createElement('small');
+    meta.textContent=(item.sessionCount||0)+' 段录音';
+    button.append(date,name,meta);
+    button.onclick=()=>{
+      if(running||starting||stopping)return;
+      releasePlayback();
+      lessonId='';
+      activeClassroom=item;
+      $('classroom-feedback').textContent='';
+      $('error').textContent='';
+      renderClassroomLock(); // Unlock synchronously, before awaited IndexedDB.
+      renderClassroomList();
+      void renderSelectedClassroom();
+      void renderLessons();
+    };
+    holder.append(button);
+  }
+  if(!classroomOptions.length){
+    const empty=document.createElement('p');
+    empty.className='classroom-list-empty';
+    empty.textContent='还没有课程。点击「添加课程」创建第一节课。';
+    holder.append(empty);
+  }
 }
 async function renderSelectedClassroom(){
   const revision=++classroomRevision;
   const holder=$('session-history');
   holder.replaceChildren();
+  renderClassroomLock();
   if(!activeClassroom){
     $('ru').textContent='';$('duration').textContent='00:00';
-    $('latency').textContent='—';stable='';draft='';renderClassroomLock();return;
+    $('latency').textContent='—';stable='';draft='';return;
   }
   const key=activeClassroom.key;
   try{
     const sessions=await listClassroomRecordings(key);
-    if(revision!==classroomRevision||key!==activeClassroom?.key)return;
+    if(revision!==classroomRevision||key!==activeClassroom?.key||starting||running)return;
     for(const session of sessions){
       const article=document.createElement('article');
       article.className='session-history-item';
@@ -49,48 +90,48 @@ async function renderSelectedClassroom(){
       String(Math.floor((last.durationSeconds||0)/60)).padStart(2,'0')+':'+
       String(Math.floor((last.durationSeconds||0)%60)).padStart(2,'0'):'00:00';
     $('latency').textContent=last?'已加载课堂历史录音':'—';
-  }catch(e){if(revision===classroomRevision)$('classroom-feedback').textContent='读取课堂失败：'+errorMessage(e);}
-  renderClassroomLock();
+  }catch(e){
+    if(revision===classroomRevision)
+      $('classroom-feedback').textContent='读取课堂失败：'+errorMessage(e);
+  }
 }
 async function refreshClassrooms(preferredKey=''){
   try{
     const entries=await listClassrooms();
     classroomOptions=entries;
-    const select=$('classroom-select');
-    const placeholder=document.createElement('option');
-    placeholder.value='';placeholder.textContent='请先添加或选择课程';
-    const options=entries.map(item=>{
-      const option=document.createElement('option');
-      option.value=item.key;
-      option.textContent=item.date+' · '+item.title;
-      return option;
-    });
-    select.replaceChildren(placeholder,...options);
     const selected=entries.find(x=>x.key===(preferredKey||activeClassroom?.key));
     activeClassroom=selected||null;
-    select.value=activeClassroom?.key||'';
     $('classroom-feedback').textContent='';
+    renderClassroomLock();
+    renderClassroomList();
     await renderSelectedClassroom();
+    await renderLessons();
   }catch(e){
     activeClassroom=null;renderClassroomLock();
     $('classroom-feedback').textContent='读取课程列表失败：'+errorMessage(e);
   }
 }
-$('classroom-select').onchange=()=>{
-  if(starting||running||stopping){$('classroom-select').value=activeClassroom?.key||'';return;}
-  activeClassroom=classroomOptions.find(x=>x.key===$('classroom-select').value)||null;
-  lessonId='';
-  $('error').textContent='';
-  void renderSelectedClassroom();
-};
 $('classroom-add').onclick=()=>{
   if(starting||running||stopping)return;
+  $('classroom-create-form').hidden=true;
+  $('classroom-create-feedback').textContent='';
+  $('classroom-dialog').showModal();
+  renderClassroomList();
+  void renderLessons();
+};
+$('classroom-close').onclick=()=>$('classroom-dialog').close();
+$('classroom-dialog').addEventListener('close',releasePlayback);
+$('classroom-new').onclick=()=>{
   $('new-classroom-title').value='';
   $('new-classroom-date').value=localCalendarDate(Date.now());
   $('classroom-create-feedback').textContent='';
-  $('classroom-dialog').showModal();
+  $('classroom-create-form').hidden=false;
+  $('new-classroom-title').focus();
 };
-$('classroom-cancel').onclick=()=>$('classroom-dialog').close();
+$('classroom-cancel').onclick=()=>{
+  $('classroom-create-form').hidden=true;
+  $('classroom-create-feedback').textContent='';
+};
 $('classroom-create-form').onsubmit=e=>{
   e.preventDefault();
   if(starting||running||stopping)return;
@@ -101,7 +142,7 @@ $('classroom-create-form').onsubmit=e=>{
   void (async()=>{
     try{
       const created=await createClassroom({title:requestedTitle,date:requestedDate});
-      $('classroom-dialog').close();
+      $('classroom-create-form').hidden=true;
       await refreshClassrooms(created.key);
     }catch(err){
       $('classroom-create-feedback').textContent=
@@ -115,8 +156,8 @@ $('classroom-create-form').onsubmit=e=>{
 function buttons(){
   $('record').disabled=stopping||starting||!activeClassroom;
   $('record').textContent=stopping?'正在停止…':starting?'正在启动…':running?'停止录音':'开始录音';
-  $('classroom-select').disabled=starting||running||stopping;
   $('classroom-add').disabled=starting||running||stopping;
+  $('classroom-new').disabled=starting||running||stopping;
   for(const id of ['speech-url','speech-model','speech-model-select','speech-key','speech-save','speech-test','speech-list','speech-refresh'])
     $(id).disabled=starting||running||stopping;
 }
@@ -289,17 +330,6 @@ window.addEventListener('pagehide',()=>{
 });
 
 // User-model configuration. The RU-Class server is NEVER consulted.
-function setTab(page){
-  if(page!=='access')releasePlayback();
-  for(const name of ['models','access']){
-    const selected=(name===page);
-    $('panel-'+name).hidden=!selected;
-    $('tab-'+name).setAttribute('aria-selected',String(selected));
-    $('tab-'+name).tabIndex=selected?0:-1;
-  }
-}
-$('tab-models').onclick=()=>setTab('models');
-$('tab-access').onclick=()=>{setTab('access');void renderLessons();};
 function reset(kind,clearKey=true){
   const step=stages[kind];step.revision++;step.ready=false;step.manual=false;
   $(kind+'-discovery').hidden=false;
@@ -404,7 +434,6 @@ function displayProfiles(){
 $('settings-open').onclick=()=>{
   displayProfiles();
   $('settings').showModal();
-  setTab('models');
 };
 for(const kind of kinds){
   $('model-'+kind).onsubmit=e=>{e.preventDefault();void modelAction(kind,'save');};
@@ -451,7 +480,6 @@ async function loadPlayback(item){
       $('local-feedback').textContent='无法播放录音：'+errorMessage(e);
   }
 }
-$('settings').addEventListener('close',releasePlayback);
 $('local-player').addEventListener('error',()=>{
   if(playbackUrl)$('local-feedback').textContent='本地音频解码失败，请下载 WAV 检查数据是否完整。';
 });
