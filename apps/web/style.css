@@ -179,7 +179,7 @@ main{grid-template-rows:minmax(0,1fr)}
 #classroom-feedback{font-size:12px;color:#a44737;margin:5px 0 0}
 #classroom-feedback:empty{display:none}
 .transcription{position:relative;border:0;background:transparent}
-.transcription .live{border-top:0;background:transparent}
+.transcription .live{border-top:1px solid #d9e2d9;background:transparent}
 .transcription .history-title{border-bottom:0}
 .transcription .bottom-toolbar{border-top:0;background:transparent}
 .transcription.is-locked .history,
