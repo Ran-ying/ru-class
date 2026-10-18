@@ -96,3 +96,20 @@ test('RU caption area stays mounted and blank until actual Russian text arrives'
       'RU should have no state-dependent placeholder: '+placeholder);
   }
 });
+
+// The About tab contains browser-only request latency and Token statistics.
+test('About exposes request metrics without leaking credentials or transcript text',()=>{
+  const html=readFileSync('apps/web/index.html','utf8');
+  const app=readFileSync('apps/web/app.js','utf8');
+  const store=readFileSync('apps/web/local-store.js','utf8');
+  for(const id of ['llm-metrics-summary','llm-metrics-rows','panel-about']){
+    assert.match(html,new RegExp('id="'+id+'"'));
+  }
+  assert.match(app,/function recordTextRequestMetric\(metric\)/);
+  assert.match(app,/onRequestMetric:recordTextRequestMetric/g);
+  assert.match(app,/loadTextRequestMetrics\(\)/);
+  assert.match(store,/indexedDB.open\(DB_NAME,6\)/);
+  assert.match(store,/db.createObjectStore\('llmMetrics'/);
+  assert.match(store,/const row=\{/);
+  assert.match(store,/\['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences','llmMetrics'\]/);
+});

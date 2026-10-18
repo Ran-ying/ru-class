@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-ignore Browser-only module with no TypeScript declaration.
-import {loadProfiles,saveProfile,saveLesson,listLessons,saveAudioChunk,recordingWav,clearBrowserData} from '../apps/web/local-store.js';
+import {loadProfiles,saveProfile,saveLesson,listLessons,saveAudioChunk,recordingWav,saveTextRequestMetric,loadTextRequestMetrics,clearBrowserData} from '../apps/web/local-store.js';
 
 // Minimal asynchronous IndexedDB contract to exercise real store transactions,
 // browser-only persistence, composite chunk keys and clear without a DOM.
@@ -56,7 +56,18 @@ test('local browser profiles, text and WAV chunks persist independently and can 
     const bytes=new Uint8Array(await wav.arrayBuffer());
     assert.equal(new TextDecoder().decode(bytes.slice(0,4)),'RIFF');
     assert.equal(new DataView(bytes.buffer).getUint32(40,true),8);
+    await saveTextRequestMetric({at:12345,provider:'DeepSeek',model:'deepseek-flash',
+      status:'ok',elapsedMs:1500,totalTokens:200,reasoningTokens:0,
+      promptTokens:120,completionTokens:80,cacheHitTokens:10,
+      apiKey:'secret must not persist',prompt:'sensitive text must not persist'});
+    const savedMetrics=await loadTextRequestMetrics();
+    assert.equal(savedMetrics.length,1);
+    assert.equal(savedMetrics[0].totalTokens,200);
+    assert.equal(savedMetrics[0].reasoningTokens,0);
+    assert.doesNotMatch(JSON.stringify(savedMetrics),/secret must not persist|sensitive text must not persist/);
+    assert.ok(objects.has('llmMetrics'),'non-destructive browser upgrade must add diagnostic store');
     await clearBrowserData();
+    assert.deepEqual(await loadTextRequestMetrics(),[]);
     assert.deepEqual(await loadProfiles(),{});
     assert.deepEqual(await listLessons(),[]);
   }finally{
