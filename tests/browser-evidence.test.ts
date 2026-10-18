@@ -452,7 +452,7 @@ test('classrooms display newest creation first regardless of selected lesson dat
     {key:'2026-10-18:middle',createdAt:500,date:'2026-10-18',title:'中间课程'},
     {key:'2026-10-11:legacy',createdAt:undefined,date:'2026-10-11',title:'旧数据'},
   ];
-  assert.deepEqual(sortClassroomsByCreatedAt(items).map(x=>x.title),[
+  assert.deepEqual(sortClassroomsByCreatedAt(items).map((x:any)=>x.title),[
     '新添加的旧课','中间课程','未来课程','旧数据']);
   assert.equal(items[0].title,'未来课程','sorting does not mutate caller data');
 });
