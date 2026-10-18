@@ -79,6 +79,13 @@
       <p>为俄语课堂提供实时语音识别、录音保存、正式俄中双语句子历史和手动恢复未完成翻译。</p>
       <p>无需登录。API 配置、Token、录音和历史记录保存在当前浏览器中；音频和待翻译的俄语只会发送至你自行配置的 API 提供商，可能产生费用。</p>
       <p>下方实时中文字幕及词级时间对齐尚未实现。重要课堂请及时导出 WAV 和原始识别记录。</p>
+      <section class="llm-metrics" aria-label="文字模型请求统计">
+        <h4>文字 API 请求统计</h4>
+        <p>仅保存在此浏览器。记录调用时间、模型、成功或失败、耗时及 API 返回的 Token 统计；不记录请求正文、翻译内容或 Token 密钥。推理 Token 为 — 表示服务商未报告，不代表零。</p>
+        <p id="llm-metrics-summary" role="status">正在读取统计…</p>
+        <div class="llm-metrics-scroll"><table><thead><tr><th>时间</th><th>模型</th><th>状态</th><th>耗时</th><th>总 Token</th><th>推理 Token</th></tr></thead><tbody id="llm-metrics-rows"></tbody></table></div>
+        <p>最近 30 条请求显示在此，汇总涵盖此浏览器保存的全部请求；清空本地数据也会清空统计。</p>
+      </section>
       <a href="https://github.com/Ran-ying/ru-class" target="_blank" rel="noopener noreferrer">项目源码与使用说明</a>
     </div>
   </section>
