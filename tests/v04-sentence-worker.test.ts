@@ -271,9 +271,8 @@ test('one model call contains at most two completed sentences and no unconfirmed
   assert.deepEqual(nextReady(j),[],'unfinished tail is held until aged or full stop');
   j.add({stable_delta:' продолжается.',window_start_sample:RATE,
     window_end_sample:2*RATE});
-  assert.deepEqual(nextReady(j),[],'new fragment cannot turn already-ended stable tail into a fake complete sentence');
-  j.add({stable_delta:'',window_start_sample:2*RATE,window_end_sample:7*RATE});
-  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['И ещё','продолжается.']);
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['И ещё','продолжается.'],
+    'a new confirmed sentence-ending fragment promptly releases its incomplete prefix');
 });
 test('as each complete sentence arrives, each durable commit appears separately before Stop',async()=>{
   const journal=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
