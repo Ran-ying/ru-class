@@ -140,3 +140,24 @@ all remaining confirmed fragments, including unfinished sentences.
 The lower tentative ASR draft is never sent early, and this does not guarantee
 a fixed speech-to-Chinese latency because ASR stability and network response
 are independently variable.
+
+
+## Conservative semantic completion of punctuation-free confirmed RU (2026-10-18)
+
+A teacher's Russian sentence may lack Whisper-inserted terminal punctuation.
+We now allow the EXISTING `requestSentenceBatch` LLM response to decide
+whether a sufficient, already LocalAgreement-confirmed source prefix is a
+semantically complete thought. A probe requires at least nine confirmed words
+with two distinct ASR confirmation window ends, or sixteen words confirmed in
+one window. It selects the **shortest** suitable prefix and never includes
+mutable `partial_text`. The provider may consume only whole immutable units
+as an exact prefix; it can return zero when a clause remains unfinished.
+To avoid repeated billable queries on identical text, a zero result suppresses
+further probes until new stable units actually arrive (or a real final flush).
+On newly confirmed text, a previous undecidable prefix can be extended, even
+where the normal batch limit would otherwise hide newer source. Short or
+ambiguous text retains the conservative +4-second eligible gate. No separate
+model, request endpoint, automatic paid recovery on page load, audio pause
+detector, or new IndexedDB schema is introduced. This remains a semantic
+inference rather than an objectively verified Russian sentence boundary.
+

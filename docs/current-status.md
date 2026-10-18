@@ -623,3 +623,16 @@ Stop retains full final-drain behavior. No ASR draft is promoted; the provider
 response must validate and persist before the bottom subtitle acknowledges
 its source. New synthetic tests verify low-latency incremental commits,
 sentence splitting, old fallback and no mutation of draft evidence.
+
+
+## Semantic Russian completion without punctuation (2026-10-18)
+
+Beyond punctuation-fast dispatch, the sentence worker now probes a minimum
+confirmed Russian source prefix for semantic completion if punctuation is
+absent: >=9 words from >=2 confirmation windows or >=16 confirmed words
+within one. DeepSeek's existing translation response may return zero for
+unfinished clauses. Zero-result source signatures are not re-billed without
+new stable text, and the bounded prefix can include newly confirmed context
+after an undecidable attempt. Short ambiguous fragments retain +4s fallback.
+The raw ASR, immutable IDs, storage and complete-recording drain are
+unchanged. No speech silence is inferred from nonexistent word timing.

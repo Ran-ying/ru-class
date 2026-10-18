@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-ignore Browser JavaScript has no TS declarations.
-import {SentenceWorker,nextReady,validateSentenceResult,requestSentenceBatch,LLM_TIMEOUT_MS,textCompletionBody,textUsage,DEEPSEEK_TRANSLATION_MAX_TOKENS} from '../apps/web/sentence-worker.js';
+import {SentenceWorker,nextReady,validateSentenceResult,requestSentenceBatch,LLM_TIMEOUT_MS,textCompletionBody,textUsage,DEEPSEEK_TRANSLATION_MAX_TOKENS,SEMANTIC_PROBE_MIN_WORDS} from '../apps/web/sentence-worker.js';
 // @ts-ignore
 import {StableUnitJournal,RATE} from '../apps/web/stable-units.js';
 
@@ -312,4 +312,99 @@ test('confirmed speech without sentence punctuation keeps conservative aged fall
   assert.deepEqual(nextReady(j),[]);
   j.add({stable_delta:'',window_start_sample:RATE,window_end_sample:5*RATE});
   assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Незаконченная мысль']);
+});
+
+// Semantic completeness is evaluated in the EXISTING LLM translation response
+// and never granted to draft/partial ASR text.
+test('confirmed unpunctuated speech can be probed before the +4s fallback',()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'semantic',startedAt:1000});
+  journal.add({stable_delta:'Я сегодня хотел объяснить студентам важный принцип',window_start_sample:0,window_end_sample:RATE});
+  assert.deepEqual(nextReady(journal),[],'a short single-window fragment is not enough context');
+  journal.add({stable_delta:'никто не должен знать какую таблицу я открываю',
+    window_start_sample:RATE,window_end_sample:2*RATE});
+  assert.deepEqual(journal.ready(),[],'no +4s gate has elapsed');
+  assert.equal(SEMANTIC_PROBE_MIN_WORDS,9);
+  assert.deepEqual(nextReady(journal).map((u:any)=>u.id),['semantic:0','semantic:1']);
+});
+test('semantic probe uses shortest stable source prefix, not an eight-fragment burst',()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'minimal',startedAt:1000});
+  for(let i=0;i<8;i++)journal.add({stable_delta:'здесь четыре довольно простых слова',
+    window_start_sample:i*RATE,window_end_sample:(i+1)*RATE});
+  assert.deepEqual(nextReady(journal).map((x:any)=>x.id),['minimal:0','minimal:1'],
+    'two confirmed fragments are enough for the earliest semantic check');
+});
+test('small snippets and mutable ASR draft do not trigger paid early semantic probes',()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'short',startedAt:1000});
+  journal.add({stable_delta:'Это',partial_text:'Почему проверка завершилась.',
+    window_start_sample:0,window_end_sample:RATE});
+  journal.add({stable_delta:'сложно',partial_text:'Ответьте на вопрос.',
+    window_start_sample:RATE,window_end_sample:2*RATE});
+  assert.deepEqual(nextReady(journal),[]);
+  assert.equal(journal.units.length,2);
+  journal.add({stable_delta:'',window_start_sample:2*RATE,window_end_sample:6*RATE});
+  assert.deepEqual(nextReady(journal).map((x:any)=>x.id),['short:0','short:1'],
+    'short confirmed text still uses the old conservative age fallback');
+});
+test('the model may translate a complete thought without punctuation and ACK only durable source',async()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'meaning',startedAt:1000});
+  journal.add({stable_delta:'Сначала нужно определить какие данные сохраняет система',
+    window_start_sample:0,window_end_sample:RATE});
+  journal.add({stable_delta:'потому что приватность здесь особенно важна',
+    window_start_sample:RATE,window_end_sample:2*RATE});
+  const saved:any[]=[];
+  const worker=new SentenceWorker({journal,profile:{},intervalMs:99999,
+    request:async(_:unknown,units:any[])=>({
+      consumed_units:2,source_prefix:units.map(x=>x.text).join(' '),
+      sentences:[{ru:units.map(x=>x.text).join(' ')+'.',zh:'首先需要确定保存了哪些数据，因为隐私很重要。'}]
+    }),save:async(rows:any[])=>saved.push(...rows)});
+  await worker.tick();worker.close();
+  assert.equal(saved.length,1);
+  assert.deepEqual(saved[0].consumedUnitIds,['meaning:0','meaning:1']);
+  assert.equal(journal.delivered.size,2);
+  assert.deepEqual(journal.ready(),[]);
+});
+test('zero-consumption does not repeat paid queries until a new confirmed source unit arrives',async()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'zero',startedAt:1000});
+  for(let i=0;i<8;i++)journal.add({stable_delta:'сложная проверка требует анализа',
+    window_start_sample:i*RATE,window_end_sample:(i+1)*RATE});
+  let requests=0;const lengths:number[]=[];
+  const worker=new SentenceWorker({journal,profile:{},intervalMs:99999,
+    request:async(_:unknown,units:any[])=>{
+      requests++;lengths.push(units.length);
+      return {consumed_units:0,source_prefix:'',sentences:[]};
+    },save:async()=>assert.fail('an empty response must not save a sentence')});
+  await worker.tick();
+  await worker.tick();
+  journal.add({stable_delta:'',window_start_sample:8*RATE,window_end_sample:14*RATE});
+  await worker.tick();
+  assert.equal(requests,1,'clock advancement without new stable text must not bill again');
+  journal.add({stable_delta:'добавили уточнение в конце ответа',
+    window_start_sample:14*RATE,window_end_sample:15*RATE});
+  await worker.tick();worker.close();
+  assert.equal(requests,2,'one new confirmed fragment authorizes one new semantic check');
+  assert.deepEqual(lengths,[2,3],'second probe includes new context without reusing identical source');
+  assert.equal(journal.delivered.size,0);
+});
+test('new units beyond an eight-unit cap can enlarge a previously undecidable source prefix',async()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'capped',startedAt:1000});
+  for(let i=0;i<8;i++)journal.add({stable_delta:'длинная неполная устная фраза',
+    window_start_sample:i*RATE,window_end_sample:(i+1)*RATE});
+  let calls=0,received:number[]=[];const writes:any[]=[];
+  const worker=new SentenceWorker({journal,profile:{},intervalMs:99999,
+    request:async(_:unknown,units:any[])=>{
+      calls++;received.push(units.length);
+      return calls===1?{consumed_units:0,source_prefix:'',sentences:[]}:
+        {consumed_units:units.length,source_prefix:units.map(u=>u.text).join(' '),
+          sentences:[{ru:'Полная фраза.',zh:'完整的句子。'}]};
+    },save:async(rows:any[])=>writes.push(...rows)});
+  await worker.tick();
+  assert.equal(calls,1);
+  journal.add({stable_delta:'и сейчас её объяснение закончилось',
+    window_start_sample:8*RATE,window_end_sample:9*RATE});
+  await worker.tick();worker.close();
+  assert.equal(calls,2);
+  assert.deepEqual(received,[2,3]);
+  assert.equal(writes.length,1);
+  assert.deepEqual(writes[0].consumedUnitIds,['capped:0','capped:1','capped:2']);
+  assert.equal(journal.delivered.size,3);
 });
