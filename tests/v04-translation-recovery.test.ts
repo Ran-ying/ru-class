@@ -76,8 +76,7 @@ test('recovery is an explicit user control, not automatic on page load',()=>{
 // Static render projection is conservative: it removes only verified prefix
 // unit IDs, and does not delete a legitimate repeated later utterance.
 test('reloaded caption shows only pending text after durable bilingual commit',()=>{
-  const session=saved();
-  session.transcript='Первая фраза Первая фраза Третья фраза';
+  const session={...saved(),transcript:'Первая фраза Первая фраза Третья фраза'};
   const rows=[{...acceptedRows()[0],sourcePrefix:'Первая фраза',
     consumedUnitIds:['recording-1:0']}];
   assert.equal(pendingTranscriptAfterCommits(session,rows),
@@ -94,8 +93,7 @@ test('reloaded caption shows only pending text after durable bilingual commit',(
   assert.equal(pendingTranscriptAfterCommits(session,all),'');
 });
 test('unknown or forged consumption never removes original transcript on reload',()=>{
-  const session=saved();
-  session.transcript='Первая фраза Первая фраза Третья фраза';
+  const session={...saved(),transcript:'Первая фраза Первая фраза Третья фраза'};
   const first=acceptedRows()[0];
   assert.equal(pendingTranscriptAfterCommits(session,[{...first,sourcePrefix:'wrong'}]),
     session.transcript);
