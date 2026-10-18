@@ -44,7 +44,7 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
   const source=units.map(u=>u.text).join(' ');
   if(source.length>4500)throw Error('LLM_INPUT_TOO_LONG');
   const messages=[
-    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Return ONE Russian sentence and its ONE matching Simplified Chinese translation per sentences array element. Split long responses into multiple aligned sentence pairs; never put multiple sentences or newlines in a single row. Multiple sentence-pair elements are allowed. If no complete sentence yet, return consumed_units 0, source_prefix empty and sentences []. When final, process meaningful remaining fragments. Never modify source_prefix.'},
+    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Return ONE Russian sentence and its ONE matching Simplified Chinese translation per sentences array element. Split long responses into multiple aligned sentence pairs; never put multiple sentences or newlines in a single row. Multiple sentence-pair elements are allowed. Use Russian meaning and syntax as well as punctuation to decide if an already-confirmed utterance is a complete independent sentence. A sentence may be complete WITHOUT terminal punctuation. Only consume a prefix of WHOLE fragments which expresses one or more complete thoughts; do not consume an unfinished final clause, dangling conjunction/preposition, dependent condition, or a question still awaiting completion. If uncertain, return consumed_units 0, source_prefix empty and sentences []; wait for further confirmed fragments. When final, process meaningful remaining fragments. Never modify source_prefix.'},
     {role:'user',content:JSON.stringify({final:Boolean(units[0]?.finalBatch),fragments:units.map((u,i)=>({n:i+1,text:u.text})),source})}
   ];
   let response;
@@ -93,26 +93,45 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
     });}catch{}
   }
 }
-// Prioritize a PREFIX that ends at a verified, immutable ASR sentence
-// boundary, even when it has not aged four additional seconds. One provider
-// call normally consumes at most two sentences. Keep a bounded +4s fallback
-// for confirmed speech without reliable sentence punctuation and for legacy
-// restored journals; never use replaceable Whisper draft as LLM input.
-export function nextReady(journal){
+// The ASR stability gate is authoritative. A completed punctuation-delimited
+// prefix is sent immediately. For already-confirmed speech with NO punctuation
+// allow a conservative, bounded semantic probe: DeepSeek may decide a Russian
+// thought is complete without a final period, or return consumed_units:0.
+// A new probe for the same bounded prefix is forbidden until source changes.
+export const SEMANTIC_PROBE_MIN_WORDS=9;
+export const SEMANTIC_PROBE_SINGLE_WINDOW_WORDS=16;
+export const SEMANTIC_PROBE_MAX_UNITS=16;
+export const SEMANTIC_PROBE_MAX_CHARS=3200;
+function probeEligible(units){
+  const text=units.map(u=>u.text).join(' ');
+  const count=text.trim().split(/\\s+/u).filter(Boolean).length;
+  const windows=new Set(units.map(u=>u.confirmedWindowEndSample));
+  return count>=SEMANTIC_PROBE_MIN_WORDS&&
+    (windows.size>=2||count>=SEMANTIC_PROBE_SINGLE_WINDOW_WORDS);
+}
+export function nextReady(journal,{minUnits=0}={}){
   const pending=journal.units.filter(unit=>!journal.delivered.has(unit.id));
+  if(!pending.length)return [];
+  const required=Math.min(SEMANTIC_PROBE_MAX_UNITS,Math.max(0,minUnits));
+  const limit=Math.max(8,required);
+  const charLimit=required>8?SEMANTIC_PROBE_MAX_CHARS:1600;
   const batch=[];let size=0,sentences=0,lastSentenceIndex=-1;
   for(const unit of pending){
-    if(batch.length>=8||(batch.length&&size+unit.text.length+1>1600))break;
+    if(batch.length>=limit||(batch.length&&size+unit.text.length+1>charLimit))break;
     batch.push(unit);size+=unit.text.length+1;
     if(isSentenceEnd(unit.text)){
       sentences++;lastSentenceIndex=batch.length-1;
-      if(sentences>=2)break;
+      if(sentences>=2&&batch.length>=required)break;
     }
   }
-  if(lastSentenceIndex>=0)return batch.slice(0,lastSentenceIndex+1);
-  // If the source is not yet a complete sentence, preserve the previous
-  // conservative aged-fragment behavior. A clean Stop makes all final source
-  // available and cannot leave the last unfinished phrase stranded.
+  if(lastSentenceIndex>=0&&lastSentenceIndex+1>=required)
+    return batch.slice(0,lastSentenceIndex+1);
+  // A word-complete thought may have no Whisper period at all. The LLM can
+  // decide semantic completeness here, but only from already-stable units.
+  // The minimum context prevents one-word fragments from causing paid calls.
+  if(batch.length>=required&&probeEligible(batch))return batch;
+  // Keep the established +4s fallback for short, ambiguous confirmed text.
+  // The final flush still releases every remaining stable unit.
   const ready=journal.ready(),result=[];size=0;
   for(const unit of ready){
     if(result.length>=8||(result.length&&size+unit.text.length+1>1600))break;
@@ -128,6 +147,7 @@ export class SentenceWorker{
     this.nextIndex=0;this.lastEmptySignature='';
     this.failedSignature='';this.failuresOnSignature=0;
     this.emptySignature='';this.emptyOnSignature=0;
+    this.lastEmptyFrontier=0;this.lastEmptyBatchSize=0;
   }
   // Called once for the post-stop drain. "complete" means all confirmed units
   // are durably ACKed; "paused" means the original RU remains recoverable.
@@ -150,13 +170,22 @@ export class SentenceWorker{
   }
   async tick(){
     if(this.closed||this.running)return;
-    const ready=nextReady(this.journal);
+    // When a bounded probe returned zero and more stable units arrived,
+    // enlarge its oldest-source prefix to include new context. Otherwise a
+    // capped batch could be queried forever without ever seeing the words
+    // that complete the sentence. No new text => no repeated paid probe.
+    const moreSinceEmpty=this.lastEmptySignature&&
+      this.journal.units.length>this.lastEmptyFrontier;
+    const minUnits=moreSinceEmpty?
+      Math.min(SEMANTIC_PROBE_MAX_UNITS,this.lastEmptyBatchSize+1):0;
+    const ready=nextReady(this.journal,{minUnits});
     if(!ready.length){
       if(this.journal.finalized)this.reportDrain('complete');
       else this.schedule();
       return;
     }
     const signature=ready.map(u=>u.id).join('|')+'|'+this.journal.finalized;
+    const sourceFrontier=this.journal.units.length;
     if(signature===this.lastEmptySignature){
       if(this.journal.finalized)this.reportDrain('paused',
         this.failedSignature===signature?'LLM_RETRY_EXHAUSTED':'LLM_NO_PROGRESS');
@@ -178,6 +207,8 @@ export class SentenceWorker{
         this.emptyOnSignature++;
         if(this.journal.finalized&&this.emptyOnSignature===1){delay=1000;return;}
         this.lastEmptySignature=signature;
+        this.lastEmptyFrontier=sourceFrontier;
+        this.lastEmptyBatchSize=ready.length;
         return;
       }
       const consumed=ready.slice(0,accepted.count);
@@ -192,6 +223,7 @@ export class SentenceWorker{
       this.journal.acknowledge(consumed.map(u=>u.id));
       this.nextIndex+=rows.length;
       this.lastEmptySignature='';
+      this.lastEmptyFrontier=0;this.lastEmptyBatchSize=0;
       this.failedSignature='';this.failuresOnSignature=0;
       this.emptySignature='';this.emptyOnSignature=0;
       delay=0; // Drain remaining eligible sentences immediately after ACK.
