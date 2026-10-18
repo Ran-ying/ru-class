@@ -26,10 +26,10 @@ test('empty return consumes nothing; malformed and forged source prefixes are re
     {consumed_units:1,source_prefix:units[0].text,sentences:[]}
   ])assert.throws(()=>validateSentenceResult(p,units),/LLM_/);
 });
-test('a real confirmed unit older than 8s is sent exactly once after durable storage',async()=>{
+test('a real confirmed unit four seconds old is sent exactly once after durable storage',async()=>{
   const journal=new StableUnitJournal({classroomId:'class-x',recordingId:'recording-x',startedAt:1780000000000});
   journal.add({stable_delta:'Это пример',window_start_sample:0,window_end_sample:8*RATE});
-  journal.add({stable_delta:'',window_start_sample:8*RATE,window_end_sample:16*RATE});
+  journal.add({stable_delta:'',window_start_sample:8*RATE,window_end_sample:12*RATE});
   const committed:any[]=[];let requests=0,saves=0;
   const worker=new SentenceWorker({
     journal,profile:{},intervalMs:10,
@@ -113,4 +113,58 @@ test('text model timeout and one-sentence-per-pair contract use bounded requests
   assert.match(source,/Return ONE Russian sentence and its ONE matching Simplified Chinese translation/);
   assert.match(source,/result\.length>=8/);
   assert.match(source,/size\+unit\.text\.length\+1>1600/);
+});
+
+// Confirmed source remains in its own recording and is drained serially
+// after final ASR flush, without requiring any new microphone input.
+test('finalized worker drains all pending sentence units in order',async()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
+  for(let i=0;i<4;i++)journal.add({stable_delta:'Фраза '+i+'.',
+    window_start_sample:i*RATE,window_end_sample:(i+1)*RATE,final:i===3});
+  let calls=0,running=0,maxRunning=0,report:any;
+  const saved:any[]=[];
+  let resolveDone:(value:unknown)=>void=()=>{};
+  const done=new Promise(resolve=>{resolveDone=resolve;});
+  const worker=new SentenceWorker({journal,profile:{},intervalMs:2,
+    request:async(_:unknown,ready:any[])=>{
+      calls++;running++;maxRunning=Math.max(running,maxRunning);
+      await Promise.resolve();
+      running--;
+      return {consumed_units:1,source_prefix:ready[0].text,
+        sentences:[{ru:ready[0].text,zh:'示例翻译。'}]};
+    },
+    save:async(rows:any[])=>{saved.push(...rows);},
+    onDrain:(status:any)=>{report=status;resolveDone(status);}
+  });
+  worker.start();
+  await Promise.race([done,new Promise((_,reject)=>setTimeout(()=>reject(Error('drain hung')),2500))]);
+  assert.equal(calls,4);
+  assert.equal(maxRunning,1);
+  assert.deepEqual(saved.map(s=>s.index),[0,1,2,3]);
+  assert.equal(journal.ready().length,0);
+  assert.equal(report.status,'complete');
+  assert.equal(report.pending,0);
+});
+test('final zero-unit LLM response pauses boundedly and keeps original Russian',async()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
+  journal.add({stable_delta:'Остаток',window_start_sample:0,window_end_sample:RATE,final:true});
+  let calls=0;
+  const worker=new SentenceWorker({journal,profile:{},intervalMs:2,
+    request:async()=>{calls++;return {consumed_units:0,source_prefix:'',sentences:[]};},
+    save:async()=>assert.fail('nothing was translated')});
+  const report=new Promise<any>(resolve=>{worker.onDrain=resolve;});
+  worker.start();
+  const status=await Promise.race([report,new Promise((_,reject)=>setTimeout(()=>reject(Error('pause hung')),2500))]);
+  assert.equal(calls,2,'only one final empty retry');
+  assert.equal(status.status,'paused');
+  assert.equal(status.pending,1);
+  assert.equal(status.reason,'LLM_NO_PROGRESS');
+  assert.equal(journal.ready().length,1);
+});
+test('new recording does not cancel finished-recording background translation',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
+  assert.match(app,/const translationWorkers=new Map\(\)/);
+  assert.match(app,/if\(sentenceWorker&&!sentenceWorker\.journal\.finalized\)/);
+  assert.match(app,/translationWorkers\.set\(id,worker\)/);
+  assert.match(app,/if\(recordingId===lessonId\)renderCaption\(\)/);
 });

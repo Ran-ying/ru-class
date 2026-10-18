@@ -42,5 +42,5 @@ test('classroom history spans successive recordings and reserves untranslated Ch
  assert.match(app,/pair\.append\(ru,zh\)/);
  assert.match(app,/history-remaining/);
  assert.match(app,/pendingTranscriptAfterCommits\(session,rows\)/);
- assert.match(app,/index\+1/);
+ assert.doesNotMatch(app,/label\.textContent='录音 '\+/);
 });

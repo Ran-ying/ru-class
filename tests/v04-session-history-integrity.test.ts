@@ -33,10 +33,14 @@ test('background history refresh during microphone use retains live RU stable an
 });
 
 test('v0.4 text model is correctly described as active history processing, not future placeholder',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
   const html=readFileSync('apps/web/index.html','utf8');
   assert.match(html,/逐句生成正式俄语校正与中文翻译/);
   assert.match(html,/id="translation-status"/);
   assert.doesNotMatch(html,/中文翻译将在后续版本提供/);
   const css=readFileSync('apps/web/style.css','utf8');
   assert.match(css,/\.history-sentence-row\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
+  assert.match(css,/\.history-sentence-row p\[lang="zh-CN"\]\{[^}]*border-left:1px solid/);
+  assert.doesNotMatch(css,/\.history-sentence-row\{[^}]*background:#edf2eb/);
+  assert.doesNotMatch(app,/label\.textContent='录音 '\+/);
 });

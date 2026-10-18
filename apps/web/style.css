@@ -207,20 +207,22 @@ main{grid-template-rows:minmax(0,1fr)}
   text-align:center;padding:18px;color:#60746a;font-size:14px;
   line-height:1.5;pointer-events:none
 }
-#session-history{display:flex;flex-direction:column;gap:10px;padding:16px 24px}
-.session-history-item{padding:12px 14px;border-radius:9px;
-  background:#ffffff82;overflow-wrap:anywhere}
-.session-history-item time{font-size:11px;color:#60746a}
-.session-sentences{display:flex;flex-direction:column;gap:8px;margin-top:9px}
-.history-sentence-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:18px;padding:9px 12px;border-radius:8px;background:#edf2eb;border:1px solid #e1e9df}
-.history-sentence-row p{margin:0!important;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
-.history-sentence-row p[lang="zh-CN"]{color:#566d5e}
-.history-remaining{font-size:12px;color:#718579;margin-top:10px}
+/* Flat bilingual transcript: horizontal row rules and a shared center rule only. */
+#session-history{display:block;padding:8px 24px 12px}
+.session-history-item{padding:0;margin:0;background:transparent;border:0;border-radius:0;overflow-wrap:anywhere}
+.session-sentences{display:block;margin:0}
+.history-sentence-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;
+  padding:0;margin:0;background:transparent;border:0;border-bottom:1px solid #d9e2d9;border-radius:0}
+.history-sentence-row p{margin:0!important;padding:12px 14px;min-width:0;
+  font-size:14px;color:#324e42;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.history-sentence-row p[lang="zh-CN"]{color:#566d5e;border-left:1px solid #d9e2d9}
+.history-remaining{padding:12px 14px;font-size:12px;color:#718579;border-bottom:1px solid #d9e2d9}
 .history-remaining summary{cursor:pointer}
 .history-remaining p{white-space:pre-wrap;overflow-wrap:anywhere}
-@media(max-width:650px){.history-sentence-row{column-gap:9px;padding:8px}}
-.session-history-item p{margin:8px 0 0;font-size:14px;color:#324e42;
-  white-space:pre-wrap;line-height:1.6}
+@media(max-width:650px){
+ #session-history{padding:6px 12px 10px}
+ .history-sentence-row p{padding:10px 9px}
+}
 
 /* Course manager: all courses on the left, scoped local recording data on the right. */
 #classroom-dialog{
