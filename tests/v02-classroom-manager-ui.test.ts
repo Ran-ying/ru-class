@@ -7,7 +7,9 @@ test('dated classroom heading occupies whole left half with no dropdown, painted
   const css=readFileSync('apps/web/style.css','utf8');
   assert.match(html,/<time id="classroom-date">/);
   assert.match(html,/<h1 id="classroom-title">/);
-  assert.match(html,/<button id="classroom-add"[^>]*>\+<\/button>/);
+  assert.match(html,/<button id="classroom-add"[^>]*><svg [^>]*><path d="M12 4v16M4 12h16"\/><\/svg><\/button>/);
+  assert.match(css,/#classroom-add\{[^}]*display:grid;place-items:center/);
+  assert.match(css,/#classroom-add svg\{[^}]*display:block;width:28px;height:28px/);
   assert.doesNotMatch(html,/id="classroom-select"/);
   assert.match(css,/\.workspace-top\{[^}]*width:100%;max-width:none;/);
   assert.match(css,/\.workspace-top\{[^}]*background:transparent;border:0/);
