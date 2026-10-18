@@ -129,6 +129,27 @@ dataset can support a **new** engineering replay, not a historical
 C2 byte-identical replacement. Do not demand Russian listening;
 `SPEECH_ACCURACY_UNVERIFIED` remains.
 
+## v0.4 per-recording explicit translation recovery
+
+When a completed recording's final asynchronous LLM drain is
+interrupted by a new recording, Safari reload or service loss, its
+confirmed source `stableUnits[]` and already committed
+`sentences` rows are retained. Implement **only opt-in manual
+recovery**, never billable auto-retry on page load: the course
+manager exposes `恢复未完成翻译` on completed sessions with
+stored source units. `restoreTranslationProgress` verifies each
+unit's recording UUID/ordinal and ordered confirmation windows,
+then replays each durable sentence batch's **consumedUnitIds**
+as an exact prefix (not lexical string dedupe). Repeated genuine
+same-text phrases are distinct IDs. Recreate `SentenceWorker`
+at the next durable sentence index and send only remaining units.
+A completed recording with no remaining source triggers NO paid
+request. Refuse interrupted or unverifiable source. No WAV/raw
+hypothesis rewrite, no automatic recovery of unconfirmed drafts.
+This is safe local recovery, not a guarantee of server-side
+exactly-once billing. Model requests may still cost tokens.
+See `docs/v04-deepseek-bilingual-history.md`.
+
 ## v0.4 browser-owned bilingual history (2026-10-17)
 
 The original PROJECT_SPEC v0.4 explicitly includes **real DeepSeek-
