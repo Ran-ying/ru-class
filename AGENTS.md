@@ -424,3 +424,16 @@ speech API backed by an external whisper.cpp engine. It supports arbitrary
 configured listener addresses (loopback is only the default); CORS with
 empty `allowedOrigins` is unrestricted, but Bearer remains mandatory.
 That service has no dependency on the historical RU-Class WebSocket gateway.
+
+
+## Browser-local per-provider JSON request parameters
+
+The settings UI offers extra JSON parameters separately for speech, image
+and text. Preserve JSON data in browser-only profiles, validate on save and
+on request, enforce bounded objects and never allow overriding model,
+messages, audio, base URL or authorization. Official DeepSeek text endpoints
+auto-fill non-thinking defaults, which user edits may override. Text sends
+non-streaming JSON; speech sends scalar extras as multipart FormData (keep
+language='ru' and response_format='json'); image extras are stored only.
+Keep tests ensuring malformed or forbidden JSON never causes requests,
+and ensure provider URL changes cannot silently reuse old custom values.

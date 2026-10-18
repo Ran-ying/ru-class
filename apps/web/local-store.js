@@ -88,7 +88,8 @@ export async function loadProfiles(){
   const rows=await withStore('profiles','readonly',s=>s.getAll());
   const profiles={};
   for(const item of rows)if(['speech','image','text'].includes(item.kind)){
-    profiles[item.kind]={baseUrl:item.baseUrl,model:item.model,apiKey:item.apiKey};
+    profiles[item.kind]={baseUrl:item.baseUrl,model:item.model,apiKey:item.apiKey,
+      ...(item.extraParams===undefined?{}:{extraParams:item.extraParams})};
   }
   return profiles;
 }

@@ -1,5 +1,6 @@
 import {wavHeader} from './local-store.js';
 import {TranscriptBuffer} from './transcript.js';
+import {parseApiParameters,applySpeechParameters} from './api-parameters.js';
 
 export const RATE=16000;
 export const WINDOW_SECONDS=8;
@@ -14,12 +15,13 @@ export function endpoint(baseUrl){
 function headers(apiKey){
   return {...(apiKey?{Authorization:'Bearer '+apiKey}:{})};
 }
-export function validateProfile(data){
+export function validateProfile(data,kind='text'){
   const baseUrl=endpoint(data.baseUrl);
   const model=data.model?.trim();
   if(!model||model.length>100||!/^[a-zA-Z0-9._/-]+$/.test(model))throw Error('请选择或填写有效的模型 ID');
   if(typeof data.apiKey!=='string'||data.apiKey.length>1024||/[\r\n]/.test(data.apiKey))throw Error('Token 格式无效');
-  return {baseUrl,model,apiKey:data.apiKey};
+  const extraParams=parseApiParameters(data.extraParams,kind);
+  return {baseUrl,model,apiKey:data.apiKey,extraParams};
 }
 async function apiFetch(url,options={},timeout=30000){
   try{
@@ -95,7 +97,7 @@ export function wavBlob(samples){
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export class BrowserAsrSession {
   constructor(profile,onUpdate,onError,onRawHypothesis=()=>{}){
-    this.profile=validateProfile(profile);
+    this.profile=validateProfile(profile,'speech');
     this.onUpdate=onUpdate;this.onError=onError;
     this.onRawHypothesis=onRawHypothesis;
     this.ring=new AudioRing();
@@ -119,12 +121,13 @@ export class BrowserAsrSession {
     }
   }
   async transcribe(snapshot){
-    const {baseUrl,model,apiKey}=this.profile;
+    const {baseUrl,model,apiKey,extraParams}=this.profile;
     const form=new FormData();
     form.set('file',wavBlob(snapshot.pcm),'window.wav');
     form.set('model',model);
     form.set('language','ru');
     form.set('response_format','json');
+    applySpeechParameters(form,extraParams);
     let response;
     for(let attempt=0;attempt<4;attempt++){
       response=await apiFetch(baseUrl+'/audio/transcriptions',{

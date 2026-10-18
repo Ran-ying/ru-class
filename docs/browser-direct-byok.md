@@ -65,3 +65,22 @@ Node 启动入口改为 `createSite`，不注册 `/api/*` 或 `/ws/client`。旧
 ## 迁移和兼容性
 
 v0.1.7 以前 RU-Class 网关持有 ASR 地址/Key、经 WebSocket 接收音频。v0.2.0 完全改变这一协议，已运行的老版服务需要更新整个网站 JS 和 Node 启动入口。以前的服务端 `config.json`、`data/local-models.json` 和 `ASR_*` 中的模型密钥**不会自动转移到浏览器**，需要用户自行在网页重新填写；确认迁移后应删除旧文件中不用的长期密钥。独立 `ru-class-asr` 的配置仍属于用户自己部署的 ASR 服务，不能误删。
+
+
+## API 额外请求参数（2026-10-18）
+
+每个语音、图像、文字提供商配置各有一个浏览器本地的 JSON 对象编辑区。
+官方 `https://api.deepseek.com`（或 `/v1`）文字 API 自动初始化
+`{"thinking":{"type":"disabled"},"max_tokens":2048,"stream":false}`。
+保存的自定义 JSON 在再次打开设置时恢复；更换 API 地址会重新初始化该
+地址的预设，以免将上一家供应商的参数误传给另一家。
+
+文字请求将自定义字段合并进 `/chat/completions` JSON 请求体，
+但 `model` / `messages` / 授权头及 URL 等由系统管理，
+`stream` 固定为 false（不能使用 SSE 模式），`n` 限于 1。
+语音识别是 `multipart/form-data`，仅支持 JSON 中的标量额外字段，
+系统固定 `file`、`model`、`language=ru` 和 `response_format=json`。
+图片处理尚未启用，只保存待将来使用的 JSON。一次请求能否接受某参数
+由该 API 供应商决定；模型列表连接测试只检验 `/models`，
+并不验证实际推理参数。JSON 必须是对象（最多 8192 字符）；
+额外参数直接发往所选第三方提供商，不会发到 RU-Class 服务器。
