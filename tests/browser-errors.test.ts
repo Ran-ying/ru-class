@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {createSite,loadSiteConfig} from '../apps/server/src/site.js';
 // @ts-ignore Browser runtime JavaScript intentionally has no TypeScript declarations.
 import {AudioRing,BrowserAsrSession,discoverModels,endpoint,wavBlob,testConnection} from '../apps/web/direct-asr.js';
@@ -17,7 +17,7 @@ test('public RU-Class serves static pages, never user-provider proxy or site log
   site.listen(0,'127.0.0.1');await new Promise<void>(r=>site.once('listening',r));
   const root='http://127.0.0.1:'+(site.address() as any).port;
   try{
-    for(const path of ['/','/app.js','/direct-asr.js','/transcript.js','/local-store.js','/audio.js','/capture-worklet.js']){
+    for(const path of ['/','/app.js','/direct-asr.js','/transcript.js','/local-store.js','/audio.js','/capture-worklet.js','/stable-units.js','/sentence-worker.js','/translation-recovery.js','/stable-source-audit.js']){
       const response=await fetch(root+path);
       assert.equal(response.status,200,path);
     }
@@ -35,6 +35,44 @@ test('public RU-Class serves static pages, never user-provider proxy or site log
     assert.doesNotMatch(csp,/unsafe-inline|unsafe-eval/);
     assert.equal((await fetch(root+'/api/models/speech/save',{method:'POST'})).status,405);
   }finally{site.closeAllConnections();await new Promise<void>(r=>site.close(()=>r()));}
+});
+
+
+test('all browser ES modules are served with executable JavaScript MIME, not 404',async()=>{
+  const site=createSite();
+  site.listen(0,'127.0.0.1');
+  await new Promise<void>(resolve=>site.once('listening',resolve));
+  const root='http://127.0.0.1:'+(site.address() as any).port;
+  try{
+    // Guard the actual static manifest against drift whenever an import or
+    // new browser module is added. A single missing dependency prevents
+    // app.js from executing and leaves both Settings and + inert.
+    const modules=readdirSync('apps/web').filter(name=>name.endsWith('.js'));
+    assert.ok(modules.includes('app.js'));
+    assert.ok(modules.includes('translation-recovery.js'));
+    for(const filename of modules){
+      const path='/'+filename;
+      const response=await fetch(root+path);
+      assert.equal(response.status,200,'Missing browser ES module: '+path);
+      assert.match(response.headers.get('content-type')||'',/^text\/javascript\b/,path);
+      assert.ok((await response.text()).length>0,path);
+      const head=await fetch(root+path,{method:'HEAD'});
+      assert.equal(head.status,200,'HEAD '+path);
+      assert.match(head.headers.get('content-type')||'',/^text\/javascript\b/,path);
+    }
+    const app=await fetch(root+'/app.js').then(r=>r.text());
+    for(const [,source] of app.matchAll(/\bfrom\s*['"]((?:\.\/)[^'"]+\.js)['"]/g)){
+      const dependency=new URL(source,root+'/app.js');
+      const response=await fetch(dependency);
+      assert.equal(response.status,200,'Unresolved app.js import: '+source);
+    }
+    for(const forbidden of ['/config.json','/package.json','/api/bootstrap','/unknown.js']){
+      assert.equal((await fetch(root+forbidden)).status,404,forbidden);
+    }
+  }finally{
+    site.closeAllConnections();
+    await new Promise<void>(resolve=>site.close(()=>resolve()));
+  }
 });
 
 test('static site config requires no shared token, model address or user database',async()=>{
