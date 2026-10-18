@@ -12,7 +12,7 @@ const row=(delta:string,endSeconds:number,opts:{start?:number;final?:boolean}={}
   window_end_sample:endSeconds*RATE,final:opts.final??false
 });
 
-test('8-second rule applies AFTER stable confirmation, not from an inferred word timestamp',()=>{
+test('four-second rule applies AFTER stable confirmation, not from an inferred word timestamp',()=>{
   const j=setup();
   const result=j.add(row('Мы изучаем',8));
   assert.equal(result.length,1);
@@ -22,15 +22,15 @@ test('8-second rule applies AFTER stable confirmation, not from an inferred word
   assert.equal(result[0].speechEndSample,null);
   assert.equal(result[0].timeBasis,'estimated_capture_epoch_plus_confirmation_window_end');
   assert.deepEqual(j.ready(),[],'confirmed text at t=8 is not immediately LLM eligible');
-  j.add(row('',15));
-  assert.deepEqual(j.ready(),[],'t=15 still younger than 8 seconds after confirmation');
-  j.add(row('',16));
+  j.add(row('',11));
+  assert.deepEqual(j.ready(),[],'t=11 still younger than 4 seconds after confirmation');
+  j.add(row('',12));
   assert.deepEqual(j.ready().map((x:any)=>x.id),['recording-1:0']);
-  assert.equal(STABLE_AGE_SAMPLES,128000);
+  assert.equal(STABLE_AGE_SAMPLES,4*RATE);
   j.acknowledge(['recording-1:0']);
   assert.deepEqual(j.ready(),[],'at-least-once downstream sends require an explicit acknowledgement');
 });
-test('unanchored or partial tail must not become DeepSeek input merely after 8 sec',()=>{
+test('unanchored or partial tail must not become DeepSeek input merely after 4 sec',()=>{
   const j=setup();
   j.add({...row('',8),partial_text:'Эти слова могут измениться'});
   j.add({...row('',40),partial_text:'Но распознавание еще не подтвердило'});

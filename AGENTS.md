@@ -135,7 +135,7 @@ C2 byte-identical replacement. Do not demand Russian listening;
 ## v0.4 per-recording explicit translation recovery
 
 When a completed recording's final asynchronous LLM drain is
-interrupted by a new recording, Safari reload or service loss, its
+interrupted by Safari reload or service loss, its
 confirmed source `stableUnits[]` and already committed
 `sentences` rows are retained. Implement **only opt-in manual
 recovery**, never billable auto-retry on page load: the course
@@ -166,7 +166,7 @@ receive private classroom Russian speech and charge token fees;
 document clearly.
 
 A single `SentenceWorker` uses serial `setTimeout` and only
-`StableUnitJournal.ready()` items (confirmed +8s, or final flush).
+`StableUnitJournal.ready()` items (confirmed +4s, or final flush).
 Responses must include an **exact original `source_prefix` covering
 the first `consumed_units` whole units**, alongside nonempty RU/ZH
 sentences; reject malformed/overlong/forged consumption. A 0-unit
@@ -177,9 +177,12 @@ store keyed by recording UUID/index, atomically per response; ACK only
 AFTER durable commit and never mix concurrent recordings. Browser-
 generated original RU text remains authoritative and recoverable;
 model/provider failure cannot block ASR or hide untranslated text.
-The current background worker is per recording, NOT a durable
-guaranteed retry queue. On next recording its old worker closes;
-unfinished source stays original, not silently discarded.
+A worker remains per recording; after clean Stop it drains confirmed
+units serially even if the user starts another recording. Failed or empty
+final requests are bounded and leave raw RU recoverable for explicit manual
+retry. Closing the page still stops the in-memory queue. This +4s
+post-confirmation gate never promotes unconfirmed ASR draft or guarantees
+end-to-end five-second translations.
 See `docs/v04-deepseek-bilingual-history.md`. Physical Safari and
 real provider validation remain pending.
 

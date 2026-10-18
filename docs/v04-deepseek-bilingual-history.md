@@ -8,7 +8,7 @@ The v0.4 milestone in PROJECT_SPEC.md explicitly requires **DeepSeek text-model 
 
 ## Data contract / model safety
 
-Existing LocalAgreement `stable_delta` emits source units tagged with a recording UUID, classroom UUID, and confirmation-window sample position. The v0.3 `StableUnitJournal.ready()` only returns text at least **8 seconds after its confirmation window end**, or remaining final-flush stable units. `partial_text` is never sent.
+Existing LocalAgreement `stable_delta` emits source units tagged with a recording UUID, classroom UUID, and confirmation-window sample position. The v0.3 `StableUnitJournal.ready()` only returns text at least **4 seconds after its confirmation window end** (previously 8; excludes ASR/LLM latency), or remaining final-flush stable units. `partial_text` is never sent.
 
 A single `SentenceWorker` runs at most one HTTP POST to `/chat/completions` at a time using recursive `setTimeout`, never `setInterval`. The body uses a system prompt with the source fragments and asks the model to return an exact JSON object:
 
@@ -28,9 +28,9 @@ All accepted sentences from a response are saved as one local IndexedDB **v5** t
 
 ## Staleness / failures / limitations
 
-- Closing the page, switching sessions or microphone failure cancels the old worker; in-flight responses after cancellation cannot be added to the new session.
+- Closing the page or microphone interruption cancels that session's worker; starting a new recording does **not** cancel a previous cleanly stopped recording's drain. Results remain scoped by recording ID.
 - Timeouts / 4xx / 5xx / malformed model JSON / invalid prefix trigger a visible nonfatal status. No source units are acknowledged on failure, so the original RU is retained.
-- The current background worker is **per active recording**. Stopping a recording triggers a final drain asynchronously; starting a fresh one cancels the prior worker. Untranslated remainder stays as original RU; a user can manually retry still-unconsumed stable source in a normally completed recording, using the course manager.
+- A background worker is **per recording** and continues its bounded final drain after Stop, independently of any later recording. Verified sentences are durably saved before ACK; final empty or repeated failed responses pause and leave original RU for manual retry.
 - Short stable fragments are not necessarily complete sentences. Empty model responses are allowed and should not cause an expensive tight polling loop; new confirmed units unlock another attempt.
 - This version does **not** produce live Chinese for the lower draft RU buffer: that is v0.5. It does not provide exact word-level timestamps or whole-class audio concatenation.
 - The project cannot claim a real provider call, semantic translation correctness, real MacBook Safari acceptance, cost or end-to-end latency from synthetic CI.
@@ -38,7 +38,7 @@ All accepted sentences from a response are saved as one local IndexedDB **v5** t
 ## Manual recovery of a completed recording
 
 The first implementation's final asynchronous DeepSeek drain could be
-canceled by immediately starting a new recording or closing Safari.
+canceled by closing Safari or service interruption.
 Its untranslated Russian is still preserved as `stableUnits[]`, but
 that alone did not permit safe continuation of the exact recording.
 The new **explicit**, per-recording `恢复未完成翻译` action in
@@ -59,9 +59,9 @@ and already committed `sentences` rows:
    Otherwise run one serial provider worker on the remaining
    finalized units, saving new bilingual rows only after validation.
 4. Remain opt-in. Opening the page or course manager does not
-   automatically call a potentially billable API. A new recording
-   can still cancel an in-flight previous-session request; the
-   user can repeat the explicit recovery later.
+   automatically call a potentially billable API. A clean Stop keeps its
+   worker alive across new recordings; a reload or service failure can
+   still require explicit recovery later.
 
 This is **at-least-once processing with durable local deduplication**
 at the unit-ID level, **not guaranteed exactly-once provider billing**:
@@ -71,7 +71,7 @@ audio and hypotheses remain unchanged.
 
 ## Owner physical acceptance
 
-On MacBook Safari, configure the **文字** model (your own HTTPS base URL + model + Token), then select a classroom and begin a Russian microphone recording. Observe the RU lower area remains live while the upper history gradually receives paired Russian and Chinese sentences, with at least an eight-second confirmation delay. During continuous speech, multiple sentences should append without replacing earlier rows. If the model returns no completed sentence, the lower original RU should remain visible. Stop while a fragment is unfinished, verify the final flush may enqueue one last model request, then reload and confirm bilingual history persists alongside the original audio and ASR JSON.
+On MacBook Safari, configure the **文字** model (your own HTTPS base URL + model + Token), then select a classroom and begin a Russian microphone recording. Observe the RU lower area remains live while the upper history gradually receives paired Russian and Chinese sentences, with a four-second post-confirmation gate plus model latency. During continuous speech, multiple sentences should append without replacing earlier rows. If the model returns no completed sentence, the lower original RU should remain visible. Stop while a fragment is unfinished, verify the final flush may enqueue one last model request, then reload and confirm bilingual history persists alongside the original audio and ASR JSON.
 
 Test a model timeout or simulated offline state: the lower Russian captions must continue, and untranslated original text must remain recoverable. Manually retry a normally completed recording from the course manager; verify saved batches are not resent, repeated same-text units remain distinct, and interrupted sessions are ineligible. Synthetic unit/HTTP tests do **not** count as that physical acceptance.
 
@@ -82,3 +82,18 @@ Test a model timeout or simulated offline state: the lower Russian captions must
 - Display the already persisted RU/ZH pairs as **one aligned row per sentence** within each recording's chronological history group, not two unsynchronized columns of independent paragraphs. Pending raw ASR is separately disclosed and never presented as a completed translation.
 - After a successful durable sentence batch commit and ACK, the acknowledged original stable prefix disappears promptly from the lower RU caption; tentative ASR stays. On history reload, the remaining raw suffix is reconstructed only from valid saved **unit IDs and source prefixes**. On uncertain metadata, preserve original raw text rather than drop it. A timeout does not ACK or delete source.
 - The text-provider timeout is now 45 seconds for the full response body, and each request contains at most 8 confirmed units / approximately 1600 characters (unless one indivisible stable unit is longer). Timeout, CORS, billing and DeepSeek availability still require real Safari tests; this is not proof of successful provider operation.
+
+## Post-stop drain and flat sentence table (2026-10-18)
+
+The history UI shows a continuous RU/ZH transcript with horizontal sentence
+separators and one center vertical rule. There are no recording time headers,
+white recording cards, or rounded green sentence borders. Every recording
+retains its private ID and evidence in storage.
+
+After normal Stop, confirmed units are translated in serial requests until
+all durable ACKs are saved; this background work survives the next recording.
+On final empty model output, retry once before pausing. On three consecutive
+errors of an unchanged source batch, pause and preserve untranslated Russian;
+manual recovery remains opt-in and must not run in parallel for the same
+recording. The changed 4-second gate is **after stability confirmation**, not
+an SLA for speech-to-translation. Real Safari latency/billing remains untested.

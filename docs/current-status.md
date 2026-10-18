@@ -202,7 +202,7 @@ The original v0.4 scope includes user-configured, browser-direct
 DeepSeek/OpenAI-compatible `/chat/completions` calls using serial
 `setTimeout`, Russian sentence splitting/correction and formal
 Simplified Chinese translation. This implementation consumes ONLY
-confirmed v0.3 stable units after the +8-second confirmation gate.
+confirmed stable units after the current +4-second post-confirmation gate.
 The provider returns exact source-prefix verification metadata and
 zero or more RU/ZH sentences. Prefix/count errors are rejected
 without acknowledging source units. All accepted sentence batches
