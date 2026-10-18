@@ -563,7 +563,7 @@ function updateApiParametersForUrl(kind){
   const url=$(kind+'-url').value.trim();
   const defaults=defaultApiParameters(kind,url);
   $(kind+'-params').value=JSON.stringify(defaults,null,2);
-  $(kind+'-params').setCustomValidity('');
+  $(kind+'-params').setCustomValidity?.('');
   $(kind+'-params-feedback').textContent='';
   $(kind+'-params-help').textContent=
     kind==='speech'?'语音识别：额外 JSON 字段会转换为 multipart 表单；file、model、language、response_format 由系统管理。':
@@ -705,10 +705,10 @@ for(const kind of kinds){
     try{
       parseApiParameters($(kind+'-params').value,kind);
       $(kind+'-params-feedback').textContent='';
-      $(kind+'-params').setCustomValidity('');
+      $(kind+'-params').setCustomValidity?.('');
     }catch(e){
       $(kind+'-params-feedback').textContent=errorMessage(e);
-      $(kind+'-params').setCustomValidity(errorMessage(e));
+      $(kind+'-params').setCustomValidity?.(errorMessage(e));
     }
   };
   $(kind+'-model-select').onchange=()=>updateActions(kind);

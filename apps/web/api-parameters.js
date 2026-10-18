@@ -47,7 +47,10 @@ export function parseApiParameters(value,kind){
 export function mergeTextParameters({baseUrl,model,messages,extraParams}){
   const extras=extraParams===undefined?
     defaultApiParameters('text',baseUrl):parseApiParameters(extraParams,'text');
-  return {model,temperature:0,...extras,messages,stream:false};
+  const body={model,temperature:0,...extras,messages};
+  // The caller cannot accept SSE. Generic providers retain their prior
+  // wire format unless an explicit stream:false was provided.
+  return body;
 }
 export function applySpeechParameters(form,extraParams){
   const fields=parseApiParameters(extraParams,'speech');

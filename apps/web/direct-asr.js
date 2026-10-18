@@ -1,6 +1,6 @@
 import {wavHeader} from './local-store.js';
 import {TranscriptBuffer} from './transcript.js';
-import {parseApiParameters,applySpeechParameters} from './api-parameters.js';
+import {parseApiParameters,applySpeechParameters,defaultApiParameters} from './api-parameters.js';
 
 export const RATE=16000;
 export const WINDOW_SECONDS=8;
@@ -20,7 +20,8 @@ export function validateProfile(data,kind='text'){
   const model=data.model?.trim();
   if(!model||model.length>100||!/^[a-zA-Z0-9._/-]+$/.test(model))throw Error('请选择或填写有效的模型 ID');
   if(typeof data.apiKey!=='string'||data.apiKey.length>1024||/[\r\n]/.test(data.apiKey))throw Error('Token 格式无效');
-  const extraParams=parseApiParameters(data.extraParams,kind);
+  const extraParams=data.extraParams===undefined?
+    defaultApiParameters(kind,baseUrl):parseApiParameters(data.extraParams,kind);
   return {baseUrl,model,apiKey:data.apiKey,extraParams};
 }
 async function apiFetch(url,options={},timeout=30000){
