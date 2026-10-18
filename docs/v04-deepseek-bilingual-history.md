@@ -33,6 +33,40 @@ All accepted sentences from a response are saved as one local IndexedDB **v5** t
 - This version does **not** produce live Chinese for the lower draft RU buffer: that is v0.5. It does not provide exact word-level timestamps or whole-class audio concatenation.
 - The project cannot claim a real provider call, semantic translation correctness, real MacBook Safari acceptance, cost or end-to-end latency from synthetic CI.
 
+## Manual recovery of a completed recording
+
+The first implementation's final asynchronous DeepSeek drain could be
+canceled by immediately starting a new recording or closing Safari.
+Its untranslated Russian is still preserved as `stableUnits[]`, but
+that alone did not permit safe continuation of the exact recording.
+The new **explicit**, per-recording `恢复未完成翻译` action in
+**课程管理** restores progress from browser-local `stableUnits[]`
+and already committed `sentences` rows:
+
+1. Accept only a recording with `outcome === 'completed'`, a valid
+   source-unit ledger and a stable recording/classroom ID. A real
+   interruption or legacy recording without stable units cannot be
+   treated as verified final audio.
+2. Verify the saved sentence batches' `consumedUnitIds` against
+   the **ordered exact prefix** of the recording's distinct source
+   unit IDs. Multiple sentences from the same reply share one
+   consumed prefix. Do not compare by Russian surface text:
+   genuinely repeated phrases may be identical yet independent.
+3. Rehydrate the journal's acknowledged IDs and the next sentence
+   index; if none remain, **do not make any network request**.
+   Otherwise run one serial provider worker on the remaining
+   finalized units, saving new bilingual rows only after validation.
+4. Remain opt-in. Opening the page or course manager does not
+   automatically call a potentially billable API. A new recording
+   can still cancel an in-flight previous-session request; the
+   user can repeat the explicit recovery later.
+
+This is **at-least-once processing with durable local deduplication**
+at the unit-ID level, **not guaranteed exactly-once provider billing**:
+a provider could bill a request just before a client timeout or
+browser close without delivering a response. The original Whisper
+audio and hypotheses remain unchanged.
+
 ## Owner physical acceptance
 
 On MacBook Safari, configure the **文字** model (your own HTTPS base URL + model + Token), then select a classroom and begin a Russian microphone recording. Observe the RU lower area remains live while the upper history gradually receives paired Russian and Chinese sentences, with at least an eight-second confirmation delay. During continuous speech, multiple sentences should append without replacing earlier rows. If the model returns no completed sentence, the lower original RU should remain visible. Stop while a fragment is unfinished, verify the final flush may enqueue one last model request, then reload and confirm bilingual history persists alongside the original audio and ASR JSON.
