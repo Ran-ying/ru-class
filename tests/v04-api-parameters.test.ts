@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-ignore Browser-side plain JavaScript intentionally has no TS declarations.
-import {defaultApiParameters,isOfficialDeepSeek,parseApiParameters,
-  mergeTextParameters,applySpeechParameters} from '../apps/web/api-parameters.js';
+import {defaultApiParameters,isOfficialDeepSeek,parseApiParameters,mergeTextParameters,applySpeechParameters} from '../apps/web/api-parameters.js';
 // @ts-ignore
 import {BrowserAsrSession,validateProfile} from '../apps/web/direct-asr.js';
 // @ts-ignore
