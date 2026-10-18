@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 test('v0.4 refreshes one persistent history row per recording after LLM commit, never duplicates it',()=>{
   const app=readFileSync('apps/web/app.js','utf8');
   const start=app.indexOf('function showBilingualSentenceRows(');
-  const end=app.indexOf('function startSentenceWorker(',start);
+  const end=app.indexOf('let metricViewRevision=',start);
   const action=app.slice(start,end);
   assert.ok(start>=0&&end>start);
   assert.match(action,/renderSelectedClassroom\(\{historyOnly:true\}\)/);

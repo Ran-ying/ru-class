@@ -279,7 +279,7 @@ async function refreshTextMetrics(){
     const rows=await loadTextRequestMetrics();
     if(revision!==metricViewRevision)return;
     const succeeded=rows.filter(r=>r.status==='ok');
-    const measured=succeeded.filter(r=>r.totalTokens!==null);
+    const measured=rows.filter(r=>r.totalTokens!==null);
     const tokens=measured.reduce((n,r)=>n+r.totalTokens,0);
     const reasoning=rows.filter(r=>r.reasoningTokens!==null);
     const reasonTotal=reasoning.reduce((n,r)=>n+r.reasoningTokens,0);
