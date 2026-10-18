@@ -11,6 +11,7 @@ const files:Record<string,[string,string]>={
   '/capture-worklet.js':['capture-worklet.js','text/javascript; charset=utf-8'],
   '/direct-asr.js':['direct-asr.js','text/javascript; charset=utf-8'],
   '/stable-units.js':['stable-units.js','text/javascript; charset=utf-8'],
+  '/history-scroll.js':['history-scroll.js','text/javascript; charset=utf-8'],
   '/api-parameters.js':['api-parameters.js','text/javascript; charset=utf-8'],
   '/sentence-worker.js':['sentence-worker.js','text/javascript; charset=utf-8'],
   '/translation-recovery.js':['translation-recovery.js','text/javascript; charset=utf-8'],

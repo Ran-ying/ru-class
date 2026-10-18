@@ -130,6 +130,16 @@ export function recordingClassroomKey(recording){
   return classroomKey(recording?.title||'未命名课堂',
     recording?.lessonDate||localCalendarDate(recording.startedAt));
 }
+// A course's displayed lesson date can be edited/selected independently of
+// when it was added. Prefer the saved creation timestamp, not the lesson date.
+export function sortClassroomsByCreatedAt(items){
+  return [...items].sort((a,b)=>{
+    const aAt=Number.isFinite(a.createdAt)?a.createdAt:0;
+    const bAt=Number.isFinite(b.createdAt)?b.createdAt:0;
+    return bAt-aAt||b.date.localeCompare(a.date)||
+      a.title.localeCompare(b.title,'zh-CN')||a.key.localeCompare(b.key);
+  });
+}
 export async function listClassrooms(){
   const [catalog,sessions]=await Promise.all([
     withStore('classrooms','readonly',s=>s.getAll()),listLessons()
@@ -149,8 +159,7 @@ export async function listClassrooms(){
     }
     groups.get(key).sessionCount++;
   }
-  return [...groups.values()].sort((a,b)=>
-    b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'zh-CN'));
+  return sortClassroomsByCreatedAt([...groups.values()]);
 }
 export async function createClassroom({title,date}){
   const key=classroomKey(title,date);
