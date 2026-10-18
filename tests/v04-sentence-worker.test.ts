@@ -296,6 +296,16 @@ test('as each complete sentence arrives, each durable commit appears separately 
   assert.equal(saved.length,2);
   assert.deepEqual(saved.map(x=>x.consumedUnitIds),[['r:0'],['r:1']]);
 });
+test('trailing ellipsis is incomplete and does not trigger speculative fast translation',()=>{
+  const j=new StableUnitJournal({classroomId:'c',recordingId:'ellipsis',startedAt:1000});
+  j.add({stable_delta:'Ну, я думаю... Тогда продолжим',
+    window_start_sample:0,window_end_sample:RATE});
+  assert.deepEqual(nextReady(j),[],
+    'ellipsis is not a full sentence boundary before the old age threshold');
+  j.add({stable_delta:' после примера.',window_start_sample:RATE,window_end_sample:2*RATE});
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),[
+    'Ну, я думаю...','Тогда продолжим','после примера.']);
+});
 test('confirmed speech without sentence punctuation keeps conservative aged fallback',()=>{
   const j=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
   j.add({stable_delta:'Незаконченная мысль',window_start_sample:0,window_end_sample:RATE});
