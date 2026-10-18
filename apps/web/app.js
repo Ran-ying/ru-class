@@ -1,6 +1,7 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
+import {defaultApiParameters,parseApiParameters,isOfficialDeepSeek} from './api-parameters.js';
 import {restoreTranslationProgress,pendingTranscriptAfterCommits} from './translation-recovery.js';
 import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,saveTextRequestMetric,loadTextRequestMetrics,clearBrowserData} from './local-store.js';
 
@@ -558,6 +559,19 @@ window.addEventListener('pagehide',()=>{
 });
 
 // User-model configuration. The RU-Class server is NEVER consulted.
+function updateApiParametersForUrl(kind){
+  const url=$(kind+'-url').value.trim();
+  const defaults=defaultApiParameters(kind,url);
+  $(kind+'-params').value=JSON.stringify(defaults,null,2);
+  $(kind+'-params').setCustomValidity?.('');
+  $(kind+'-params-feedback').textContent='';
+  $(kind+'-params-help').textContent=
+    kind==='speech'?'语音识别：额外 JSON 字段会转换为 multipart 表单；file、model、language、response_format 由系统管理。':
+    kind==='image'?'图像：当前仅保存参数，不会发送图像请求。':
+    isOfficialDeepSeek(url)?
+      '已加载官方 DeepSeek 默认参数；可自定义 thinking、max_tokens 等。stream 必须为 false。':
+      '文字：与 Chat Completions 请求体合并；model、messages 由系统管理，stream 固定为 false。';
+}
 function reset(kind,clearKey=true){
   const step=stages[kind];step.revision++;step.ready=false;step.manual=false;
   $(kind+'-discovery').hidden=false;
@@ -631,10 +645,11 @@ async function discover(kind){
 }
 async function modelAction(kind,mode){
   const label=$(kind+'-feedback');
-  const candidate={baseUrl:$(kind+'-url').value.trim(),model:choice(kind),apiKey:keyFor(kind)};
+  const candidate={baseUrl:$(kind+'-url').value.trim(),model:choice(kind),
+    apiKey:keyFor(kind),extraParams:$(kind+'-params').value};
   try{
     if(!stages[kind].ready)throw Error('请先获取可用模型');
-    const profile=validateProfile(candidate);
+    const profile=validateProfile(candidate,kind);
     const save=$(kind+'-save'),test=$(kind+'-test');
     save.disabled=true;test.disabled=true;
     try{
@@ -656,6 +671,10 @@ function displayProfiles(){
     const p=profiles[kind];
     $(kind+'-url').value=p?.baseUrl||'';
     reset(kind);
+    updateApiParametersForUrl(kind);
+    $(kind+'-params').value=JSON.stringify(
+      p?.extraParams===undefined?defaultApiParameters(kind,p?.baseUrl||''):
+        parseApiParameters(p.extraParams,kind),null,2);
     $(kind+'-key').placeholder=p?.apiKey?'已存储在此浏览器中；留空继续使用':'输入自己的 API Token';
   }
 }
@@ -681,7 +700,17 @@ for(const kind of kinds){
   $(kind+'-test').onclick=()=>void modelAction(kind,'test');
   $(kind+'-list').onclick=()=>void discover(kind);
   $(kind+'-refresh').onclick=()=>void discover(kind);
-  $(kind+'-url').oninput=()=>reset(kind);
+  $(kind+'-url').oninput=()=>{reset(kind);updateApiParametersForUrl(kind);};
+  $(kind+'-params').oninput=()=>{
+    try{
+      parseApiParameters($(kind+'-params').value,kind);
+      $(kind+'-params-feedback').textContent='';
+      $(kind+'-params').setCustomValidity?.('');
+    }catch(e){
+      $(kind+'-params-feedback').textContent=errorMessage(e);
+      $(kind+'-params').setCustomValidity?.(errorMessage(e));
+    }
+  };
   $(kind+'-model-select').onchange=()=>updateActions(kind);
   $(kind+'-model').oninput=()=>updateActions(kind);
   // Model lists can depend on the API Token. Changing it invalidates the

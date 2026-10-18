@@ -113,3 +113,21 @@ test('About exposes request metrics without leaking credentials or transcript te
   assert.match(store,/const row=\{/);
   assert.match(store,/\['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences','llmMetrics'\]/);
 });
+
+test('all three API profile cards expose JSON parameter editor, only model save persists it',()=>{
+  const html=readFileSync('apps/web/index.html','utf8');
+  const app=readFileSync('apps/web/app.js','utf8');
+  const css=readFileSync('apps/web/style.css','utf8');
+  for(const kind of ['speech','image','text']){
+    const card=html.match(new RegExp('<form class="model-card" id="model-'+kind+'">([\\s\\S]*?)<\\/form>'))?.[1];
+    assert.ok(card);
+    assert.match(card,new RegExp('id="'+kind+'-params-details"'));
+    assert.match(card,new RegExp('<textarea id="'+kind+'-params"'));
+    assert.ok(card.indexOf('id="'+kind+'-params"')<card.indexOf('id="'+kind+'-actions"'));
+  }
+  assert.match(app,/function updateApiParametersForUrl\(kind\)/);
+  assert.match(app,/defaultApiParameters\(kind,url\)/);
+  assert.match(app,/parseApiParameters\(p.extraParams,kind\)/);
+  assert.match(app,/extraParams:\$\(kind\+'-params'\)\.value/);
+  assert.match(css,/#settings \.model-extra textarea\{/);
+});

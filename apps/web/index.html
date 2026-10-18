@@ -39,6 +39,13 @@
           </div>
           <label id="speech-model-manual-wrap" hidden>模型名称<input id="speech-model" placeholder="手动输入模型 ID"></label>
         </div>
+        <details class="model-extra" id="speech-params-details">
+          <summary>额外请求参数（JSON）</summary>
+          <label for="speech-params">JSON 参数</label>
+          <textarea id="speech-params" rows="7" spellcheck="false" aria-describedby="speech-params-help speech-params-feedback">{}</textarea>
+          <p class="model-params-help" id="speech-params-help">语音：标量值以 multipart 表单字段发送；系统管理音频、模型和识别语言。</p>
+          <p class="model-feedback" id="speech-params-feedback" role="status"></p>
+        </details>
         <div class="model-actions" id="speech-actions" hidden><button type="submit" id="speech-save">保存配置</button><button type="button" class="secondary" id="speech-test">测试连接</button></div>
         <p id="speech-feedback" class="model-feedback" role="status"></p>
       </form>
@@ -53,6 +60,13 @@
           </div>
           <label id="image-model-manual-wrap" hidden>模型名称<input id="image-model" placeholder="手动输入模型 ID"></label>
         </div>
+        <details class="model-extra" id="image-params-details">
+          <summary>额外请求参数（JSON）</summary>
+          <label for="image-params">JSON 参数</label>
+          <textarea id="image-params" rows="7" spellcheck="false" aria-describedby="image-params-help image-params-feedback">{}</textarea>
+          <p class="model-params-help" id="image-params-help">图像：本版只保存参数，不发送图像推理请求。</p>
+          <p class="model-feedback" id="image-params-feedback" role="status"></p>
+        </details>
         <div class="model-actions" id="image-actions" hidden><button type="submit" id="image-save">保存配置</button><button type="button" class="secondary" id="image-test">测试连接</button></div>
         <p id="image-feedback" class="model-feedback" role="status"></p>
       </form>
@@ -67,6 +81,13 @@
           </div>
           <label id="text-model-manual-wrap" hidden>模型名称<input id="text-model" placeholder="手动输入模型 ID"></label>
         </div>
+        <details class="model-extra" id="text-params-details">
+          <summary>额外请求参数（JSON）</summary>
+          <label for="text-params">JSON 参数</label>
+          <textarea id="text-params" rows="7" spellcheck="false" aria-describedby="text-params-help text-params-feedback">{}</textarea>
+          <p class="model-params-help" id="text-params-help">文字：合并到 Chat Completions 请求体。官方 DeepSeek 自动填入默认参数。</p>
+          <p class="model-feedback" id="text-params-feedback" role="status"></p>
+        </details>
         <div class="model-actions" id="text-actions" hidden><button type="submit" id="text-save">保存配置</button><button type="button" class="secondary" id="text-test">测试连接</button></div>
         <p id="text-feedback" class="model-feedback" role="status"></p>
       </form>

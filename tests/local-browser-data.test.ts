@@ -46,6 +46,10 @@ test('local browser profiles, text and WAV chunks persist independently and can 
     await saveProfile('speech',speech);
     assert.deepEqual((await loadProfiles()).speech,speech);
     assert.equal((await loadProfiles()).image,undefined);
+    const newSpeech={...speech,extraParams:{temperature:0.2,prompt:'security lecture'}};
+    await saveProfile('speech',newSpeech);
+    assert.deepEqual((await loadProfiles()).speech,newSpeech,
+      'JSON parameters persist independently of audio and private text');
     await saveLesson({id:'lesson-001',title:'Russian lecture',startedAt:10,durationSeconds:0.4,transcript:'Привет мир',outcome:'completed',hasAudio:true});
     await saveAudioChunk('lesson-001',0,new Float32Array([0,1]));
     await saveAudioChunk('lesson-001',1,new Float32Array([-1,0]));

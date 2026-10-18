@@ -75,6 +75,13 @@ main{grid-template-rows:minmax(0,1fr)}
 #settings .model-discovery button:disabled{opacity:.5}
 #settings .model-discovery span{color:#738177;font-size:11px;overflow-wrap:anywhere;flex:1;min-width:0}
 #settings .model-card label[hidden]{display:none!important}
+#settings .model-extra{margin:10px 0 12px;border-top:1px solid #e1e7df;padding-top:10px}
+#settings .model-extra summary{font-size:12px;color:#245946;cursor:pointer;padding:3px 0}
+#settings .model-extra label{margin:10px 0 4px;font-size:11px}
+#settings .model-extra textarea{box-sizing:border-box;display:block;width:100%;min-height:125px;max-height:240px;resize:vertical;border:1px solid #d8dfd7;border-radius:8px;padding:10px;background:#fffef9;color:#183330;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;outline-offset:2px}
+#settings .model-extra textarea:invalid{border-color:#bb786d}
+#settings .model-extra .model-params-help{font-size:11px;color:#829084;margin:7px 0;line-height:1.55}
+#settings .model-extra .model-feedback{font-size:11px;margin:7px 0}
 @media(max-width:500px){
  #settings .settings-heading{padding:12px;gap:6px;grid-template-columns:minmax(60px,1fr) minmax(128px,1.6fr) minmax(42px,1fr)}
  #settings .settings-heading h2{padding:8px 10px;font-size:13px}

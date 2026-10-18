@@ -1,14 +1,11 @@
+import {mergeTextParameters} from './api-parameters.js';
 export const LLM_TIMEOUT_MS=45000;
 export const DEEPSEEK_TRANSLATION_MAX_TOKENS=2048;
 
 // Only the official provider gets vendor-specific fields. Never infer from
 // model names (custom OpenAI-compatible providers may reuse these IDs).
-export function textCompletionBody({baseUrl,model,messages}){
-  const body={model,temperature:0,messages};
-  if(new URL(baseUrl).hostname==='api.deepseek.com'){
-    Object.assign(body,{thinking:{type:'disabled'},max_tokens:DEEPSEEK_TRANSLATION_MAX_TOKENS,stream:false});
-  }
-  return body;
+export function textCompletionBody({baseUrl,model,messages,extraParams}){
+  return mergeTextParameters({baseUrl,model,messages,extraParams});
 }
 const tokenCount=value=>Number.isSafeInteger(value)&&value>=0?value:null;
 export function textUsage(usage){
@@ -42,7 +39,7 @@ export function validateSentenceResult(payload,units){
 }
 export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=>{}}={}){
   const {endpoint,validateProfile}=await import('./direct-asr.js');
-  const {baseUrl,model,apiKey}=validateProfile(profile);
+  const {baseUrl,model,apiKey,extraParams}=validateProfile(profile,'text');
   const source=units.map(u=>u.text).join(' ');
   if(source.length>4500)throw Error('LLM_INPUT_TOO_LONG');
   const messages=[
@@ -59,7 +56,7 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
     response=await fetch(endpoint(baseUrl)+'/chat/completions',{
       method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',
         ...(apiKey?{Authorization:'Bearer '+apiKey}:{})},
-      body:JSON.stringify(textCompletionBody({baseUrl,model,messages})),redirect:'error',
+      body:JSON.stringify(textCompletionBody({baseUrl,model,messages,extraParams})),redirect:'error',
       credentials:'omit',signal:AbortSignal.any([timeoutSignal,...(signal?[signal]:[])])
     });
     if(!response.ok)throw Error('LLM_HTTP_'+response.status);
