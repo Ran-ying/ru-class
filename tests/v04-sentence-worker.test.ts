@@ -382,10 +382,10 @@ test('zero-consumption does not repeat paid queries until a new confirmed source
     window_start_sample:14*RATE,window_end_sample:15*RATE});
   await worker.tick();worker.close();
   assert.equal(requests,2,'one new confirmed fragment authorizes one new semantic check');
-  assert.deepEqual(lengths,[2,3],'second probe includes new context without reusing identical source');
+  assert.deepEqual(lengths,[3,4],'second probe extends the shortest previously rejected context');
   assert.equal(journal.delivered.size,0);
 });
-test('new units beyond an eight-unit cap can enlarge a previously undecidable source prefix',async()=>{
+test('newly confirmed context enlarges a previously undecidable source prefix',async()=>{
   const journal=new StableUnitJournal({classroomId:'c',recordingId:'capped',startedAt:1000});
   for(let i=0;i<8;i++)journal.add({stable_delta:'длинная неполная устная фраза',
     window_start_sample:i*RATE,window_end_sample:(i+1)*RATE});
@@ -403,8 +403,8 @@ test('new units beyond an eight-unit cap can enlarge a previously undecidable so
     window_start_sample:8*RATE,window_end_sample:9*RATE});
   await worker.tick();worker.close();
   assert.equal(calls,2);
-  assert.deepEqual(received,[2,3]);
+  assert.deepEqual(received,[3,4]);
   assert.equal(writes.length,1);
-  assert.deepEqual(writes[0].consumedUnitIds,['capped:0','capped:1','capped:2']);
-  assert.equal(journal.delivered.size,3);
+  assert.deepEqual(writes[0].consumedUnitIds,['capped:0','capped:1','capped:2','capped:3']);
+  assert.equal(journal.delivered.size,4);
 });
