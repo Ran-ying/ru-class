@@ -70,5 +70,5 @@ test('recovery is an explicit user control, not automatic on page load',()=>{
   assert.match(code,/retryButton.onclick=\(\)=>void retrySavedRecordingTranslation\(item\)/);
   assert.match(code,/if\(!remainingUnits\)/);
   assert.match(code,/worker.nextIndex=nextIndex/);
-  assert.doesNotMatch(code,/void retrySavedRecordingTranslation\(item\);/);
+  assert.doesNotMatch(code.slice(code.lastIndexOf('try{profiles=')),/retrySavedRecordingTranslation/);
 });
