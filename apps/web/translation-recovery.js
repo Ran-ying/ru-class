@@ -1,6 +1,34 @@
 import {StableUnitJournal} from './stable-units.js';
 
 /**
+ * The browser may be reloaded after model output has been durably saved.
+ * Only remove a verified WHOLE stable-unit prefix; never use loose lexical
+ * matching to remove repeated speech or discard unconfirmed ASR draft.
+ */
+export function pendingTranscriptAfterCommits(recording,rows){
+  const raw=typeof recording?.transcript==='string'?recording.transcript:'';
+  if(!rows?.length||!Array.isArray(recording?.stableUnits))return raw;
+  let cursor=0,lastGroup='',rowIndex=0;
+  for(const row of rows){
+    if(row?.recordingId!==recording.id||row?.classroomId!==recording.classroomId||
+       row.index!==rowIndex++||!Array.isArray(row.consumedUnitIds))return raw;
+    const key=JSON.stringify(row.consumedUnitIds);
+    if(key===lastGroup)continue; // multiple sentence pairs from one response
+    if(!row.consumedUnitIds.length)return raw;
+    const batch=recording.stableUnits.slice(cursor,cursor+row.consumedUnitIds.length);
+    if(batch.length!==row.consumedUnitIds.length||
+       batch.some((unit,i)=>unit.id!==row.consumedUnitIds[i])||
+       row.sourcePrefix!==batch.map(unit=>unit.text).join(' '))return raw;
+    cursor+=batch.length;lastGroup=key;
+  }
+  if(!cursor)return raw;
+  const consumed=recording.stableUnits.slice(0,cursor).map(unit=>unit.text).join(' ');
+  if(raw===consumed)return '';
+  if(raw.startsWith(consumed+' '))return raw.slice(consumed.length+1);
+  return raw; // uncertain prefix: retain complete source instead of losing it
+}
+
+/**
  * Restore only a COMPLETED recording and its already committed bilingual
  * sentence rows. Do not fabricate final flush for interrupted recordings.
  * All source units and provider output remain private in the browser.

@@ -8,7 +8,17 @@ test('settings keeps model cards and a close control, with local recording data 
   const header=html.match(/<div class="settings-heading">([\s\S]*?)<\/div>\s*<div class="settings-body">/)?.[1];
   assert.ok(header,'Settings heading should end before the scrollable body');
   assert.ok(header.indexOf('id="settings-title"')<header.indexOf('class="close-button"'));
-  assert.doesNotMatch(html,/id="panel-access"|id="tab-access"|id="tab-models"/);
+  assert.doesNotMatch(html,/id="panel-access"|id="tab-access"/);
+  const tabs=['tab-models','tab-about'];
+  for(const id of tabs)assert.match(header,new RegExp('id="'+id+'"'));
+  assert.ok(header.indexOf('id="settings-title"')<
+    header.indexOf('id="tab-models"')&&
+    header.indexOf('id="tab-about"')<header.indexOf('class="close-button"'));
+  assert.match(html,/id="panel-about"[^>]*hidden/);
+  assert.match(css,/#settings \.settings-heading form\{grid-column:3;justify-self:end/);
+  const app=readFileSync('apps/web/app.js','utf8');
+  assert.match(app,/function showSettingsTab\(name\)/);
+  assert.match(app,/\$\(panel\)\.hidden=!active/);
   assert.match(html,/id="classroom-dialog"/);
   assert.match(html,/id="local-lessons"/);
   assert.match(html,/id="classroom-list"/);

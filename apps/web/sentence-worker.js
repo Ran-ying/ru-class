@@ -1,3 +1,4 @@
+export const LLM_TIMEOUT_MS=45000;
 export function validateSentenceResult(payload,units){
   if(!Array.isArray(units)||!units.length)throw Error('LLM_SOURCE_UNAVAILABLE');
   const count=payload?.consumed_units;
@@ -24,26 +25,29 @@ export async function requestSentenceBatch(profile,units,{signal}={}){
   const source=units.map(u=>u.text).join(' ');
   if(source.length>4500)throw Error('LLM_INPUT_TOO_LONG');
   const messages=[
-    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Translate each sentence to Simplified Chinese in zh. Multiple sentences allowed. If no complete sentence yet, return consumed_units 0, source_prefix empty and sentences []. When final, process meaningful remaining fragments. Never modify source_prefix.'},
+    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Return ONE Russian sentence and its ONE matching Simplified Chinese translation per sentences array element. Split long responses into multiple aligned sentence pairs; never put multiple sentences or newlines in a single row. Multiple sentence-pair elements are allowed. If no complete sentence yet, return consumed_units 0, source_prefix empty and sentences []. When final, process meaningful remaining fragments. Never modify source_prefix.'},
     {role:'user',content:JSON.stringify({final:Boolean(units[0]?.finalBatch),fragments:units.map((u,i)=>({n:i+1,text:u.text})),source})}
   ];
   let response;
+  const timeoutSignal=AbortSignal.timeout(LLM_TIMEOUT_MS);
+  let raw;
   try{
     response=await fetch(endpoint(baseUrl)+'/chat/completions',{
       method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',
         ...(apiKey?{Authorization:'Bearer '+apiKey}:{})},
       body:JSON.stringify({model,temperature:0,messages}),redirect:'error',
-      credentials:'omit',signal:AbortSignal.any([AbortSignal.timeout(15000),...(signal?[signal]:[])])
+      credentials:'omit',signal:AbortSignal.any([timeoutSignal,...(signal?[signal]:[])])
     });
+    if(!response.ok)throw Error('LLM_HTTP_'+response.status);
+    if(Number(response.headers.get('content-length')||0)>100000)throw Error('LLM_RESPONSE_TOO_LARGE');
+    raw=await response.text();
+    if(raw.length>100000)throw Error('LLM_RESPONSE_TOO_LARGE');
   }catch(e){
     if(signal?.aborted)throw Error('LLM_CANCELLED');
-    if(e?.name==='TimeoutError')throw Error('LLM_TIMEOUT');
+    if(timeoutSignal.aborted||e?.name==='TimeoutError')throw Error('LLM_TIMEOUT');
+    if(e instanceof Error&&e.message.startsWith('LLM_'))throw e;
     throw Error('LLM_NETWORK_FAILED');
   }
-  if(!response.ok)throw Error('LLM_HTTP_'+response.status);
-  if(Number(response.headers.get('content-length')||0)>100000)throw Error('LLM_RESPONSE_TOO_LARGE');
-  const raw=await response.text();
-  if(raw.length>100000)throw Error('LLM_RESPONSE_TOO_LARGE');
   let data;
   try{data=JSON.parse(raw);}catch{throw Error('LLM_INVALID_JSON');}
   let content=data?.choices?.[0]?.message?.content;
@@ -56,7 +60,7 @@ export async function requestSentenceBatch(profile,units,{signal}={}){
 function nextReady(journal){
   const ready=journal.ready(),result=[];let size=0;
   for(const unit of ready){
-    if(result.length>=20||(result.length&&size+unit.text.length+1>4500))break;
+    if(result.length>=8||(result.length&&size+unit.text.length+1>1600))break;
     result.push(unit);size+=unit.text.length+1;
   }
   return result;
