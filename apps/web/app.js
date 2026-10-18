@@ -86,7 +86,7 @@ async function renderSelectedClassroom({historyOnly=false}={}){
     if(revision!==classroomRevision||key!==activeClassroom?.key||(!historyOnly&&(starting||running)))return;
     $('history-empty').hidden=sessions.length>0;
     const translations=await Promise.all(sessions.map(s=>loadBilingualSentences(s.id)));
-    if(revision!==classroomRevision||key!==activeClassroom?.key||starting||running)return;
+    if(revision!==classroomRevision||key!==activeClassroom?.key||(!historyOnly&&(starting||running)))return;
     for(const [index,session] of sessions.entries()){
       const article=document.createElement('article');
       article.className='session-history-item';
@@ -264,9 +264,14 @@ function renderCaption(){
 
 function showBilingualSentenceRows(rows,recordingId){
   if(recordingId!==lessonId||!activeClassroom)return;
+  // After a durable translation commit, ACK has already marked these
+  // stable units delivered. Remove only that stable prefix from the bottom RU;
+  // retain the tentative draft and original ASR source unchanged.
+  renderCaption();
   // Rebuild the selected classroom's ONE history row per recording.
   // Never append a duplicate "current recording" article after stop().
-  // Preserve bottom live stable/draft while this async local read proceeds.
+  // History-only reads are allowed during live recording, and MUST NOT reset
+  // the current ASR stable/draft or the microphone clock.
   void renderSelectedClassroom({historyOnly:true});
 }
 function startSentenceWorker(){
