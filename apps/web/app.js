@@ -77,7 +77,7 @@ async function renderSelectedClassroom({historyOnly=false}={}){
   renderClassroomLock();
   // Do not display the previously selected class's transcript while the new
   // class's asynchronous IndexedDB read is pending.
-  if(switchingClassroom){
+  if(selectedKey!==renderedClassroomKey){
     renderedClassroomKey=selectedKey;
     stable='';draft='';renderCaption();
     $('latency').textContent='—';
