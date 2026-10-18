@@ -66,18 +66,28 @@ function nextReady(journal){
   return result;
 }
 export class SentenceWorker{
-  constructor({journal,profile,save,onCommit=()=>{},onError=()=>{},request=requestSentenceBatch,intervalMs=1200}){
+  constructor({journal,profile,save,onCommit=()=>{},onError=()=>{},onDrain=()=>{},request=requestSentenceBatch,intervalMs=800}){
     if(!journal||typeof save!=='function')throw Error('LLM_INVALID_WORKER');
-    Object.assign(this,{journal,profile,save,onCommit,onError,request,intervalMs});
+    Object.assign(this,{journal,profile,save,onCommit,onError,onDrain,request,intervalMs});
     this.closed=false;this.running=false;this.timer=null;this.controller=null;
     this.nextIndex=0;this.lastEmptySignature='';
     this.failedSignature='';this.failuresOnSignature=0;
+    this.emptySignature='';this.emptyOnSignature=0;
+  }
+  // Called once for the post-stop drain. "complete" means all confirmed units
+  // are durably ACKed; "paused" means the original RU remains recoverable.
+  reportDrain(status,reason=''){
+    if(this.closed||!this.journal.finalized)return;
+    this.closed=true;
+    if(this.timer!==null)clearTimeout(this.timer);
+    this.timer=null;
+    this.onDrain({status,pending:this.journal.ready().length,reason});
   }
   schedule(ms=this.intervalMs){
     if(this.closed||this.timer!==null)return;
     this.timer=setTimeout(()=>{this.timer=null;void this.tick();},ms);
   }
-  start(){this.schedule();}
+  start(){this.schedule(0);}
   wake(){
     if(this.closed)return;
     if(this.timer!==null)clearTimeout(this.timer);
@@ -86,9 +96,18 @@ export class SentenceWorker{
   async tick(){
     if(this.closed||this.running)return;
     const ready=nextReady(this.journal);
-    if(!ready.length){if(!this.journal.finalized)this.schedule();return;}
+    if(!ready.length){
+      if(this.journal.finalized)this.reportDrain('complete');
+      else this.schedule();
+      return;
+    }
     const signature=ready.map(u=>u.id).join('|')+'|'+this.journal.finalized;
-    if(signature===this.lastEmptySignature){if(!this.journal.finalized)this.schedule();return;}
+    if(signature===this.lastEmptySignature){
+      if(this.journal.finalized)this.reportDrain('paused',
+        this.failedSignature===signature?'LLM_RETRY_EXHAUSTED':'LLM_NO_PROGRESS');
+      else this.schedule();
+      return;
+    }
     this.running=true;this.controller=new AbortController();
     const signal=this.controller.signal;
     let delay=this.intervalMs;
@@ -96,7 +115,15 @@ export class SentenceWorker{
       const payload=await this.request(this.profile,ready.map(u=>({...u,finalBatch:this.journal.finalized})),{signal});
       if(this.closed||signal.aborted)return;
       const accepted=validateSentenceResult(payload,ready);
-      if(!accepted.count){this.lastEmptySignature=signature;return;}
+      if(!accepted.count){
+        // Final flush may arrive while the previous request was in flight.
+        // Retry a final empty response once, but never spin or charge forever.
+        if(this.emptySignature!==signature){this.emptySignature=signature;this.emptyOnSignature=0;}
+        this.emptyOnSignature++;
+        if(this.journal.finalized&&this.emptyOnSignature===1){delay=1000;return;}
+        this.lastEmptySignature=signature;
+        return;
+      }
       const consumed=ready.slice(0,accepted.count);
       const rows=accepted.sentences.map((s,i)=>({
         recordingId:this.journal.recordingId,classroomId:this.journal.classroomId,
@@ -110,6 +137,8 @@ export class SentenceWorker{
       this.nextIndex+=rows.length;
       this.lastEmptySignature='';
       this.failedSignature='';this.failuresOnSignature=0;
+      this.emptySignature='';this.emptyOnSignature=0;
+      delay=0; // Drain remaining eligible sentences immediately after ACK.
       this.onCommit(rows);
     }catch(e){
       if(!this.closed&&!signal.aborted){
@@ -124,8 +153,13 @@ export class SentenceWorker{
     }finally{
       this.running=false;this.controller=null;
       if(!this.closed){
-        if(!this.journal.finalized)this.schedule(delay);
-        else if(this.journal.ready().length&&signature!==this.lastEmptySignature)this.schedule(delay);
+        if(this.journal.finalized){
+          const remaining=this.journal.ready();
+          if(!remaining.length)this.reportDrain('complete');
+          else if(signature===this.lastEmptySignature)this.reportDrain('paused',
+            this.failedSignature===signature?'LLM_RETRY_EXHAUSTED':'LLM_NO_PROGRESS');
+          else this.schedule(delay);
+        }else this.schedule(delay);
       }
     }
   }
