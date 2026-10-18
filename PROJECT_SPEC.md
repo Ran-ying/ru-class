@@ -1,15 +1,19 @@
-> **CURRENT RUNTIME OVERRIDE · 2026-10-17**: This long-term specification mixes
-> historical gateway/Worker plans with the current product. The active v0.2.2
+> **CURRENT RUNTIME OVERRIDE · 2026-10-18**: This long-term specification mixes
+> historical gateway/Worker plans with the current product. The active v0.4.0
 > runtime is **anonymous static browser-direct BYOK**: per-user model keys,
-> lesson data, PCM recording and Russian transcript remain in browser IndexedDB;
-> the browser calls the user's HTTPS+CORS ASR directly. No server ASR relay,
+> lesson data, PCM recording, Russian transcript and RU/ZH sentence history
+> remain in browser IndexedDB v5; speech and text APIs are called directly
+> from the browser over compatible HTTPS/CORS. No server ASR relay,
 > public login, shared API credentials or default providers.
 > Read [current status](docs/current-status.md),
 > [active browser architecture](docs/browser-direct-byok.md) and
 > [current maintainer contract](AGENTS.md) **before implementing roadmap items**.
 > M1 synthetic proof is not live-classroom or deferred M4 acceptance.
-> Long recording/playback/recovery (P2) is intentionally deferred.
-> The later version tables are design targets, not accepted deliverables.
+> Formal DeepSeek RU/ZH history and manual completed-session translation retry
+> are implemented in v0.4.0; lower live Chinese is a v0.5 goal. P2 long-session
+> durability/word-aligned playback and physical Safari/provider acceptance are
+> still pending. Later version tables are roadmap targets, not acceptance records.
+> Legacy v0.1 gateway/authentication requirements below are superseded.
 
 # RU-Class — 项目总任务书与分版本开发计划
 
@@ -20,7 +24,7 @@
 
 ## 当前架构与变更优先级（2026-10-16）
 
-**新权威决策（覆盖全部旧的 Node 录音网关/公网站点 Token/服务器账户方案）**：RU-Class 是完全公开、不需要登录的网页；每个人（包括维护者）使用自带 API，没有任何默认模型/共享 Token。所有个人 API 配置、课堂语音录音、俄文转写和未来数据留在各自浏览器。网页脚本直接向第三方支持 CORS 的 API 请求，**API 不支持 CORS 就不使用，不开发服务器代理**。Node 可选，仅用作静态页面服务。浏览器执行 AudioWorklet 16kHz 采集、8 秒滚动窗口、按秒串行 ASR、文字稳定化和 IndexedDB 本地保存录音；DeepSeek 后续必须按稳定且退出 8 秒窗口的完整句子消费，当前未实现。参见 `docs/browser-direct-byok.md`；该文档是当前的最高优先级规范。原先“必须在公共服务器添加每用户登录/后台密钥数据库/服务器代管模型”的方案**已被用户明确否定并废弃**。
+**新权威决策（覆盖全部旧的 Node 录音网关/公网站点 Token/服务器账户方案）**：RU-Class 是完全公开、不需要登录的网页；每个人（包括维护者）使用自带 API，没有任何默认模型/共享 Token。所有个人 API 配置、课堂语音录音、俄文转写和未来数据留在各自浏览器。网页脚本直接向第三方支持 CORS 的 API 请求，**API 不支持 CORS 就不使用，不开发服务器代理**。Node 可选，仅用作静态页面服务。浏览器执行 AudioWorklet 16kHz 采集、8 秒滚动窗口、按秒串行 ASR、文字稳定化和 IndexedDB 本地保存录音；DeepSeek 正式双语历史已在 v0.4 实现，仅消费满足稳定来源和确认后 +8 秒边界的文字；下方实时中文仍待 v0.5。参见 `docs/browser-direct-byok.md`；该文档是当前的最高优先级规范。原先“必须在公共服务器添加每用户登录/后台密钥数据库/服务器代管模型”的方案**已被用户明确否定并废弃**。
 
 
 **最高优先级 · v0.1.7 用户确认**：RU-Class 将面向公众提供**用户自带 API（BYOK）**服务，维护者自己与其他用户都必须亲自填写语音、图像和文字的 URL、模型及 Token。网站**不提供任何默认 API、模型或共用的凭据**。`config.json` 仅部署参数；本地单用户 API 配置暂独立放在 `data/local-models.json`，不再被 `ASR_*` 环境变量覆盖。**公共多用户安全使用尚未完成**，真正上线前必须先实现用户认证、模型/Token/转写/录音隔离、每用户独立 ASR 会话、SSRF 和资源配额防护，不得把单用户文件作为公共配置。完整约束和迁移见 `docs/byok-public-service.md`。下文所有关于“默认本地 ASR”“全站统一模型配置”“公网共用站点令牌就能支持普通用户”等内容均被本段覆盖。

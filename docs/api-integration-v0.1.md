@@ -1,4 +1,4 @@
-> **HISTORICAL v0.1 INTEGRATION ONLY (2026-10-17)**. The v0.2.2 website
+> **HISTORICAL v0.1 INTEGRATION ONLY (2026-10-17)**. The v0.4.0 website
 > calls user-selected ASR endpoints directly from the browser; Node does not
 > proxy audio or hold provider credentials. For live setup, see
 > [browser-direct architecture](browser-direct-byok.md) and

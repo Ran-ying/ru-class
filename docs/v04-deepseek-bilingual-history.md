@@ -1,4 +1,6 @@
-# RU-Class v0.4 — DeepSeek-compatible sentence correction and bilingual history
+# RU-Class v0.4.0 — DeepSeek-compatible sentence correction and bilingual history
+
+**Status (2026-10-18):** delivered to `main` and CI passing; actual Safari and real-provider end-to-end verification remains open in [Issue #47](https://github.com/Ran-ying/ru-class/issues/47).
 
 ## Scope
 
@@ -28,7 +30,7 @@ All accepted sentences from a response are saved as one local IndexedDB **v5** t
 
 - Closing the page, switching sessions or microphone failure cancels the old worker; in-flight responses after cancellation cannot be added to the new session.
 - Timeouts / 4xx / 5xx / malformed model JSON / invalid prefix trigger a visible nonfatal status. No source units are acknowledged on failure, so the original RU is retained.
-- The current background worker is **per active recording**. Stopping a recording triggers a final drain asynchronously; starting a fresh one cancels the prior worker. Untranslated remainder stays as original RU, and future offline retry/recovery can be added separately without rewriting source text.
+- The current background worker is **per active recording**. Stopping a recording triggers a final drain asynchronously; starting a fresh one cancels the prior worker. Untranslated remainder stays as original RU; a user can manually retry still-unconsumed stable source in a normally completed recording, using the course manager.
 - Short stable fragments are not necessarily complete sentences. Empty model responses are allowed and should not cause an expensive tight polling loop; new confirmed units unlock another attempt.
 - This version does **not** produce live Chinese for the lower draft RU buffer: that is v0.5. It does not provide exact word-level timestamps or whole-class audio concatenation.
 - The project cannot claim a real provider call, semantic translation correctness, real MacBook Safari acceptance, cost or end-to-end latency from synthetic CI.
@@ -71,4 +73,4 @@ audio and hypotheses remain unchanged.
 
 On MacBook Safari, configure the **文字** model (your own HTTPS base URL + model + Token), then select a classroom and begin a Russian microphone recording. Observe the RU lower area remains live while the upper history gradually receives paired Russian and Chinese sentences, with at least an eight-second confirmation delay. During continuous speech, multiple sentences should append without replacing earlier rows. If the model returns no completed sentence, the lower original RU should remain visible. Stop while a fragment is unfinished, verify the final flush may enqueue one last model request, then reload and confirm bilingual history persists alongside the original audio and ASR JSON.
 
-Test a model timeout or simulated offline state: the lower Russian captions must continue, and untranslated original text must remain recoverable. Synthetic unit/HTTP tests do **not** count as that physical acceptance.
+Test a model timeout or simulated offline state: the lower Russian captions must continue, and untranslated original text must remain recoverable. Manually retry a normally completed recording from the course manager; verify saved batches are not resent, repeated same-text units remain distinct, and interrupted sessions are ineligible. Synthetic unit/HTTP tests do **not** count as that physical acceptance.

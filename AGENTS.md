@@ -1,4 +1,4 @@
-# RU-Class maintainer contract — current (2026-10-17)
+# RU-Class maintainer contract — current (2026-10-18)
 
 ## Source of truth
 
@@ -7,7 +7,7 @@ Read `docs/current-status.md`, `docs/browser-direct-byok.md` and
 roadmap**, not an instruction to restore retired Node/WebSocket systems.
 Historic decisions remain in `docs/decisions.md` and old acceptance reports.
 
-## Active runtime (v0.2.2)
+## Active runtime (v0.4.0; CI passed, physical Safari pending)
 
 - Anonymous public **static** website, no site login, central user database,
   global provider keys, default model endpoint, CORS proxy or ASR relay.
@@ -26,8 +26,11 @@ Historic decisions remain in `docs/decisions.md` and old acceptance reports.
   three compact cards in a centered responsive settings grid (3/2/1 across
   large/medium/mobile), URL + optional Token before model discovery, separate
   Save/Test actions, and modest local success feedback.
-- Image/text model *configuration* exists but inference / DeepSeek / live
-  translations are not implemented. Do not claim otherwise.
+- Image model configuration exists but image inference does not. v0.4.0 has
+  browser-direct text-model calls, formal RU correction/ZH translation and
+  persistent bilingual history, plus user-triggered retry of unfinished
+  completed sessions. Lower live Chinese remains v0.5-only.
+  Automated CI is not real provider/Safari acceptance.
 
 ## P1 private offline audio probe
 
