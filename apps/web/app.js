@@ -14,6 +14,7 @@ let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise
 let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 const CLIENT_VERSION='0.4.0'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
+const translationWorkers=new Map(); // A finished recording may continue draining while another starts.
 let playbackUrl=null,playbackRevision=0;
 const errorMessage=e=>e instanceof Error?e.message:String(e);
 function renderClassroomLock(){
@@ -92,11 +93,6 @@ async function renderSelectedClassroom({historyOnly=false}={}){
       const article=document.createElement('article');
       article.className='session-history-item';
       article.dataset.recordingId=session.id;
-      const label=document.createElement('time');
-      label.textContent='录音 '+(index+1)+' · '+
-        new Date(session.startedAt).toLocaleTimeString()+
-        ' · '+Math.round(session.durationSeconds||0)+' 秒'+
-        (session.outcome==='interrupted'?' · 中断':'');
       const rows=translations[index];
       const sentences=document.createElement('div');
       sentences.className='session-sentences';
@@ -108,16 +104,12 @@ async function renderSelectedClassroom({historyOnly=false}={}){
         const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
         pair.append(ru,zh);sentences.append(pair);
       }
-      article.append(label,sentences);
+      article.append(sentences);
       if(Array.isArray(session.stableUnits)&&session.stableUnits.length){
         const last=session.stableUnits.at(-1);
-        const provenance=document.createElement('small');
-        provenance.className='history-provenance';
-        provenance.textContent='已保存 '+session.stableUnits.length+
-          ' 个稳定文字单元 · 最近确认窗口末端 '+
-          (last.confirmedWindowEndSample/16000).toFixed(1)+' 秒（非逐词时间）';
+        // Retain provenance in the recording itself; the visible history is
+        // deliberately a continuous sentence table, not per-recording cards.
         article.dataset.confirmedWindowEndSample=String(last.confirmedWindowEndSample);
-        article.append(provenance);
       }
       const pendingSource=pendingTranscriptAfterCommits(session,rows);
       // Pending source stays in the LOWER live area while this recording runs.
@@ -266,14 +258,13 @@ function renderCaption(){
   $('ru-draft').textContent=draft?(pending?' '+draft:draft):'';
 }
 
-function showBilingualSentenceRows(rows,recordingId){
-  if(recordingId!==lessonId||!activeClassroom)return;
-  // After a durable translation commit, ACK has already marked these
-  // stable units delivered. Remove only that stable prefix from the bottom RU;
-  // retain the tentative draft and original ASR source unchanged.
-  renderCaption();
+function showBilingualSentenceRows(rows,recordingId,classroomId){
+  if(!activeClassroom||activeClassroom.id!==classroomId)return;
+  // A prior completed recording can drain while a new recording is active.
+  // Only update the lower RU when these ACKs belong to its own session.
+  if(recordingId===lessonId)renderCaption();
   $('translation-status').textContent='正式双语句子已保存。';
-  // Rebuild the selected classroom's ONE history row per recording.
+  // Rebuild the selected classroom's aligned sentence rows after each commit.
   // Never append a duplicate "current recording" article after stop().
   // History-only reads are allowed during live recording, and MUST NOT reset
   // the current ASR stable/draft or the microphone clock.
@@ -291,21 +282,30 @@ function startSentenceWorker(){
   const worker=new SentenceWorker({
     journal,profile:{...p},
     save:rows=>saveBilingualSentences(id,rows),
-    onCommit:rows=>{
-      if(sentenceWorker===worker&&lessonId===id&&activeClassroom?.id===selectedClass)
-        showBilingualSentenceRows(rows,id);
-    },
+    onCommit:rows=>showBilingualSentenceRows(rows,id,selectedClass),
     onError:code=>{
-      if(sentenceWorker===worker&&lessonId===id)
-        $('translation-status').textContent=code==='LLM_TIMEOUT'?
-          '文字模型请求超过45秒；未翻译的俄语仍保留，识别继续。':
-          code==='LLM_NETWORK_FAILED'?
-          '文字模型网络连接失败（可能是网络或 CORS 限制），俄语识别继续。':
-          '翻译暂不可用（'+code+'），俄语识别继续。';
+      if(activeClassroom?.id!==selectedClass||lessonId!==id)return;
+      $('translation-status').textContent=code==='LLM_TIMEOUT'?
+        '文字模型请求超过45秒；俄语原文已保留，将有限重试。':
+        code==='LLM_NETWORK_FAILED'?
+        '文字模型连接失败（网络或 CORS），俄语原文已保留。':
+        '翻译暂不可用（'+code+'），俄语原文已保留。';
+    },
+    onDrain:({status,pending,reason})=>{
+      if(translationWorkers.get(id)===worker)translationWorkers.delete(id);
+      if(sentenceWorker===worker)sentenceWorker=null;
+      if(activeClassroom?.id!==selectedClass||lessonId!==id)return;
+      $('translation-status').textContent=status==='complete'?
+        '这段录音的已确认俄语已全部转入双语历史。':
+        '本段尚有 '+pending+' 个稳定片段未翻译（'+reason+
+          '）；原文仍已保存，可在课程管理中手动恢复。';
+      // Do not clear the final transcript on any failed/incomplete drain.
+      renderCaption();
     }
   });
   sentenceWorker=worker;
-  $('translation-status').textContent='已启用正式双语历史处理';
+  translationWorkers.set(id,worker);
+  $('translation-status').textContent='正在等待稳定俄语并逐句处理…';
   worker.start();
 }
 
@@ -315,6 +315,9 @@ function showTranscript(update){
   // The source journal reads the exact same append-only stable delta but
   // never changes the existing LocalAgreement reducer's decision.
   sourceJournal?.add(update);
+  // Wake the sentence worker when new confirmed source arrives; polling alone
+  // adds unnecessary latency to an already buffered completed sentence.
+  if(update.stable_delta?.trim()||update.final)sentenceWorker?.wake();
   if(update.stable_delta?.trim())stable=stable?[stable,update.stable_delta.trim()].join(' '):update.stable_delta.trim();
   draft=update.partial_text?.trim()||'';
   const text=[stable,draft].filter(Boolean).join(' ');
@@ -368,7 +371,11 @@ async function onFailure(e){
   const message=errorMessage(e);
   if(!running&&!stopping&&!context){starting=false;$('error').textContent=message;buttons();return;}
   asr?.cancel();
-  sentenceWorker?.close();sentenceWorker=null;
+  if(sentenceWorker){
+    sentenceWorker.close();
+    translationWorkers.delete(sentenceWorker.journal.recordingId);
+  }
+  sentenceWorker=null;
   $('error').textContent=message;
   try{
     await cleanupMicrophone();
@@ -385,7 +392,13 @@ async function onFailure(e){
 async function start(){
   if(running||stopping||starting)return;
   if(!activeClassroom){$('error').textContent='请先在左侧添加并选择课程。';buttons();return;}
-  sentenceWorker?.close();sentenceWorker=null;
+  // A previous completed recording must finish draining independently.
+  // Only an unfinalized/interrupted worker is cancelled.
+  if(sentenceWorker&&!sentenceWorker.journal.finalized){
+    sentenceWorker.close();
+    translationWorkers.delete(sentenceWorker.journal.recordingId);
+  }
+  sentenceWorker=null;
   releasePlayback(); // Never play existing audio into a new microphone recording.
   const p=profiles.speech;
   if(!p?.baseUrl||!p?.model||!p?.apiKey){
@@ -460,6 +473,9 @@ async function stop(){
     // The ASR final flush is independent of LLM latency and may release
     // confirmed end-of-class fragments for the history worker.
     sentenceWorker?.finish();
+    if(sentenceWorker){
+      $('translation-status').textContent='录音已结束，正在继续翻译剩余已确认句子…';
+    }
     // stop() may emit the final raw hypothesis, so capture the latest
     // evidenceWrites promise only after its completion.
     await Promise.all([writing,evidenceWrites]);
@@ -490,6 +506,8 @@ async function stop(){
 }
 $('record').onclick=()=>running?void stop():void start();
 window.addEventListener('pagehide',()=>{
+  for(const worker of translationWorkers.values())worker.close();
+  translationWorkers.clear();
   sentenceWorker?.close();
   releasePlayback();
   stream?.getTracks().forEach(t=>t.stop());
@@ -677,8 +695,18 @@ async function retrySavedRecordingTranslation(item){
     $('local-feedback').textContent='请先在设置 → 文字中配置自己的文字模型。';
     return;
   }
+  // Do not run two paid workers for the same recording.
+  if(translationWorkers.has(item.id)){
+    $('local-feedback').textContent='这段录音正在后台处理剩余翻译，请等待完成。';
+    return;
+  }
   // Explicit user action only. Never run billable recovery on page load.
-  sentenceWorker?.close();sentenceWorker=null;
+  // A completed recording can finish independently of another recording.
+  if(sentenceWorker&&!sentenceWorker.journal.finalized){
+    sentenceWorker.close();
+    translationWorkers.delete(sentenceWorker.journal.recordingId);
+  }
+  sentenceWorker=null;
   const classroomId=activeClassroom.id,recordingId=item.id;
   try{
     const rows=await loadBilingualSentences(recordingId);
@@ -697,12 +725,23 @@ async function retrySavedRecordingTranslation(item){
         void renderSelectedClassroom({historyOnly:true});
       },
       onError:code=>{
-        if(sentenceWorker===worker&&activeClassroom?.id===classroomId)
+        if(activeClassroom?.id===classroomId)
           $('local-feedback').textContent='处理失败（'+code+'），原始俄语仍完整保留。';
+      },
+      onDrain:({status,pending,reason})=>{
+        if(translationWorkers.get(recordingId)===worker)translationWorkers.delete(recordingId);
+        if(sentenceWorker===worker)sentenceWorker=null;
+        if(activeClassroom?.id===classroomId){
+          $('local-feedback').textContent=status==='complete'?
+            '已完成这段录音的剩余翻译。':
+            '还剩 '+pending+' 个稳定片段未翻译（'+reason+'），可以稍后再试。';
+          void renderSelectedClassroom({historyOnly:true});
+        }
       }
     });
     worker.nextIndex=nextIndex;
     sentenceWorker=worker;
+    translationWorkers.set(recordingId,worker);
     $('local-feedback').textContent='正在处理这段录音尚未翻译的稳定文字…';
     worker.finish();
   }catch(e){

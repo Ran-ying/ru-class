@@ -1,13 +1,13 @@
 /**
  * v0.3: immutable, session-scoped stable text units plus a conservative
- * eight-second-after-CONFIRMATION candidate boundary for future v0.4 LLM.
+ * four-second-after-CONFIRMATION boundary for v0.4.0 faster formal history.
  *
  * An ASR response supplies a WINDOW, not word timestamps. The sample interval
  * below is evidence provenance only; it is NOT the time a phrase was spoken.
  * Never promote pending/partial_text based on elapsed time alone.
  */
 export const RATE=16000;
-export const STABLE_AGE_SAMPLES=8*RATE;
+export const STABLE_AGE_SAMPLES=4*RATE;
 export class StableUnitJournal{
   constructor({classroomId,recordingId,startedAt}){
     if(typeof classroomId!=='string'||!classroomId||
@@ -55,10 +55,10 @@ export class StableUnitJournal{
     if(update.final===true)this.finalized=true;
     return additions;
   }
-  /** Stable immutable units only. Future v0.4 may use these as LLM input. */
+  /** Only confirmed stable units become LLM input, never ASR draft. */
   ready(){
     // Never accept a caller-supplied "future" audio position or finalized
-    // override: advancing either would silently bypass the eight-second gate.
+    // override: advancing either would silently bypass the four-second gate.
     // Only processed ASR windows, or the actual final flush, move the clock.
     const cutoff=this.finalized?Number.POSITIVE_INFINITY:
       this.lastWindowEnd-STABLE_AGE_SAMPLES;
