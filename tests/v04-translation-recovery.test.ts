@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 // @ts-ignore Browser modules intentionally have no JS declarations.
 import {StableUnitJournal,RATE} from '../apps/web/stable-units.js';
 // @ts-ignore
-import {restoreTranslationProgress} from '../apps/web/translation-recovery.js';
+import {restoreTranslationProgress,pendingTranscriptAfterCommits} from '../apps/web/translation-recovery.js';
 import {readFileSync} from 'node:fs';
 
 function saved(){
@@ -71,4 +71,37 @@ test('recovery is an explicit user control, not automatic on page load',()=>{
   assert.match(code,/if\(!remainingUnits\)/);
   assert.match(code,/worker.nextIndex=nextIndex/);
   assert.doesNotMatch(code.slice(code.lastIndexOf('try{profiles=')),/retrySavedRecordingTranslation/);
+});
+
+// Static render projection is conservative: it removes only verified prefix
+// unit IDs, and does not delete a legitimate repeated later utterance.
+test('reloaded caption shows only pending text after durable bilingual commit',()=>{
+  const session=saved();
+  session.transcript='Первая фраза Первая фраза Третья фраза';
+  const rows=[{...acceptedRows()[0],sourcePrefix:'Первая фраза',
+    consumedUnitIds:['recording-1:0']}];
+  assert.equal(pendingTranscriptAfterCommits(session,rows),
+    'Первая фраза Третья фраза');
+  assert.equal(pendingTranscriptAfterCommits(session,[]),session.transcript);
+  const first={...acceptedRows()[0]};
+  assert.equal(pendingTranscriptAfterCommits(session,[first,acceptedRows()[1]]),
+    'Третья фраза');
+  const all=[first,acceptedRows()[1],{
+    index:2,recordingId:'recording-1',classroomId:'class-1',
+    sourcePrefix:'Третья фраза',consumedUnitIds:['recording-1:2'],
+    ru:'Третья фраза.',zh:'第三句。'
+  }];
+  assert.equal(pendingTranscriptAfterCommits(session,all),'');
+});
+test('unknown or forged consumption never removes original transcript on reload',()=>{
+  const session=saved();
+  session.transcript='Первая фраза Первая фраза Третья фраза';
+  const first=acceptedRows()[0];
+  assert.equal(pendingTranscriptAfterCommits(session,[{...first,sourcePrefix:'wrong'}]),
+    session.transcript);
+  assert.equal(pendingTranscriptAfterCommits(session,[{...first,
+    consumedUnitIds:['recording-1:1']}]),session.transcript);
+  assert.equal(pendingTranscriptAfterCommits({...session,transcript:'Неожиданная поправка'},[first]),
+    'Неожиданная поправка');
+  assert.equal(pendingTranscriptAfterCommits(session,[]),session.transcript);
 });
