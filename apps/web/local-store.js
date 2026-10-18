@@ -4,7 +4,7 @@ const DB_NAME='ru-class-local-v1';
 function openDatabase(){
   if(!globalThis.indexedDB)throw new Error('当前浏览器不支持 IndexedDB，不能保存私人数据。');
   return new Promise((resolve,reject)=>{
-    const request=indexedDB.open(DB_NAME,5);
+    const request=indexedDB.open(DB_NAME,6);
     request.onupgradeneeded=()=>{
       const db=request.result;
       if(!db.objectStoreNames.contains('profiles'))db.createObjectStore('profiles',{keyPath:'kind'});
@@ -19,6 +19,8 @@ function openDatabase(){
       if(!db.objectStoreNames.contains('classrooms'))db.createObjectStore('classrooms',{keyPath:'key'});
       // v5: durable, recording-scoped LLM sentence history, independent from ASR.
       if(!db.objectStoreNames.contains('sentences'))db.createObjectStore('sentences',{keyPath:['recordingId','index']});
+      // v6: content-free local diagnostics for each text API request.
+      if(!db.objectStoreNames.contains('llmMetrics'))db.createObjectStore('llmMetrics',{keyPath:'id'});
     };
     // Another tab may request an upgrade while this tab holds an open handle.
     // Release the old handle rather than blocking the schema migration.
@@ -58,6 +60,29 @@ async function withStore(table,mode,operation){
     tx.onerror=()=>reject(tx.error||new Error('LOCAL_WRITE_FAILED'));
     tx.onabort=()=>reject(tx.error||new Error('LOCAL_TRANSACTION_ABORTED'));
   });
+}
+// Preserve only allowlisted aggregate diagnostics; never write prompts,
+// responses, full URLs, API tokens, or authentication headers.
+const safeMetricNumber=n=>Number.isSafeInteger(n)&&n>=0?n:null;
+export async function saveTextRequestMetric(metric){
+  if(!metric||!Number.isFinite(metric.at)||!Number.isFinite(metric.elapsedMs))throw Error('INVALID_TEXT_METRIC');
+  const row={
+    id:crypto.randomUUID(),at:Math.round(metric.at),
+    provider:metric.provider==='DeepSeek'?'DeepSeek':'OpenAI 兼容',
+    model:typeof metric.model==='string'?metric.model.slice(0,100):'',
+    status:typeof metric.status==='string'&&/^(ok|LLM_[A-Z_0-9]+)$/.test(metric.status)?metric.status:'LLM_UNKNOWN_ERROR',
+    elapsedMs:Math.max(0,Math.round(metric.elapsedMs)),
+    promptTokens:safeMetricNumber(metric.promptTokens),
+    completionTokens:safeMetricNumber(metric.completionTokens),
+    totalTokens:safeMetricNumber(metric.totalTokens),
+    reasoningTokens:safeMetricNumber(metric.reasoningTokens),
+    cacheHitTokens:safeMetricNumber(metric.cacheHitTokens)
+  };
+  await withStore('llmMetrics','readwrite',s=>s.put(row));
+}
+export async function loadTextRequestMetrics(){
+  const rows=await withStore('llmMetrics','readonly',s=>s.getAll());
+  return rows.sort((a,b)=>b.at-a.at||b.id.localeCompare(a.id));
 }
 export async function loadProfiles(){
   const rows=await withStore('profiles','readonly',s=>s.getAll());
@@ -437,7 +462,7 @@ export async function recordingWav(lessonId){
 }
 export async function clearBrowserData(){
   const db=await connection();
-  for(const table of ['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences']){
+  for(const table of ['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences','llmMetrics']){
     await new Promise((resolve,reject)=>{
       const tx=db.transaction(table,'readwrite');
       tx.objectStore(table).clear();

@@ -97,3 +97,26 @@ errors of an unchanged source batch, pause and preserve untranslated Russian;
 manual recovery remains opt-in and must not run in parallel for the same
 recording. The changed 4-second gate is **after stability confirmation**, not
 an SLA for speech-to-translation. Real Safari latency/billing remains untested.
+
+
+## DeepSeek non-thinking and request statistics (2026-10-18)
+
+For the **exact** `api.deepseek.com` hostname only, the browser sends
+`thinking: {type: 'disabled'}`, `max_tokens: 2048` and `stream: false`
+with `/chat/completions`. Other OpenAI-compatible endpoints retain their
+generic request without vendor-specific fields. This follows DeepSeek's
+official non-thinking Chat Completion API contract and avoids default
+reasoning-token consumption. Responses with `finish_reason: 'length'`
+are **rejected**, never committed or ACKed as successfully translated;
+the raw Russian stays recoverable.
+
+Text API attempts (including failures/timeouts) produce a single browser-local
+IndexedDB v6 `llmMetrics` entry. Entries contain only local timestamp,
+provider label, model ID, elapsed wall time, status and optional
+prompt/completion/total/reasoning/cache-hit token counters as **reported by
+the API**. Missing counters remain null (not falsely displayed as zero).
+No API Key, URLs, prompt, raw ASR or translated contents are stored in
+diagnostics. Settings → About shows aggregate statistics and the latest
+30 attempts; clearing browser data deletes these diagnostics as well.
+Request diagnostics are best-effort and never block ASR or durable sentence
+ACK. Real DeepSeek latency/cost reduction requires owner-device measurement.

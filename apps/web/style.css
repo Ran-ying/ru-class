@@ -140,6 +140,12 @@ main{grid-template-rows:minmax(0,1fr)}
 #settings .settings-about h3 small{font-size:13px;font-weight:400;color:#738177}
 #settings .settings-about p{font-size:14px;margin:0 0 16px}
 #settings .settings-about a{font-size:14px;color:#245946}
+#settings .llm-metrics{border-top:1px solid #d8dfd7;margin:20px 0 8px;padding-top:14px}
+#settings .llm-metrics h4{font-size:15px;color:#183330;margin:0 0 12px}
+#settings .llm-metrics-scroll{overflow-x:auto;width:100%;margin:8px 0}
+#settings .llm-metrics table{border-collapse:collapse;min-width:510px;width:100%;font-size:12px}
+#settings .llm-metrics th,#settings .llm-metrics td{padding:9px 8px;text-align:left;border-bottom:1px solid #e1e7de;white-space:nowrap}
+#settings .llm-metrics th{font-weight:500;color:#687d71}
 @media(max-width:500px){
  #settings .settings-heading{grid-template-columns:auto minmax(0,1fr) auto;gap:6px}
  #settings .settings-heading .settings-tabs{min-width:0}

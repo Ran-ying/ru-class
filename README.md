@@ -235,3 +235,19 @@ npm run build
 ### 旧架构说明
 
 v0.1.x 的 Node.js 音频 WebSocket 网关、`config.json` 里的全局模型和公网站点 Token 已不再用于**正式启动入口**；相应历史代码/测试保留在仓库供迁移比对。不要沿用旧的 Nginx 到 `/ws/client` 转发说明。参见 [浏览器直连架构](docs/browser-direct-byok.md)。
+
+
+### 文字 API 低延迟设置与本地统计（2026-10-18）
+
+当「文字」API 地址属于官方 `api.deepseek.com` 时，RU-Class
+为正式句子翻译发送 `thinking: {type: "disabled"}`、
+`max_tokens: 2048`、`stream: false`，防止默认深度思考造成
+不必要的输出 Token 和延迟。其他兼容 API 保持原有参数。
+如果 DeepSeek 的回复因长度限制截断，系统拒绝保存不完整译文，
+保留原始俄语等待有限重试或用户手动恢复。
+
+在「设置 → 关于」可查看此浏览器保存的文字模型每次请求耗时、
+Token 用量和错误状态。只有 API 明确上报的 Token 才显示数字，
+未提供推理 Token 时显示「—」而非 0。诊断信息不含密钥、
+课堂原文和翻译正文；清除本地数据时同时删除诊断信息。
+实际效果须在 MacBook Safari 和真实模型上继续验收。

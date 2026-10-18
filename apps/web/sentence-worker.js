@@ -1,4 +1,25 @@
 export const LLM_TIMEOUT_MS=45000;
+export const DEEPSEEK_TRANSLATION_MAX_TOKENS=2048;
+
+// Only the official provider gets vendor-specific fields. Never infer from
+// model names (custom OpenAI-compatible providers may reuse these IDs).
+export function textCompletionBody({baseUrl,model,messages}){
+  const body={model,temperature:0,messages};
+  if(new URL(baseUrl).hostname==='api.deepseek.com'){
+    Object.assign(body,{thinking:{type:'disabled'},max_tokens:DEEPSEEK_TRANSLATION_MAX_TOKENS,stream:false});
+  }
+  return body;
+}
+const tokenCount=value=>Number.isSafeInteger(value)&&value>=0?value:null;
+export function textUsage(usage){
+  return {
+    promptTokens:tokenCount(usage?.prompt_tokens),
+    completionTokens:tokenCount(usage?.completion_tokens),
+    totalTokens:tokenCount(usage?.total_tokens),
+    reasoningTokens:tokenCount(usage?.completion_tokens_details?.reasoning_tokens),
+    cacheHitTokens:tokenCount(usage?.prompt_cache_hit_tokens)
+  };
+}
 export function validateSentenceResult(payload,units){
   if(!Array.isArray(units)||!units.length)throw Error('LLM_SOURCE_UNAVAILABLE');
   const count=payload?.consumed_units;
@@ -19,7 +40,7 @@ export function validateSentenceResult(payload,units){
   if(sentences.map(s=>s.ru).join(' ').length>prefix.length*2+150)throw Error('LLM_EXCESSIVE_REWRITE');
   return {count,prefix,sentences};
 }
-export async function requestSentenceBatch(profile,units,{signal}={}){
+export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=>{}}={}){
   const {endpoint,validateProfile}=await import('./direct-asr.js');
   const {baseUrl,model,apiKey}=validateProfile(profile);
   const source=units.map(u=>u.text).join(' ');
@@ -30,32 +51,49 @@ export async function requestSentenceBatch(profile,units,{signal}={}){
   ];
   let response;
   const timeoutSignal=AbortSignal.timeout(LLM_TIMEOUT_MS);
+  const started=performance.now();
+  const deepseek=new URL(baseUrl).hostname==='api.deepseek.com';
+  let metricStatus='LLM_REQUEST_INCOMPLETE',usage=null;
   let raw;
   try{
     response=await fetch(endpoint(baseUrl)+'/chat/completions',{
       method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',
         ...(apiKey?{Authorization:'Bearer '+apiKey}:{})},
-      body:JSON.stringify({model,temperature:0,messages}),redirect:'error',
+      body:JSON.stringify(textCompletionBody({baseUrl,model,messages})),redirect:'error',
       credentials:'omit',signal:AbortSignal.any([timeoutSignal,...(signal?[signal]:[])])
     });
     if(!response.ok)throw Error('LLM_HTTP_'+response.status);
     if(Number(response.headers.get('content-length')||0)>100000)throw Error('LLM_RESPONSE_TOO_LARGE');
     raw=await response.text();
     if(raw.length>100000)throw Error('LLM_RESPONSE_TOO_LARGE');
+    let data;
+    try{data=JSON.parse(raw);}catch{throw Error('LLM_INVALID_JSON');}
+    usage=data?.usage;
+    if(data?.choices?.[0]?.finish_reason==='length')throw Error('LLM_OUTPUT_TRUNCATED');
+    let content=data?.choices?.[0]?.message?.content;
+    if(typeof content!=='string'||content.length>16000)throw Error('LLM_INVALID_RESPONSE');
+    content=content.trim();
+    const fence=String.fromCharCode(96).repeat(3);
+    if(content.startsWith(fence+'json')&&content.endsWith(fence))content=content.slice(fence.length+4,-fence.length).trim();
+    let parsed;
+    try{parsed=JSON.parse(content);}catch{throw Error('LLM_INVALID_JSON');}
+    metricStatus='ok';
+    return parsed;
   }catch(e){
-    if(signal?.aborted)throw Error('LLM_CANCELLED');
-    if(timeoutSignal.aborted||e?.name==='TimeoutError')throw Error('LLM_TIMEOUT');
-    if(e instanceof Error&&e.message.startsWith('LLM_'))throw e;
-    throw Error('LLM_NETWORK_FAILED');
+    metricStatus=signal?.aborted?'LLM_CANCELLED':
+      timeoutSignal.aborted||e?.name==='TimeoutError'?'LLM_TIMEOUT':
+      e instanceof Error&&e.message.startsWith('LLM_')?e.message:'LLM_NETWORK_FAILED';
+    throw Error(metricStatus);
+  }finally{
+    // One local-only, content-free record per HTTP attempt, including errors
+    // and timeouts. Telemetry failure must never affect recording/translation.
+    try{onTelemetry({
+      at:Date.now(),provider:deepseek?'DeepSeek':'OpenAI 兼容',
+      model:model.slice(0,100),status:metricStatus,
+      elapsedMs:Math.max(0,Math.round(performance.now()-started)),
+      ...textUsage(usage)
+    });}catch{}
   }
-  let data;
-  try{data=JSON.parse(raw);}catch{throw Error('LLM_INVALID_JSON');}
-  let content=data?.choices?.[0]?.message?.content;
-  if(typeof content!=='string'||content.length>16000)throw Error('LLM_INVALID_RESPONSE');
-  content=content.trim();
-  const fence=String.fromCharCode(96).repeat(3);
-  if(content.startsWith(fence+'json')&&content.endsWith(fence))content=content.slice(fence.length+4,-fence.length).trim();
-  try{return JSON.parse(content);}catch{throw Error('LLM_INVALID_JSON');}
 }
 function nextReady(journal){
   const ready=journal.ready(),result=[];let size=0;
@@ -66,9 +104,9 @@ function nextReady(journal){
   return result;
 }
 export class SentenceWorker{
-  constructor({journal,profile,save,onCommit=()=>{},onError=()=>{},onDrain=()=>{},request=requestSentenceBatch,intervalMs=800}){
+  constructor({journal,profile,save,onCommit=()=>{},onError=()=>{},onDrain=()=>{},onRequestMetric=()=>{},request=requestSentenceBatch,intervalMs=800}){
     if(!journal||typeof save!=='function')throw Error('LLM_INVALID_WORKER');
-    Object.assign(this,{journal,profile,save,onCommit,onError,onDrain,request,intervalMs});
+    Object.assign(this,{journal,profile,save,onCommit,onError,onDrain,onRequestMetric,request,intervalMs});
     this.closed=false;this.running=false;this.timer=null;this.controller=null;
     this.nextIndex=0;this.lastEmptySignature='';
     this.failedSignature='';this.failuresOnSignature=0;
@@ -112,7 +150,8 @@ export class SentenceWorker{
     const signal=this.controller.signal;
     let delay=this.intervalMs;
     try{
-      const payload=await this.request(this.profile,ready.map(u=>({...u,finalBatch:this.journal.finalized})),{signal});
+      const payload=await this.request(this.profile,ready.map(u=>({...u,finalBatch:this.journal.finalized})),
+        {signal,onTelemetry:this.onRequestMetric});
       if(this.closed||signal.aborted)return;
       const accepted=validateSentenceResult(payload,ready);
       if(!accepted.count){

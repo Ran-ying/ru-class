@@ -2,7 +2,7 @@ import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from '.
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
 import {restoreTranslationProgress,pendingTranscriptAfterCommits} from './translation-recovery.js';
-import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,clearBrowserData} from './local-store.js';
+import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,saveTextRequestMetric,loadTextRequestMetrics,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
 const kinds=['speech','image','text'];
@@ -270,6 +270,48 @@ function showBilingualSentenceRows(rows,recordingId,classroomId){
   // the current ASR stable/draft or the microphone clock.
   void renderSelectedClassroom({historyOnly:true});
 }
+// Usage records are local and intentionally omit prompts, answers, URLs and keys.
+let metricViewRevision=0;
+async function refreshTextMetrics(){
+  const revision=++metricViewRevision;
+  const info=$('llm-metrics-summary'),holder=$('llm-metrics-rows');
+  try{
+    const rows=await loadTextRequestMetrics();
+    if(revision!==metricViewRevision)return;
+    const succeeded=rows.filter(r=>r.status==='ok');
+    const measured=rows.filter(r=>r.totalTokens!==null);
+    const tokens=measured.reduce((n,r)=>n+r.totalTokens,0);
+    const reasoning=rows.filter(r=>r.reasoningTokens!==null);
+    const reasonTotal=reasoning.reduce((n,r)=>n+r.reasoningTokens,0);
+    const avg=rows.length?Math.round(rows.reduce((n,r)=>n+r.elapsedMs,0)/rows.length):0;
+    info.textContent=rows.length?
+      rows.length+' 次请求 · '+succeeded.length+' 次成功响应 · 平均 '+(avg/1000).toFixed(1)+
+      ' 秒 · 已报告总 Token '+tokens.toLocaleString()+
+      ' · 已报告推理 Token '+reasonTotal.toLocaleString():
+      '暂无文字模型请求记录。录音或恢复翻译后会显示。';
+    holder.replaceChildren();
+    for(const record of rows.slice(0,30)){
+      const tr=document.createElement('tr');
+      const cols=[new Date(record.at).toLocaleString(),record.model,
+        record.status==='ok'?'成功':record.status,
+        (record.elapsedMs/1000).toFixed(2)+' s',
+        record.totalTokens??'—',record.reasoningTokens??'—'];
+      for(const value of cols){
+        const td=document.createElement('td');td.textContent=String(value);tr.append(td);
+      }
+      holder.append(tr);
+    }
+  }catch(e){if(revision===metricViewRevision)info.textContent='无法读取本地统计：'+errorMessage(e);}
+}
+function recordTextRequestMetric(metric){
+  void saveTextRequestMetric(metric).then(()=>{
+    if(!$('panel-about').hidden)void refreshTextMetrics();
+  }).catch(()=>{
+    // Analytics may be unavailable (quota, private mode); never block ASR
+    // or an otherwise successful durable translation commit.
+    if(!$('panel-about').hidden)$('llm-metrics-summary').textContent='本地请求统计写入失败，翻译不受影响。';
+  });
+}
 function startSentenceWorker(){
   sentenceWorker?.close();
   sentenceWorker=null;
@@ -281,6 +323,7 @@ function startSentenceWorker(){
   const id=lessonId,journal=sourceJournal,selectedClass=activeClassroom.id;
   const worker=new SentenceWorker({
     journal,profile:{...p},
+    onRequestMetric:recordTextRequestMetric,
     save:rows=>saveBilingualSentences(id,rows),
     onCommit:rows=>showBilingualSentenceRows(rows,id,selectedClass),
     onError:code=>{
@@ -623,6 +666,7 @@ function showSettingsTab(name){
     $('tab-'+tab).tabIndex=active?0:-1;
     $(panel).hidden=!active;
   }
+  if(name==='about')void refreshTextMetrics();
 }
 for(const tab of ['models','about']){
   $('tab-'+tab).onclick=()=>showSettingsTab(tab);
@@ -718,6 +762,7 @@ async function retrySavedRecordingTranslation(item){
     }
     const worker=new SentenceWorker({
       journal,profile:{...p},
+      onRequestMetric:recordTextRequestMetric,
       save:newRows=>saveBilingualSentences(recordingId,newRows),
       onCommit:()=>{
         if(sentenceWorker!==worker||activeClassroom?.id!==classroomId)return;
@@ -852,7 +897,11 @@ async function renderLessons(){
 $('clear-local').onclick=async()=>{
   if(running||stopping||starting){$('local-feedback').textContent='请先停止录音，再清空浏览器数据。';return;}
   if(!confirm('确定清空此浏览器里所有 API 配置、课堂文本和录音吗？此操作无法撤销。'))return;
-  try{releasePlayback();await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();activeClassroom=null;lessonId='';await refreshClassrooms();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
+  try{
+    for(const worker of translationWorkers.values())worker.close();
+    translationWorkers.clear();sentenceWorker=null;
+    metricViewRevision++;
+    releasePlayback();await clearBrowserData();profiles={speech:null,image:null,text:null};displayProfiles();activeClassroom=null;lessonId='';await refreshClassrooms();$('local-feedback').textContent='已清空此浏览器的 RU-Class 数据。';}
   catch(e){$('local-feedback').textContent='清空失败：'+errorMessage(e);}
 };
 try{profiles={speech:null,image:null,text:null,...await loadProfiles()};}

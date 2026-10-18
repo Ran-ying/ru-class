@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// A tiny transaction-compatible fake for verifying the v1 -> v5 IndexedDB
+// A tiny transaction-compatible fake for verifying the v1 -> v6 IndexedDB
 // schema and browser-only evidence. It does not impersonate Safari acceptance.
 const stores=new Map<string,Map<string,any>>();
 const schemas=new Map<string,string|string[]>();
@@ -124,10 +124,10 @@ const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
   createClassroom,renameClassroom,listClassrooms,listClassroomRecordings,classroomKey,localCalendarDate,
   saveBilingualSentences,loadBilingualSentences,clearBrowserData}=storage;
 
-test('IndexedDB v5 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
+test('IndexedDB v6 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
   const previous=await loadProfiles();
-  assert.deepEqual(requestedVersions,[5]);
-  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences']);
+  assert.deepEqual(requestedVersions,[6]);
+  assert.deepEqual([...stores.keys()],['profiles','lessons','audio','hypotheses','evidence','classrooms','sentences','llmMetrics']);
   assert.equal(previous.speech.apiKey,oldProfile.apiKey);
   assert.equal((await listLessons())[0].title,oldLesson.title);
   assert.deepEqual([...stores.get('audio')!.values()][0].data,oldAudio.data);

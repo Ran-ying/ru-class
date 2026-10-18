@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-ignore Browser JavaScript has no TS declarations.
-import {SentenceWorker,validateSentenceResult,requestSentenceBatch,LLM_TIMEOUT_MS} from '../apps/web/sentence-worker.js';
+import {SentenceWorker,validateSentenceResult,requestSentenceBatch,LLM_TIMEOUT_MS,textCompletionBody,textUsage,DEEPSEEK_TRANSLATION_MAX_TOKENS} from '../apps/web/sentence-worker.js';
 // @ts-ignore
 import {StableUnitJournal,RATE} from '../apps/web/stable-units.js';
 
@@ -167,4 +167,89 @@ test('new recording does not cancel finished-recording background translation',(
   assert.match(app,/if\(sentenceWorker&&!sentenceWorker\.journal\.finalized\)/);
   assert.match(app,/translationWorkers\.set\(id,worker\)/);
   assert.match(app,/if\(recordingId===lessonId\)renderCaption\(\)/);
+});
+
+test('DeepSeek official host disables thinking and bounds output, other providers stay compatible',()=>{
+  const messages=[{role:'user',content:'short test'}];
+  const deepseek=textCompletionBody({baseUrl:'https://api.deepseek.com/v1',
+    model:'deepseek-flash',messages});
+  assert.deepEqual(deepseek.thinking,{type:'disabled'});
+  assert.equal(deepseek.max_tokens,2048);
+  assert.equal(DEEPSEEK_TRANSLATION_MAX_TOKENS,2048);
+  assert.equal(deepseek.stream,false);
+  const generic=textCompletionBody({baseUrl:'https://ai.example.test/v1',
+    model:'deepseek-flash',messages});
+  assert.deepEqual(generic,{model:'deepseek-flash',temperature:0,messages});
+  const impersonator=textCompletionBody({baseUrl:'https://api.deepseek.com.attacker.test/v1',
+    model:'deepseek-flash',messages});
+  assert.deepEqual(impersonator,generic);
+});
+test('each DeepSeek request reports sanitized token usage and elapsed time',async()=>{
+  const before=globalThis.fetch;
+  let body:any,results:any[]=[];
+  (globalThis as any).fetch=async(_url:string,options:any)=>{
+    body=JSON.parse(options.body);
+    return {ok:true,headers:new Headers(),text:async()=>JSON.stringify({
+      choices:[{finish_reason:'stop',message:{content:JSON.stringify({
+        consumed_units:1,source_prefix:'Фраза',
+        sentences:[{ru:'Фраза.',zh:'一句话。'}]})}}],
+      usage:{prompt_tokens:170,completion_tokens:28,total_tokens:198,
+        completion_tokens_details:{reasoning_tokens:0},prompt_cache_hit_tokens:10}
+    })};
+  };
+  try{
+    const result=await requestSentenceBatch(
+      {baseUrl:'https://api.deepseek.com/v1',model:'deepseek-flash',apiKey:'secret'},
+      [{id:'1',text:'Фраза',finalBatch:true}],
+      {onTelemetry:(metric:any)=>{results.push(metric);}});
+    assert.equal(result.consumed_units,1);
+    assert.equal(body.thinking.type,'disabled');
+    assert.equal(body.max_tokens,2048);
+    assert.equal(body.stream,false);
+    assert.equal(results.length,1);
+    assert.equal(results[0].provider,'DeepSeek');
+    assert.equal(results[0].status,'ok');
+    assert.equal(results[0].totalTokens,198);
+    assert.equal(results[0].reasoningTokens,0);
+    assert.equal(results[0].cacheHitTokens,10);
+    assert.ok(results[0].elapsedMs>=0);
+    assert.doesNotMatch(JSON.stringify(results),/secret|Фраза|chat\/completions/);
+  }finally{(globalThis as any).fetch=before;}
+});
+test('truncated DeepSeek completion fails closed but retains available usage',async()=>{
+  const before=globalThis.fetch;
+  const events:any[]=[];
+  (globalThis as any).fetch=async()=>({
+    ok:true,headers:new Headers(),text:async()=>JSON.stringify({
+      choices:[{finish_reason:'length',message:{content:'{\"incomplete\":'}}],
+      usage:{prompt_tokens:10,completion_tokens:2048,total_tokens:2058}
+    })
+  });
+  try{
+    await assert.rejects(requestSentenceBatch(
+      {baseUrl:'https://api.deepseek.com',model:'deepseek-flash',apiKey:'secret'},
+      [{id:'1',text:'Фраза'}],{onTelemetry:(m:any)=>events.push(m)}
+    ),/LLM_OUTPUT_TRUNCATED/);
+    assert.equal(events.length,1);
+    assert.equal(events[0].status,'LLM_OUTPUT_TRUNCATED');
+    assert.equal(events[0].totalTokens,2058);
+    assert.equal(events[0].reasoningTokens,null,'unreported usage must not be interpreted as zero');
+  }finally{(globalThis as any).fetch=before;}
+});
+test('text provider errors and missing usage generate a single safe metric',async()=>{
+  const before=globalThis.fetch;
+  const events:any[]=[];
+  (globalThis as any).fetch=async()=>{throw new TypeError('provider unavailable');};
+  try{
+    await assert.rejects(requestSentenceBatch(
+      {baseUrl:'https://example.test/v1',model:'text',apiKey:'private'},
+      [{id:'1',text:'сырой текст'}],{onTelemetry:(m:any)=>events.push(m)}
+    ),/LLM_NETWORK_FAILED/);
+    assert.equal(events.length,1);
+    assert.equal(events[0].status,'LLM_NETWORK_FAILED');
+    assert.equal(events[0].totalTokens,null);
+    assert.equal(events[0].reasoningTokens,null);
+    assert.equal(events[0].provider,'OpenAI 兼容');
+    assert.equal(textUsage({completion_tokens_details:{reasoning_tokens:3}}).reasoningTokens,3);
+  }finally{(globalThis as any).fetch=before;}
 });
