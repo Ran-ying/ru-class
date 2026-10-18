@@ -9,6 +9,8 @@ test('v0.4 refreshes one persistent history row per recording after LLM commit, 
   const action=app.slice(start,end);
   assert.ok(start>=0&&end>start);
   assert.match(action,/renderSelectedClassroom\(\{historyOnly:true\}\)/);
+  assert.match(action,/renderCaption\(\);/,
+    'acknowledged source fragments must immediately leave the lower RU area');
   assert.doesNotMatch(action,/holder\.append\(|createElement\('article'\)/);
   assert.match(app,/article\.dataset\.recordingId=session\.id/);
 });
@@ -19,7 +21,9 @@ test('background history refresh during microphone use retains live RU stable an
   const end=app.indexOf('async function refreshClassrooms(',start);
   const render=app.slice(start,end);
   assert.match(render,/\{historyOnly=false\}=\{\}/);
-  assert.match(render,/if\(revision!==classroomRevision\|\|key!==activeClassroom\?\.key\|\|\(!historyOnly&&\(starting\|\|running\)\)\)return/);
+  const guards=render.match(/if\(revision!==classroomRevision\|\|key!==activeClassroom\?\.key\|\|\(!historyOnly&&\(starting\|\|running\)\)\)return/g)||[];
+  assert.equal(guards.length,2,
+    'both asynchronous IndexedDB reads must accept history-only refreshes during live recording');
   assert.ok(render.includes('if(historyOnly)return; //'));
   assert.ok(render.indexOf('if(historyOnly)return')<render.indexOf("stable=last?.transcript"),'history-only load must exit before modifying current RU');
 });
