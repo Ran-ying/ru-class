@@ -126,10 +126,17 @@ export function nextReady(journal,{minUnits=0}={}){
   }
   if(lastSentenceIndex>=0&&lastSentenceIndex+1>=required)
     return batch.slice(0,lastSentenceIndex+1);
-  // A word-complete thought may have no Whisper period at all. The LLM can
-  // decide semantic completeness here, but only from already-stable units.
-  // The minimum context prevents one-word fragments from causing paid calls.
-  if(batch.length>=required&&probeEligible(batch))return batch;
+  // A word-complete thought may have no Whisper period at all. Probe
+  // the SHORTEST prefix with enough stable context, rather than shipping
+  // eight units that could each contain another sentence. If a prior probe
+  // returned zero, required grows so newly confirmed context can be seen.
+  const semantic=[];
+  const probeLimit=Math.max(6,required);
+  for(const unit of batch){
+    if(semantic.length>=probeLimit)break;
+    semantic.push(unit);
+    if(semantic.length>=required&&probeEligible(semantic))return semantic;
+  }
   // Keep the established +4s fallback for short, ambiguous confirmed text.
   // The final flush still releases every remaining stable unit.
   const ready=journal.ready(),result=[];size=0;
