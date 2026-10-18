@@ -455,3 +455,20 @@ conservative fallback; clean Stop still drains all confirmed source. No
 unconfirmed hypothesis/draft may bypass the LocalAgreement stability gate.
 Preserve exact consumedUnitIds, source-prefix validation, durable save-before-
 ACK and recovery compatibility; no speech/word timing is inferred.
+
+
+## v0.4 conservative semantic completion probes (2026-10-18)
+
+A finished thought can lack terminal punctuation. Permit the existing
+serialized DeepSeek text completion request to evaluate the SHORTEST eligible
+already-confirmed Russian source prefix (at least 9 words across 2 distinct
+ASR confirmation windows, or at least 16 words from 1 window). Prompt the
+model to consume only semantically complete whole source-unit prefixes, or
+consume 0 if the final clause is unfinished. The original RU stability
+boundary remains authoritative; never send `partial_text`. Avoid repeated
+paid 0-consumption probes unless NEW confirmed source changes, even if the
+ASR window clock advances. A rejected capped prefix must be able to include
+newly confirmed context rather than remaining permanently blocked by old
+unit IDs. Maintain the legacy +4s fallback for short/no punctuation source,
+exact prefix/unit-ID validation, save-before-ACK, opt-in recovery, and full
+Stop drain; no guessed word timestamps, no extra LLM endpoint.
