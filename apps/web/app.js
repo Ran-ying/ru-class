@@ -1,6 +1,7 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
+import {restoreTranslationProgress} from './translation-recovery.js';
 import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
@@ -642,6 +643,53 @@ $('local-player').addEventListener('error',()=>{
   if(playbackUrl)$('local-feedback').textContent='本地音频解码失败，请下载 WAV 检查数据是否完整。';
 });
 
+async function retrySavedRecordingTranslation(item){
+  if(running||starting||stopping){
+    $('local-feedback').textContent='请先停止录音，再恢复此前录音的翻译。';
+    return;
+  }
+  if(!activeClassroom||item.classroomId!==activeClassroom.id){
+    $('local-feedback').textContent='请选择该录音所属的课程。';
+    return;
+  }
+  const p=profiles.text;
+  if(!p?.baseUrl||!p?.model||!p?.apiKey){
+    $('local-feedback').textContent='请先在设置 → 文字中配置自己的文字模型。';
+    return;
+  }
+  // Explicit user action only. Never run billable recovery on page load.
+  sentenceWorker?.close();sentenceWorker=null;
+  const classroomId=activeClassroom.id,recordingId=item.id;
+  try{
+    const rows=await loadBilingualSentences(recordingId);
+    if(running||starting||stopping||activeClassroom?.id!==classroomId)return;
+    const {journal,nextIndex,remainingUnits}=restoreTranslationProgress(item,rows);
+    if(!remainingUnits){
+      $('local-feedback').textContent='这段录音已没有待翻译的稳定文字。';
+      return;
+    }
+    const worker=new SentenceWorker({
+      journal,profile:{...p},
+      save:newRows=>saveBilingualSentences(recordingId,newRows),
+      onCommit:()=>{
+        if(sentenceWorker!==worker||activeClassroom?.id!==classroomId)return;
+        $('local-feedback').textContent='已保存恢复处理的双语句子。';
+        void renderSelectedClassroom({historyOnly:true});
+      },
+      onError:code=>{
+        if(sentenceWorker===worker&&activeClassroom?.id===classroomId)
+          $('local-feedback').textContent='处理失败（'+code+'），原始俄语仍完整保留。';
+      }
+    });
+    worker.nextIndex=nextIndex;
+    sentenceWorker=worker;
+    $('local-feedback').textContent='正在处理这段录音尚未翻译的稳定文字…';
+    worker.finish();
+  }catch(e){
+    $('local-feedback').textContent='无法恢复翻译：'+errorMessage(e);
+  }
+}
+
 let recordsRevision=0;
 async function renderLessons(){
   const revision=++recordsRevision;
@@ -711,6 +759,15 @@ async function renderLessons(){
         }catch(e){$('local-feedback').textContent=errorMessage(e);}
       };
       row.append(evidenceButton);
+      if(item.outcome==='completed'&&Array.isArray(item.stableUnits)&&item.stableUnits.length){
+        const retryButton=document.createElement('button');
+        retryButton.type='button';
+        retryButton.textContent='恢复未完成翻译';
+        retryButton.title='只发送该录音尚未翻译的已确认俄语；会使用你配置的文字模型，可能产生 API 费用';
+        retryButton.disabled=running||starting||stopping;
+        retryButton.onclick=()=>void retrySavedRecordingTranslation(item);
+        row.append(retryButton);
+      }
       const status=await lessonEvidenceStatus(item.id);
       if(revision!==recordsRevision||key!==activeClassroom?.key)return;
       if(status.savedCount||status.status!=='legacy_unverified'){
