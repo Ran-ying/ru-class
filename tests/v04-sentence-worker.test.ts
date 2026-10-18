@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-ignore Browser JavaScript has no TS declarations.
-import {SentenceWorker,validateSentenceResult,requestSentenceBatch,LLM_TIMEOUT_MS,textCompletionBody,textUsage,DEEPSEEK_TRANSLATION_MAX_TOKENS} from '../apps/web/sentence-worker.js';
+import {SentenceWorker,nextReady,validateSentenceResult,requestSentenceBatch,LLM_TIMEOUT_MS,textCompletionBody,textUsage,DEEPSEEK_TRANSLATION_MAX_TOKENS} from '../apps/web/sentence-worker.js';
 // @ts-ignore
 import {StableUnitJournal,RATE} from '../apps/web/stable-units.js';
 
@@ -252,4 +252,55 @@ test('text provider errors and missing usage generate a single safe metric',asyn
     assert.equal(events[0].provider,'OpenAI 兼容');
     assert.equal(textUsage({completion_tokens_details:{reasoning_tokens:3}}).reasoningTokens,3);
   }finally{(globalThis as any).fetch=before;}
+});
+
+test('a complete confirmed sentence is eligible immediately, no extra 4s clock',()=>{
+  const j=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
+  j.add({stable_delta:'Завершённое предложение.',window_start_sample:0,window_end_sample:4*RATE});
+  assert.deepEqual(j.ready(),[],'legacy age gate still requires 4s for fallback');
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Завершённое предложение.']);
+});
+test('one model call contains at most two completed sentences and no unconfirmed tail',()=>{
+  const j=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
+  j.add({stable_delta:'Первое. Второе. Третье. И ещё',
+    window_start_sample:0,window_end_sample:RATE});
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Первое.','Второе.']);
+  j.acknowledge(nextReady(j).map((x:any)=>x.id));
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Третье.']);
+  j.acknowledge(nextReady(j).map((x:any)=>x.id));
+  assert.deepEqual(nextReady(j),[],'unfinished tail is held until aged or full stop');
+  j.add({stable_delta:' продолжается.',window_start_sample:RATE,
+    window_end_sample:2*RATE});
+  assert.deepEqual(nextReady(j),[],'new fragment cannot turn already-ended stable tail into a fake complete sentence');
+  j.add({stable_delta:'',window_start_sample:2*RATE,window_end_sample:7*RATE});
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['И ещё','продолжается.']);
+});
+test('as each complete sentence arrives, each durable commit appears separately before Stop',async()=>{
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
+  const saved:any[]=[];const commits:number[]=[];
+  const worker=new SentenceWorker({journal,profile:{},intervalMs:100000,
+    request:async(_:unknown,batch:any[])=>({
+      consumed_units:batch.length,source_prefix:batch.map((x:any)=>x.text).join(' '),
+      sentences:batch.map((x:any)=>({ru:x.text,zh:'句子。'}))
+    }),
+    save:async(rows:any[])=>{saved.push(...rows);},
+    onCommit:(rows:any[])=>commits.push(rows.length)
+  });
+  journal.add({stable_delta:'Первая закончена.',window_start_sample:0,window_end_sample:RATE});
+  await worker.tick();
+  assert.deepEqual(commits,[1]);
+  assert.equal(journal.ready().length,0);
+  journal.add({stable_delta:'Вторая закончена.',window_start_sample:RATE,window_end_sample:2*RATE});
+  await worker.tick();
+  worker.close();
+  assert.deepEqual(commits,[1,1],'new sentence is committed on a separate update, not in a burst');
+  assert.equal(saved.length,2);
+  assert.deepEqual(saved.map(x=>x.consumedUnitIds),[['r:0'],['r:1']]);
+});
+test('confirmed speech without sentence punctuation keeps conservative aged fallback',()=>{
+  const j=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
+  j.add({stable_delta:'Незаконченная мысль',window_start_sample:0,window_end_sample:RATE});
+  assert.deepEqual(nextReady(j),[]);
+  j.add({stable_delta:'',window_start_sample:RATE,window_end_sample:5*RATE});
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Незаконченная мысль']);
 });

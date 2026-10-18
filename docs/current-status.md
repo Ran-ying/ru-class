@@ -609,3 +609,17 @@ already at/within 6 px of the bottom; if browsing older text, the prior
 scrollTop is retained. New classroom selection starts at the bottom.
 The Token summary shows '—（未上报）' rather than 0 if the provider returned no
 reasoning-token counters at all.
+
+
+## Completed-sentence incremental history (2026-10-18)
+
+Already confirmed LocalAgreement source is segmented into immutable units at
+explicit terminal punctuation, preserving text order and per-recording
+provenance. The worker sends oldest stable completed-prefix units immediately
+(maximum two complete sentences per request) rather than waiting an additional
+four audio seconds and sending many fragments as one large batch. The original
++4s fallback remains for confirmed incomplete/undelimited speech, while
+Stop retains full final-drain behavior. No ASR draft is promoted; the provider
+response must validate and persist before the bottom subtitle acknowledges
+its source. New synthetic tests verify low-latency incremental commits,
+sentence splitting, old fallback and no mutation of draft evidence.

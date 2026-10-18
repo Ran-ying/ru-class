@@ -120,3 +120,23 @@ diagnostics. Settings → About shows aggregate statistics and the latest
 30 attempts; clearing browser data deletes these diagnostics as well.
 Request diagnostics are best-effort and never block ASR or durable sentence
 ACK. Real DeepSeek latency/cost reduction requires owner-device measurement.
+
+
+## Fast complete-sentence dispatch (2026-10-18)
+
+A Whisper LocalAgreement `stable_delta` can contain more than one finished
+sentence. Without altering the ASR algorithm, v0.4 now splits an **already
+confirmed** stable delta on whitespace-delimited sentence-ending punctuation
+into multiple immutable, ordered source units (retaining the original words
+and combined order). Each unit retains the same recording ID and window-level
+provenance; this is **not** word timing. Old stored source units remain
+unchanged. The sentence worker prioritizes the oldest whole-unit prefix
+ending after at most **two finished sentences**. Such a verified stable prefix
+can be sent immediately, without waiting four additional audio seconds.
+All requests remain serialized per recording and are ACKed only after
+atomic IndexedDB sentence commits. The 4-second delayed legacy path continues
+for confirmed fragments that have no clear punctuation; a clean Stop releases
+all remaining confirmed fragments, including unfinished sentences.
+The lower tentative ASR draft is never sent early, and this does not guarantee
+a fixed speech-to-Chinese latency because ASR stability and network response
+are independently variable.
