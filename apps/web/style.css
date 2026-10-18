@@ -130,7 +130,21 @@ main{grid-template-rows:minmax(0,1fr)}
 
 /* v0.2.2: three compact model profiles in a wider, scrollable settings dialog. */
 #settings{width:min(1020px,calc(100% - 32px));padding:0}
-#settings .settings-heading{grid-template-columns:minmax(72px,1fr) minmax(160px,260px) minmax(72px,1fr)}
+#settings .settings-heading{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+#settings .settings-heading h2{grid-column:1;justify-self:start}
+#settings .settings-heading .settings-tabs{grid-column:2;display:flex;justify-self:center;align-items:center;gap:4px;width:max-content}
+#settings .settings-heading form{grid-column:3;justify-self:end;margin:0}
+#settings .settings-heading .settings-tab{flex:none;min-width:76px;padding:9px 12px;white-space:nowrap}
+#settings .settings-about{max-width:660px;margin:0 auto;padding:18px 12px;color:#526c5e;line-height:1.8}
+#settings .settings-about h3{font-size:21px;color:#183330;margin:0 0 18px}
+#settings .settings-about h3 small{font-size:13px;font-weight:400;color:#738177}
+#settings .settings-about p{font-size:14px;margin:0 0 16px}
+#settings .settings-about a{font-size:14px;color:#245946}
+@media(max-width:500px){
+ #settings .settings-heading{grid-template-columns:auto minmax(0,1fr) auto;gap:6px}
+ #settings .settings-heading .settings-tabs{min-width:0}
+ #settings .settings-heading .settings-tab{min-width:0;padding:8px 9px;font-size:12px}
+}
 #model-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start;max-width:900px;margin-inline:auto}
 #settings .model-card{min-width:0;margin:0;padding:13px 12px}
 #settings .model-purpose{min-height:33px;margin-bottom:12px}
@@ -197,6 +211,14 @@ main{grid-template-rows:minmax(0,1fr)}
 .session-history-item{padding:12px 14px;border-radius:9px;
   background:#ffffff82;overflow-wrap:anywhere}
 .session-history-item time{font-size:11px;color:#60746a}
+.session-sentences{display:flex;flex-direction:column;gap:8px;margin-top:9px}
+.history-sentence-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:18px;padding:9px 12px;border-radius:8px;background:#edf2eb;border:1px solid #e1e9df}
+.history-sentence-row p{margin:0!important;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.history-sentence-row p[lang="zh-CN"]{color:#566d5e}
+.history-remaining{font-size:12px;color:#718579;margin-top:10px}
+.history-remaining summary{cursor:pointer}
+.history-remaining p{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:650px){.history-sentence-row{column-gap:9px;padding:8px}}
 .session-history-item p{margin:8px 0 0;font-size:14px;color:#324e42;
   white-space:pre-wrap;line-height:1.6}
 

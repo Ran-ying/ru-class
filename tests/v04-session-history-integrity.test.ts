@@ -13,6 +13,10 @@ test('v0.4 refreshes one persistent history row per recording after LLM commit, 
     'acknowledged source fragments must immediately leave the lower RU area');
   assert.doesNotMatch(action,/holder\.append\(|createElement\('article'\)/);
   assert.match(app,/article\.dataset\.recordingId=session\.id/);
+  assert.match(app,/pair\.className='history-sentence-row'/);
+  assert.match(app,/pair\.append\(ru,zh\)/);
+  assert.match(app,/pendingTranscriptAfterCommits\(last,translations\.at\(-1\)\|\|\[\]\)/);
+  assert.match(app,/renderCaption\(\);/);
 });
 
 test('background history refresh during microphone use retains live RU stable and draft text',()=>{
@@ -25,7 +29,7 @@ test('background history refresh during microphone use retains live RU stable an
   assert.equal(guards.length,2,
     'both asynchronous IndexedDB reads must accept history-only refreshes during live recording');
   assert.ok(render.includes('if(historyOnly)return; //'));
-  assert.ok(render.indexOf('if(historyOnly)return')<render.indexOf("stable=last?.transcript"),'history-only load must exit before modifying current RU');
+  assert.ok(render.indexOf('if(historyOnly)return')<render.indexOf('if(last && sourceJournal?.recordingId==='),'history-only load must exit before modifying current RU');
 });
 
 test('v0.4 text model is correctly described as active history processing, not future placeholder',()=>{
@@ -33,4 +37,6 @@ test('v0.4 text model is correctly described as active history processing, not f
   assert.match(html,/逐句生成正式俄语校正与中文翻译/);
   assert.match(html,/id="translation-status"/);
   assert.doesNotMatch(html,/中文翻译将在后续版本提供/);
+  const css=readFileSync('apps/web/style.css','utf8');
+  assert.match(css,/\.history-sentence-row\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
 });

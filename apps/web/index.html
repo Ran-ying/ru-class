@@ -18,10 +18,14 @@
 <footer class="bottom-toolbar" aria-label="录音控制"><button id="record" type="button">开始录音</button><output id="duration" aria-label="录音时长">00:00</output><small id="latency">窗口跨度 / 推理耗时 / 音频末端至显示延迟：—</small><button id="settings-open" class="settings-button" type="button" aria-label="设置" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button></footer></section></main><dialog id="settings" aria-labelledby="settings-title">
   <div class="settings-heading">
     <h2 id="settings-title">设置</h2>
+    <div class="settings-tabs" role="tablist" aria-label="设置选项">
+      <button id="tab-models" type="button" class="settings-tab" role="tab" aria-controls="panel-models" aria-selected="true">API 配置</button>
+      <button id="tab-about" type="button" class="settings-tab" role="tab" aria-controls="panel-about" aria-selected="false" tabindex="-1">关于</button>
+    </div>
     <form method="dialog"><button class="close-button" aria-label="关闭设置" title="关闭设置">×</button></form>
   </div>
   <div class="settings-body">
-  <section id="panel-models" aria-label="模型配置">
+  <section id="panel-models" role="tabpanel" aria-labelledby="tab-models">
     
     <div id="model-cards">
       <form class="model-card" id="model-speech">
@@ -68,6 +72,15 @@
       </form>
     </div>
     <p class="settings-help">这里保存的 Token 只存放在当前浏览器中；直接请求 API 时会发送给你选择的供应商。</p>
+  </section>
+  <section id="panel-about" role="tabpanel" aria-labelledby="tab-about" hidden>
+    <div class="settings-about">
+      <h3>RU-Class <small>v0.4.0</small></h3>
+      <p>为俄语课堂提供实时语音识别、录音保存、正式俄中双语句子历史和手动恢复未完成翻译。</p>
+      <p>无需登录。API 配置、Token、录音和历史记录保存在当前浏览器中；音频和待翻译的俄语只会发送至你自行配置的 API 提供商，可能产生费用。</p>
+      <p>下方实时中文字幕及词级时间对齐尚未实现。重要课堂请及时导出 WAV 和原始识别记录。</p>
+      <a href="https://github.com/Ran-ying/ru-class" target="_blank" rel="noopener noreferrer">项目源码与使用说明</a>
+    </div>
   </section>
   </div>
 </dialog>

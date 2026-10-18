@@ -1,7 +1,7 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
-import {restoreTranslationProgress} from './translation-recovery.js';
+import {restoreTranslationProgress,pendingTranscriptAfterCommits} from './translation-recovery.js';
 import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
@@ -97,50 +97,53 @@ async function renderSelectedClassroom({historyOnly=false}={}){
         new Date(session.startedAt).toLocaleTimeString()+
         ' · '+Math.round(session.durationSeconds||0)+' 秒'+
         (session.outcome==='interrupted'?' · 中断':'');
-      const columns=document.createElement('div');
-      columns.className='session-bilingual';
-      const ru=document.createElement('div');
-      ru.lang='ru';ru.textContent=session.transcript||'（这段录音没有识别文本）';
+      const rows=translations[index];
+      const sentences=document.createElement('div');
+      sentences.className='session-sentences';
+      // One paired row per saved sentence: RU and ZH can never drift apart
+      // when their line heights differ or a recording contains many sentences.
+      for(const sentence of rows){
+        const pair=document.createElement('div');pair.className='history-sentence-row';
+        const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
+        const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
+        pair.append(ru,zh);sentences.append(pair);
+      }
+      article.append(label,sentences);
       if(Array.isArray(session.stableUnits)&&session.stableUnits.length){
-        // Show only *confirmation* window time, never fake word timestamps.
         const last=session.stableUnits.at(-1);
         const provenance=document.createElement('small');
         provenance.className='history-provenance';
         provenance.textContent='已保存 '+session.stableUnits.length+
           ' 个稳定文字单元 · 最近确认窗口末端 '+
           (last.confirmedWindowEndSample/16000).toFixed(1)+' 秒（非逐词时间）';
-        columns.dataset.confirmedWindowEndSample=String(last.confirmedWindowEndSample);
-        columns.append(provenance);
+        article.dataset.confirmedWindowEndSample=String(last.confirmedWindowEndSample);
+        article.append(provenance);
       }
-      const zh=document.createElement('div');
-      zh.lang='zh-CN';
-      zh.textContent=session.translation||'（中文翻译尚未生成）';
-      const rows=translations[index];
-      if(rows.length){
-        ru.textContent='';
-        zh.textContent='';
-        for(const sentence of rows){
-          const ruLine=document.createElement('p');ruLine.lang='ru';ruLine.textContent=sentence.ru;
-          const zhLine=document.createElement('p');zhLine.lang='zh-CN';zhLine.textContent=sentence.zh;
-          ru.append(ruLine);zh.append(zhLine);
-        }
-        const consumed=rows.filter((row,i)=>!i||
-          row.consumedUnitIds.join('|')!==rows[i-1].consumedUnitIds.join('|'))
-          .map(row=>row.sourcePrefix).join(' ');
-        const remaining=session.transcript?.startsWith(consumed)?
-          session.transcript.slice(consumed.length).trimStart():session.transcript;
-        if(remaining){
-          const leftover=document.createElement('p');
-          leftover.textContent=remaining;leftover.className='history-untranslated';
-          ru.append(leftover);
-        }
+      const pendingSource=pendingTranscriptAfterCommits(session,rows);
+      // Pending source stays in the LOWER live area while this recording runs.
+      // For a completed session it remains recoverable, clearly distinguished
+      // from officially translated sentence pairs (never a fake Chinese row).
+      if(pendingSource && !(session.id===lessonId&&(running||starting||stopping))){
+        const details=document.createElement('details');
+        details.className='history-remaining';details.open=!rows.length;
+        const summary=document.createElement('summary');
+        summary.textContent=rows.length?'未翻译的原始俄语（展开查看）':'原始俄语（尚无正式翻译）';
+        const raw=document.createElement('p');raw.lang='ru';raw.textContent=pendingSource;
+        details.append(summary,raw);article.append(details);
       }
-      columns.append(ru,zh);
-      article.append(label,columns);holder.append(article);
+      holder.append(article);
     }
     if(historyOnly)return; // LLM history updates must NEVER reset live RU.
     const last=sessions.at(-1);
-    stable=last?.transcript||'';draft='';
+    // After a reload there is no in-memory ACK journal. Restore the pending
+    // suffix from durable sentence-unit IDs so acknowledged text does not
+    // reappear below. Within the active session, renderCaption handles ACKs.
+    if(last && sourceJournal?.recordingId===last.id)stable=last.transcript||'';
+    else{
+      sourceJournal=null;
+      stable=last?pendingTranscriptAfterCommits(last,translations.at(-1)||[]):'';
+    }
+    draft='';
     renderCaption();
     $('duration').textContent=last?
       String(Math.floor((last.durationSeconds||0)/60)).padStart(2,'0')+':'+
@@ -269,6 +272,7 @@ function showBilingualSentenceRows(rows,recordingId){
   // stable units delivered. Remove only that stable prefix from the bottom RU;
   // retain the tentative draft and original ASR source unchanged.
   renderCaption();
+  $('translation-status').textContent='正式双语句子已保存。';
   // Rebuild the selected classroom's ONE history row per recording.
   // Never append a duplicate "current recording" article after stop().
   // History-only reads are allowed during live recording, and MUST NOT reset
@@ -293,7 +297,11 @@ function startSentenceWorker(){
     },
     onError:code=>{
       if(sentenceWorker===worker&&lessonId===id)
-        $('translation-status').textContent='翻译暂不可用（'+code+'），俄语识别继续。';
+        $('translation-status').textContent=code==='LLM_TIMEOUT'?
+          '文字模型请求超过45秒；未翻译的俄语仍保留，识别继续。':
+          code==='LLM_NETWORK_FAILED'?
+          '文字模型网络连接失败（可能是网络或 CORS 限制），俄语识别继续。':
+          '翻译暂不可用（'+code+'），俄语识别继续。';
     }
   });
   sentenceWorker=worker;
@@ -590,8 +598,20 @@ function displayProfiles(){
     $(kind+'-key').placeholder=p?.apiKey?'已存储在此浏览器中；留空继续使用':'输入自己的 API Token';
   }
 }
+function showSettingsTab(name){
+  for(const [tab,panel] of [['models','panel-models'],['about','panel-about']]){
+    const active=name===tab;
+    $('tab-'+tab).setAttribute('aria-selected',String(active));
+    $('tab-'+tab).tabIndex=active?0:-1;
+    $(panel).hidden=!active;
+  }
+}
+for(const tab of ['models','about']){
+  $('tab-'+tab).onclick=()=>showSettingsTab(tab);
+}
 $('settings-open').onclick=()=>{
   displayProfiles();
+  showSettingsTab('models');
   $('settings').showModal();
 };
 for(const kind of kinds){

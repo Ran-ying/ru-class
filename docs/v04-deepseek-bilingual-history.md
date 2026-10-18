@@ -74,3 +74,11 @@ audio and hypotheses remain unchanged.
 On MacBook Safari, configure the **文字** model (your own HTTPS base URL + model + Token), then select a classroom and begin a Russian microphone recording. Observe the RU lower area remains live while the upper history gradually receives paired Russian and Chinese sentences, with at least an eight-second confirmation delay. During continuous speech, multiple sentences should append without replacing earlier rows. If the model returns no completed sentence, the lower original RU should remain visible. Stop while a fragment is unfinished, verify the final flush may enqueue one last model request, then reload and confirm bilingual history persists alongside the original audio and ASR JSON.
 
 Test a model timeout or simulated offline state: the lower Russian captions must continue, and untranslated original text must remain recoverable. Manually retry a normally completed recording from the course manager; verify saved batches are not resent, repeated same-text units remain distinct, and interrupted sessions are ineligible. Synthetic unit/HTTP tests do **not** count as that physical acceptance.
+
+
+## v0.4.0 Safari acceptance follow-up (2026-10-18)
+
+- Settings header now has API 配置 / 关于 tabs, with the close button aligned to the right. No user credentials are displayed on About.
+- Display the already persisted RU/ZH pairs as **one aligned row per sentence** within each recording's chronological history group, not two unsynchronized columns of independent paragraphs. Pending raw ASR is separately disclosed and never presented as a completed translation.
+- After a successful durable sentence batch commit and ACK, the acknowledged original stable prefix disappears promptly from the lower RU caption; tentative ASR stays. On history reload, the remaining raw suffix is reconstructed only from valid saved **unit IDs and source prefixes**. On uncertain metadata, preserve original raw text rather than drop it. A timeout does not ACK or delete source.
+- The text-provider timeout is now 45 seconds for the full response body, and each request contains at most 8 confirmed units / approximately 1600 characters (unless one indivisible stable unit is longer). Timeout, CORS, billing and DeepSeek availability still require real Safari tests; this is not proof of successful provider operation.
