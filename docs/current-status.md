@@ -173,6 +173,26 @@ raw-window recording feature is now integrated, while Issue #28
 remains open until physical Safari acceptance. Do not revive PR #13.
 P2 long-session recording/playback/recovery remains deferred.
 
+## v0.4 completed-recording recovery (manual only)
+
+The course manager now offers `恢复未完成翻译` for
+completed recording sessions with persisted stable source units.
+It compares the saved `stableUnits[]` against `sentences`
+history using exact per-unit UUID/ordinal and durable consumed
+prefixes, then reopens a per-recording worker at the next
+stored sentence index to translate **only still-undelivered
+confirmed source units**. Repeated genuinely spoken equal strings
+remain distinct by source ID; interrupted/unverified sessions
+cannot claim a final flush. A fully translated session triggers
+zero provider calls. This is a user-click-only action, not a
+background or on-page-load paid retry. New/old ASR and WAV data
+remain untouched. Browser API provider may charge per request.
+
+Synthetic CI verifies recovery and negative corruption cases,
+but no MacBook Safari billing, migration or actual DeepSeek
+provider calls have been confirmed. This does not promise
+exactly-once billing if external requests fail ambiguously.
+
 ## v0.4 DeepSeek-compatible formal RU/ZH history (CI pending)
 
 The original v0.4 scope includes user-configured, browser-direct
