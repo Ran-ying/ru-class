@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-ignore Browser JavaScript has no TS declarations.
-import {SentenceWorker,validateSentenceResult,requestSentenceBatch} from '../apps/web/sentence-worker.js';
+import {SentenceWorker,validateSentenceResult,requestSentenceBatch,LLM_TIMEOUT_MS} from '../apps/web/sentence-worker.js';
 // @ts-ignore
 import {StableUnitJournal,RATE} from '../apps/web/stable-units.js';
 
@@ -95,4 +95,21 @@ test('browser-direct OpenAI chat interface sends isolated user profile and no ce
     assert.equal(req.messages[1].role,'user');
     assert.equal(response.consumed_units,1);
   }finally{(globalThis as any).fetch=original;}
+});
+
+test('text model timeout and one-sentence-per-pair contract use bounded requests',async()=>{
+  assert.equal(LLM_TIMEOUT_MS,45000);
+  const previous=globalThis.fetch;
+  globalThis.fetch=(async()=>{
+    throw new DOMException('request timed out','TimeoutError');
+  }) as typeof fetch;
+  try{
+    await assert.rejects(requestSentenceBatch(
+      {baseUrl:'https://example.test/v1',model:'test-model',apiKey:'test-key'},
+      [{text:'Это тест.',id:'synthetic-0'}]),/LLM_TIMEOUT/);
+  }finally{globalThis.fetch=previous;}
+  const source=readFileSync('apps/web/sentence-worker.js','utf8');
+  assert.match(source,/Return ONE Russian sentence and its ONE matching Simplified Chinese translation/);
+  assert.match(source,/result\.length>=8/);
+  assert.match(source,/size\+unit\.text\.length\+1>1600/);
 });
