@@ -36,9 +36,11 @@ test('classroom history spans successive recordings and reserves untranslated Ch
  assert.match(html,/id="session-history"/);
  assert.match(app,/const sessions=await listClassroomRecordings\(key\)/);
  assert.match(app,/for\(const \[index,session\] of sessions\.entries\(\)\)/);
- assert.match(app,/const columns=document\.createElement\('div'\)/);
- assert.match(app,/columns\.className='session-bilingual'/);
- assert.match(app,/zh\.textContent=session\.translation\|\|'（中文翻译尚未生成）'/);
- assert.match(app,/ru\.textContent=session\.transcript/);
+ assert.match(app,/const sentences=document\.createElement\('div'\)/);
+ assert.match(app,/sentences\.className='session-sentences'/);
+ assert.match(app,/pair\.className='history-sentence-row'/);
+ assert.match(app,/pair\.append\(ru,zh\)/);
+ assert.match(app,/history-remaining/);
+ assert.match(app,/pendingTranscriptAfterCommits\(session,rows\)/);
  assert.match(app,/index\+1/);
 });
