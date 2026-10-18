@@ -29,7 +29,7 @@ test('background history refresh during microphone use retains live RU stable an
   assert.equal(guards.length,2,
     'both asynchronous IndexedDB reads must accept history-only refreshes during live recording');
   assert.ok(render.includes('if(historyOnly)return; //'));
-  assert.ok(render.indexOf('if(historyOnly)return')<render.indexOf("stable=last?.transcript"),'history-only load must exit before modifying current RU');
+  assert.ok(render.indexOf('if(historyOnly)return')<render.indexOf('if(last && sourceJournal?.recordingId==='),'history-only load must exit before modifying current RU');
 });
 
 test('v0.4 text model is correctly described as active history processing, not future placeholder',()=>{
