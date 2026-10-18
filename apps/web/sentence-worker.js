@@ -104,7 +104,7 @@ export const SEMANTIC_PROBE_MAX_UNITS=16;
 export const SEMANTIC_PROBE_MAX_CHARS=3200;
 function probeEligible(units){
   const text=units.map(u=>u.text).join(' ');
-  const count=text.trim().split(/\\s+/u).filter(Boolean).length;
+  const count=text.trim().split(/\s+/u).filter(Boolean).length;
   const windows=new Set(units.map(u=>u.confirmedWindowEndSample));
   return count>=SEMANTIC_PROBE_MIN_WORDS&&
     (windows.size>=2||count>=SEMANTIC_PROBE_SINGLE_WINDOW_WORDS);
@@ -170,6 +170,12 @@ export class SentenceWorker{
   }
   async tick(){
     if(this.closed||this.running)return;
+    if(this.lastEmptySignature&&!this.journal.finalized&&
+       this.journal.units.length<=this.lastEmptyFrontier){
+      // Both the ASR window clock and our poll timer may advance without
+      // new stable text. Do not re-bill for the exact same source prefix.
+      this.schedule();return;
+    }
     // When a bounded probe returned zero and more stable units arrived,
     // enlarge its oldest-source prefix to include new context. Otherwise a
     // capped batch could be queried forever without ever seeing the words
