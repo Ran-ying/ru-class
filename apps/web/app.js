@@ -259,7 +259,7 @@ function renderCaption(){
   const pending=delivered && (stable===delivered||stable.startsWith(delivered+' '))?
     stable.slice(delivered.length).trimStart():stable;
   $('ru-stable').textContent=pending;
-  $('ru-draft').textContent=draft?(stable?' '+draft:draft):'';
+  $('ru-draft').textContent=draft?(pending?' '+draft:draft):'';
 }
 
 function showBilingualSentenceRows(rows,recordingId){
