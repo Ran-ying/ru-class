@@ -18,7 +18,12 @@ export function splitStableSentenceUnits(text){
   if(!source)return [];
   return source.split(/(?<=[.!?。！？…])\s+(?=\S)/u).filter(Boolean);
 }
-export const isSentenceEnd=text=>/[.!?。！？…][\u0022'»”）)\]]*$/u.test(text.trim());
+export function isSentenceEnd(text){
+  // A trailing ellipsis marks a possibly unfinished thought; don't fast-track
+  // it as a complete sentence. It may still be sent via the aged fallback.
+  const tail=text.trim().replace(/["'»”）)\]]+$/u,'');
+  return /[!?。！？]$/u.test(tail)||(tail.endsWith('.')&&!tail.endsWith('..'));
+}
 export class StableUnitJournal{
   constructor({classroomId,recordingId,startedAt}){
     if(typeof classroomId!=='string'||!classroomId||
