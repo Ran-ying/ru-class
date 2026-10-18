@@ -437,3 +437,21 @@ non-streaming JSON; speech sends scalar extras as multipart FormData (keep
 language='ru' and response_format='json'); image extras are stored only.
 Keep tests ensuring malformed or forbidden JSON never causes requests,
 and ensure provider URL changes cannot silently reuse old custom values.
+
+
+## v0.4 eager complete-sentence gate (2026-10-18)
+
+Previously every stable fragment had to age four seconds and up to eight
+fragments were translated together; this visibly accumulated several
+sentences before a burst of history commits. Only already confirmed
+LocalAgreement deltas can become source units. One confirmed delta may
+contain several whitespace-delimited completed sentences, so split it into
+sequential immutable source units, preserving text order and the original
+recording/session provenance. Limit fast request prefixes to at most two
+sentence-ending units and never include a still-incomplete trailing unit.
+Such completed prefixes may skip the **additional** four-second hold,
+while plain undelimited stable fragments retain the old four-second
+conservative fallback; clean Stop still drains all confirmed source. No
+unconfirmed hypothesis/draft may bypass the LocalAgreement stability gate.
+Preserve exact consumedUnitIds, source-prefix validation, durable save-before-
+ACK and recovery compatibility; no speech/word timing is inferred.

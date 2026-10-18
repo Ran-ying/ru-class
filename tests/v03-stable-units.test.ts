@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-ignore Browser ESM JS module intentionally has no TypeScript declarations.
-import {StableUnitJournal,RATE,STABLE_AGE_SAMPLES} from '../apps/web/stable-units.js';
+import {StableUnitJournal,RATE,STABLE_AGE_SAMPLES,splitStableSentenceUnits} from '../apps/web/stable-units.js';
 import {readFileSync} from 'node:fs';
 
 const setup=(id='recording-1')=>
@@ -96,4 +96,25 @@ test('page keeps visually separate stable and draft RU spans, session metadata s
   assert.match(js,/sourceJournal\?\.add\(update\)/);
   assert.match(css,/#ru-draft/);
   assert.doesNotMatch(js,/fetch\([^)]*deepseek/iu);
+});
+
+test('sentence delimiters split one confirmed delta into separate immutable units without dropping source',()=>{
+  const text='Первое предложение. Второе предложение! Третье предложение? И незавершённая мысль';
+  const pieces=splitStableSentenceUnits(text);
+  assert.deepEqual(pieces,[
+    'Первое предложение.','Второе предложение!',
+    'Третье предложение?','И незавершённая мысль']);
+  assert.equal(pieces.join(' '),text);
+  const journal=setup('split-test');
+  const result=journal.add(row(text,8));
+  assert.deepEqual(result.map((u:any)=>u.id),[
+    'split-test:0','split-test:1','split-test:2','split-test:3']);
+  assert.deepEqual(result.map((u:any)=>u.confirmedWindowEndSample),Array(4).fill(8*RATE));
+  assert.equal(journal.export().map((u:any)=>u.text).join(' '),text);
+  assert.deepEqual(journal.ready(),[],'unaged units remain unavailable via legacy 4s fallback');
+});
+test('draft punctuation can never create units or trigger a fast translation',()=>{
+  const j=setup('no-draft-promotion');
+  j.add({...row('',8),partial_text:'Это не подтверждено. Ещё.'});
+  assert.equal(j.units.length,0);
 });

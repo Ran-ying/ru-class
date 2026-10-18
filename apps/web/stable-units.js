@@ -8,6 +8,22 @@
  */
 export const RATE=16000;
 export const STABLE_AGE_SAMPLES=4*RATE;
+// Keep every character and its order, but split ONE Whisper-confirmed delta
+// at whitespace-delimited sentence punctuation. IDs stay immutable and form
+// exact, whole-unit prefixes for the model and crash-safe recovery. These are
+// textual boundaries only, NOT inferred audio/word timestamps.
+export function splitStableSentenceUnits(text){
+  if(typeof text!=='string')throw Error('INVALID_STABLE_DELTA');
+  const source=text.trim();
+  if(!source)return [];
+  return source.split(/(?<=[.!?。！？…])\s+(?=\S)/u).filter(Boolean);
+}
+export function isSentenceEnd(text){
+  // A trailing ellipsis marks a possibly unfinished thought; don't fast-track
+  // it as a complete sentence. It may still be sent via the aged fallback.
+  const tail=text.trim().replace(/["'»”）)\]]+$/u,'');
+  return /[!?。！？]$/u.test(tail)||(tail.endsWith('.')&&!tail.endsWith('..'));
+}
 export class StableUnitJournal{
   constructor({classroomId,recordingId,startedAt}){
     if(typeof classroomId!=='string'||!classroomId||
@@ -30,9 +46,8 @@ export class StableUnitJournal{
     this.lastWindowEnd=end;
     const delta=update?.stable_delta;
     if(typeof delta!=='string')throw Error('INVALID_STABLE_DELTA');
-    const text=delta.trim();
     const additions=[];
-    if(text){
+    for(const text of splitStableSentenceUnits(delta)){
       const ordinal=this.units.length;
       const unit={
         id:this.recordingId+':'+ordinal,

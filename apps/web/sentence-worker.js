@@ -1,4 +1,5 @@
 import {mergeTextParameters} from './api-parameters.js';
+import {isSentenceEnd} from './stable-units.js';
 export const LLM_TIMEOUT_MS=45000;
 export const DEEPSEEK_TRANSLATION_MAX_TOKENS=2048;
 
@@ -92,8 +93,27 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
     });}catch{}
   }
 }
-function nextReady(journal){
-  const ready=journal.ready(),result=[];let size=0;
+// Prioritize a PREFIX that ends at a verified, immutable ASR sentence
+// boundary, even when it has not aged four additional seconds. One provider
+// call normally consumes at most two sentences. Keep a bounded +4s fallback
+// for confirmed speech without reliable sentence punctuation and for legacy
+// restored journals; never use replaceable Whisper draft as LLM input.
+export function nextReady(journal){
+  const pending=journal.units.filter(unit=>!journal.delivered.has(unit.id));
+  const batch=[];let size=0,sentences=0,lastSentenceIndex=-1;
+  for(const unit of pending){
+    if(batch.length>=8||(batch.length&&size+unit.text.length+1>1600))break;
+    batch.push(unit);size+=unit.text.length+1;
+    if(isSentenceEnd(unit.text)){
+      sentences++;lastSentenceIndex=batch.length-1;
+      if(sentences>=2)break;
+    }
+  }
+  if(lastSentenceIndex>=0)return batch.slice(0,lastSentenceIndex+1);
+  // If the source is not yet a complete sentence, preserve the previous
+  // conservative aged-fragment behavior. A clean Stop makes all final source
+  // available and cannot leave the last unfinished phrase stranded.
+  const ready=journal.ready(),result=[];size=0;
   for(const unit of ready){
     if(result.length>=8||(result.length&&size+unit.text.length+1>1600))break;
     result.push(unit);size+=unit.text.length+1;
