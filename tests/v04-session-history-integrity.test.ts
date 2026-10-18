@@ -33,6 +33,7 @@ test('background history refresh during microphone use retains live RU stable an
 });
 
 test('v0.4 text model is correctly described as active history processing, not future placeholder',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
   const html=readFileSync('apps/web/index.html','utf8');
   assert.match(html,/逐句生成正式俄语校正与中文翻译/);
   assert.match(html,/id="translation-status"/);
