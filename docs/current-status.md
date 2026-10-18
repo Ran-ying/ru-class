@@ -1,6 +1,6 @@
 # RU-Class current architecture, status and acceptance gates
 
-Updated 2026-10-17. This page and `docs/browser-direct-byok.md` describe the
+Updated 2026-10-18. This page and `docs/browser-direct-byok.md` describe the
 **active runtime**. `PROJECT_SPEC.md` retains the long-term feature roadmap;
 its legacy WebSocket gateway, server-held provider keys, and authenticated
 public site designs were superseded by the v0.2 browser-direct decision.
@@ -13,14 +13,15 @@ public site designs were superseded by the v0.2 browser-direct decision.
 | Browser recorder | `apps/web/audio.js`, `capture-worklet.js` | 16-kHz mono samples and bounded audio ring |
 | Direct ASR requester | `apps/web/direct-asr.js` | User's provider URL / model / token, 8-second windows, serial `POST /v1/audio/transcriptions` |
 | Transcript projection | `apps/web/transcript.js` | Best-effort stable delta and replaceable draft; **not ground truth** |
-| Browser local data | `apps/web/local-store.js` | Private provider profiles, lesson metadata and PCM chunks in IndexedDB |
+| Browser local data | `apps/web/local-store.js` | Browser-private provider profiles, PCM, raw ASR evidence and RU/ZH history (IndexedDB v5) |
+| Text worker | `apps/web/sentence-worker.js`, `translation-recovery.js` | Browser-direct stable RU → formal RU/ZH, manual per-session recovery |
 | Static-only Node server | `apps/server/src/index.ts` | Optional static content serving, no ASR gateway or user data |
 | Independent Whisper API | `Ran-ying/ru-class-asr` | Bearer-protected OpenAI-compatible ASR backed by whisper.cpp |
 
 Only the browser talks to the user's selected speech/image/text providers.
 The static RU-Class server neither sees nor supplies provider keys. Speech
-inference is implemented; image/text model selection exists but image/text
-inference, DeepSeek translation and bilingual history are **not** implemented.
+ASR inference and browser-direct text-model formal RU/ZH history **are
+implemented**. Image inference and v0.5 lower live Chinese are **not**.
 
 API providers must permit browser CORS and expose HTTPS (local loopback HTTP
 is for same-device development only). No RU-Class CORS proxy, shared API key,
@@ -28,8 +29,10 @@ public provider default or automatic cross-device synchronization.
 
 ## Confirmed code and unconfirmed acceptance
 
-- Main baseline: **v0.2.2**, PR #12 merged. Existing tests and GitHub CI
-  verify deterministic local contracts but do not establish classroom accuracy.
+- Main baseline: **v0.4.0**, including DeepSeek formal history PR #44,
+  history fixes #46/#48 and manual translation recovery squash `eb346727`.
+  Automated CI verifies deterministic contracts, not real Safari/DeepSeek
+  compatibility or classroom speech/translation accuracy.
 - Real private C1/C2 caches contain 121/106 ASR windows. Prior PR #13
   regression reduced C1 displayed word count from 828 to 322 and C2 from
   717 to 474 in the later test. These counts show a regression, **not** WER.
@@ -193,7 +196,7 @@ but no MacBook Safari billing, migration or actual DeepSeek
 provider calls have been confirmed. This does not promise
 exactly-once billing if external requests fail ambiguously.
 
-## v0.4 DeepSeek-compatible formal RU/ZH history (CI pending)
+## v0.4 DeepSeek-compatible formal RU/ZH history (CI passed; physical acceptance pending)
 
 The original v0.4 scope includes user-configured, browser-direct
 DeepSeek/OpenAI-compatible `/chat/completions` calls using serial

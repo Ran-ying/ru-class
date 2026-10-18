@@ -1,6 +1,6 @@
 > **HISTORICAL REVERSE PROXY CONFIGURATION (2026-10-17)**. Do not use
 > `/ws/client`, server ASR credentials or legacy website access-token
-> routing in the active v0.2.2 product. Serve `apps/web/` as static HTTPS
+> routing in the active v0.4.0 product. Serve `apps/web/` as static HTTPS
 > assets, and separately expose any privately owned ASR through its own HTTPS
 > endpoint if the user's browser needs remote access. See
 > [current status](current-status.md) and
