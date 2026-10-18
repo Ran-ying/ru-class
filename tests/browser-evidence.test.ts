@@ -121,7 +121,7 @@ const storage = await import('../apps/web/local-store.js');
 const {saveHypothesis,lessonHypotheses,lessonHypothesesJson,
   beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,
   saveProfile,loadProfiles,saveLesson,listLessons,
-  createClassroom,renameClassroom,listClassrooms,listClassroomRecordings,classroomKey,localCalendarDate,
+  createClassroom,renameClassroom,listClassrooms,sortClassroomsByCreatedAt,listClassroomRecordings,classroomKey,localCalendarDate,
   saveBilingualSentences,loadBilingualSentences,clearBrowserData}=storage;
 
 test('IndexedDB v6 upgrades a populated v1 DB without deleting profiles, lessons or WAV chunks',async()=>{
@@ -443,4 +443,16 @@ test('validate hypotheses before writing and clear private evidence with browser
   assert.equal(stores.get('evidence')!.size,0);
   assert.equal(stores.get('classrooms')!.size,0);
   assert.equal(stores.get('sentences')!.size,0);
+});
+
+test('classrooms display newest creation first regardless of selected lesson date',()=>{
+  const items=[
+    {key:'2026-11-20:future',createdAt:100,date:'2026-11-20',title:'未来课程'},
+    {key:'2026-09-01:new',createdAt:900,date:'2026-09-01',title:'新添加的旧课'},
+    {key:'2026-10-18:middle',createdAt:500,date:'2026-10-18',title:'中间课程'},
+    {key:'2026-10-11:legacy',createdAt:undefined,date:'2026-10-11',title:'旧数据'},
+  ];
+  assert.deepEqual(sortClassroomsByCreatedAt(items).map(x=>x.title),[
+    '新添加的旧课','中间课程','未来课程','旧数据']);
+  assert.equal(items[0].title,'未来课程','sorting does not mutate caller data');
 });

@@ -594,3 +594,18 @@ is waived or changed by this HTTP-only smoke.
 `docs/acceptance-v0.1.md`, `docs/api-integration-v0.1.md`,
 `docs/reverse-proxy.md` and most of `PROJECT_SPEC.md` may mention the
 retired topology. Do not use those as live installation instructions.
+
+
+## Classroom chronology / transcript scroll behavior (2026-10-18)
+
+Newly added classrooms appear first, using `createdAt` rather than the
+user-entered lesson date. Legacy implicit classroom groups use their earliest
+recording timestamp when available, with a stable date/name fallback.
+The sentence table has no outer horizontal gutters; its paired RU/ZH row
+rules and center border remain. History-only IndexedDB refreshes first
+construct the complete sentence document, then atomically replace the history
+DOM. The real `.history` scroller follows newly translated text only when
+already at/within 6 px of the bottom; if browsing older text, the prior
+scrollTop is retained. New classroom selection starts at the bottom.
+The Token summary shows '—（未上报）' rather than 0 if the provider returned no
+reasoning-token counters at all.

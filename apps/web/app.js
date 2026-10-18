@@ -1,6 +1,7 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
+import {captureHistoryScroll,restoreHistoryScroll} from './history-scroll.js';
 import {defaultApiParameters,parseApiParameters,isOfficialDeepSeek} from './api-parameters.js';
 import {restoreTranslationProgress,pendingTranscriptAfterCommits} from './translation-recovery.js';
 import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,saveTextRequestMetric,loadTextRequestMetrics,clearBrowserData} from './local-store.js';
@@ -68,12 +69,15 @@ function renderClassroomList(){
 async function renderSelectedClassroom({historyOnly=false}={}){
   const revision=++classroomRevision;
   const holder=$('session-history');
-  holder.replaceChildren();
+  const selectedKey=activeClassroom?.key||'';
+  const switchingClassroom=selectedKey!==renderedClassroomKey;
+  // Keep existing history visible during asynchronous reads. Clearing it
+  // here used to reset scroll position even while reading older sentences.
+  if(switchingClassroom)holder.replaceChildren();
   renderClassroomLock();
   // Do not display the previously selected class's transcript while the new
   // class's asynchronous IndexedDB read is pending.
-  const selectedKey=activeClassroom?.key||'';
-  if(selectedKey!==renderedClassroomKey){
+  if(switchingClassroom){
     renderedClassroomKey=selectedKey;
     stable='';draft='';renderCaption();
     $('latency').textContent='—';
@@ -87,9 +91,13 @@ async function renderSelectedClassroom({historyOnly=false}={}){
   try{
     const sessions=await listClassroomRecordings(key);
     if(revision!==classroomRevision||key!==activeClassroom?.key||(!historyOnly&&(starting||running)))return;
-    $('history-empty').hidden=sessions.length>0;
     const translations=await Promise.all(sessions.map(s=>loadBilingualSentences(s.id)));
     if(revision!==classroomRevision||key!==activeClassroom?.key||(!historyOnly&&(starting||running)))return;
+    // Check the scroll position immediately before the DOM swap, not before
+    // the async database fetch: the user may scroll during that delay.
+    const scroller=$('history-pane');
+    const scroll=captureHistoryScroll(scroller,{switchingClassroom});
+    const nextHistory=document.createDocumentFragment();
     for(const [index,session] of sessions.entries()){
       const article=document.createElement('article');
       article.className='session-history-item';
@@ -124,8 +132,11 @@ async function renderSelectedClassroom({historyOnly=false}={}){
         const raw=document.createElement('p');raw.lang='ru';raw.textContent=pendingSource;
         details.append(summary,raw);article.append(details);
       }
-      holder.append(article);
+      nextHistory.append(article);
     }
+    $('history-empty').hidden=sessions.length>0;
+    holder.replaceChildren(nextHistory);
+    restoreHistoryScroll(scroller,scroll);
     if(historyOnly)return; // LLM history updates must NEVER reset live RU.
     const last=sessions.at(-1);
     // After a reload there is no in-memory ACK journal. Restore the pending
@@ -284,11 +295,12 @@ async function refreshTextMetrics(){
     const tokens=measured.reduce((n,r)=>n+r.totalTokens,0);
     const reasoning=rows.filter(r=>r.reasoningTokens!==null);
     const reasonTotal=reasoning.reduce((n,r)=>n+r.reasoningTokens,0);
+    const reasonLabel=reasoning.length?reasonTotal.toLocaleString():'—（未上报）';
     const avg=rows.length?Math.round(rows.reduce((n,r)=>n+r.elapsedMs,0)/rows.length):0;
     info.textContent=rows.length?
       rows.length+' 次请求 · '+succeeded.length+' 次成功响应 · 平均 '+(avg/1000).toFixed(1)+
       ' 秒 · 已报告总 Token '+tokens.toLocaleString()+
-      ' · 已报告推理 Token '+reasonTotal.toLocaleString():
+      ' · 推理 Token '+reasonLabel:
       '暂无文字模型请求记录。录音或恢复翻译后会显示。';
     holder.replaceChildren();
     for(const record of rows.slice(0,30)){

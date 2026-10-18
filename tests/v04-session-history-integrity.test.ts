@@ -44,3 +44,19 @@ test('v0.4 text model is correctly described as active history processing, not f
   assert.doesNotMatch(css,/\.history-sentence-row\{[^}]*background:#edf2eb/);
   assert.doesNotMatch(app,/label\.textContent='录音 '\+/);
 });
+
+test('history replaces rows only after both async reads and preserves scroll intent',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
+  const html=readFileSync('apps/web/index.html','utf8');
+  const css=readFileSync('apps/web/style.css','utf8');
+  const start=app.indexOf('async function renderSelectedClassroom(');
+  const end=app.indexOf('async function refreshClassrooms(',start);
+  const history=app.slice(start,end);
+  assert.match(html,/<section class="history" id="history-pane">/);
+  assert.match(history,/const scroll=captureHistoryScroll\(scroller,\{switchingClassroom\}\)/);
+  assert.match(history,/const nextHistory=document\.createDocumentFragment\(\)/);
+  assert.match(history,/holder\.replaceChildren\(nextHistory\);\s*restoreHistoryScroll\(scroller,scroll\)/);
+  assert.doesNotMatch(history,/const holder=\$\('session-history'\);\s*holder\.replaceChildren\(\)/);
+  assert.match(css,/#session-history\{display:block;padding:0\}/);
+  assert.match(css,/@media\(max-width:650px\)\{\s*#session-history\{padding:0\}/);
+});
