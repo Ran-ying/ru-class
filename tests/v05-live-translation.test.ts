@@ -199,3 +199,12 @@ test('full-buffer ZH is not dimmed by pending class or styled in low-contrast gr
   assert.doesNotMatch(app,/classList\.add\('is-pending'\)/);
   assert.match(app,/liveWorker\.update\(\[pending,draft\]/);
 });
+
+test('durably committed history is painted promptly without showing a temporary draft as formal RU',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
+  assert.match(app,/function appendSavedSentenceRows\(/);
+  assert.match(app,/appendSavedSentenceRows\(rows,recordingId\)/);
+  assert.match(app,/pair\.dataset\.sentenceIndex=index/);
+  assert.match(app,/restoreHistoryScroll\(pane,scroll\)/);
+  assert.match(app,/void renderSelectedClassroom\(\{historyOnly:true\}\)/);
+});
