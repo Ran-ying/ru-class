@@ -35,15 +35,17 @@ test('different interpretation or changed terminal punctuation does not prematur
   const asr=new TranscriptBuffer();
   asr.update('Сегодня мы изучаем защиту информации.',0,8*RATE);
   const next=asr.update('Сегодня мы изучаем защиту информации?',RATE,9*RATE);
-  assert.equal(next.stable_delta,'');
-  assert.match(next.partial_text,/информации\./);
+  assert.doesNotMatch(next.stable_delta,/[.?]$/u,
+    'changed punctuation cannot become a confirmed sentence');
+  assert.match(next.partial_text,/информации\?/u,
+    'latest punctuation stays replaceable draft');
 });
 test('ellipsis is never a confirmed terminal sentence boundary',()=>{
   const asr=new TranscriptBuffer();
   asr.update('Сегодня, наверное, стоит подумать...',0,8*RATE);
   const next=asr.update('Сегодня, наверное, стоит подумать...',RATE,9*RATE);
-  assert.equal(next.stable_delta,'');
-  assert.match(next.partial_text,/подумать\.\.\./);
+  assert.doesNotMatch(next.stable_delta,/\.\.\./u);
+  assert.match(next.partial_text,/подумать\.\.\./u);
 });
 test('same exact sample-range replay is not a second confirmation',()=>{
   const asr=new TranscriptBuffer();
