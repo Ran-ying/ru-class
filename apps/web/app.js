@@ -111,6 +111,7 @@ async function renderSelectedClassroom({historyOnly=false}={}){
       // when their line heights differ or a recording contains many sentences.
       for(const sentence of rows){
         const pair=document.createElement('div');pair.className='history-sentence-row';
+        pair.dataset.sentenceIndex=String(sentence.index);
         const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
         const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
         pair.append(ru,zh);sentences.append(pair);
@@ -320,16 +321,51 @@ function initializeLiveTranslation(){
   liveWorker.start(recordingId);
   updateLiveStatus('等待俄语…');
 }
+// onCommit is called ONLY after the full source prefix and paired RU/ZH
+// sentences have been durably saved. Paint those rows immediately: waiting
+// for a fresh read of every prior recording can make several sentences appear
+// all at once, even if the model finished each one separately.
+function appendSavedSentenceRows(rows,recordingId){
+  const pane=$('history-pane'),holder=$('session-history');
+  const scroll=captureHistoryScroll(pane,{switchingClassroom:false});
+  let article=[...holder.querySelectorAll('.session-history-item')].find(
+    node=>node.dataset.recordingId===recordingId);
+  if(!article){
+    article=document.createElement('article');
+    article.className='session-history-item';
+    article.dataset.recordingId=recordingId;
+    article.append(document.createElement('div'));
+    article.firstElementChild.className='session-sentences';
+    holder.append(article);
+  }
+  let list=article.querySelector('.session-sentences');
+  if(!list){
+    list=document.createElement('div');list.className='session-sentences';
+    article.prepend(list);
+  }
+  const existing=new Set([...list.querySelectorAll('.history-sentence-row')]
+    .map(node=>node.dataset.sentenceIndex));
+  for(const sentence of rows){
+    const index=String(sentence.index);
+    if(existing.has(index))continue;
+    const pair=document.createElement('div');
+    pair.className='history-sentence-row';pair.dataset.sentenceIndex=index;
+    const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
+    const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
+    pair.append(ru,zh);list.append(pair);existing.add(index);
+  }
+  $('history-empty').hidden=true;
+  restoreHistoryScroll(pane,scroll);
+}
 function showBilingualSentenceRows(rows,recordingId,classroomId){
   if(!activeClassroom||activeClassroom.id!==classroomId)return;
-  // A prior completed recording can drain while a new recording is active.
-  // Only update the lower RU when these ACKs belong to its own session.
-  if(recordingId===lessonId)renderCaption();
+  if(recordingId===lessonId){
+    renderCaption();
+    appendSavedSentenceRows(rows,recordingId);
+  }
   $('translation-status').textContent='正式双语句子已保存。';
-  // Rebuild the selected classroom's aligned sentence rows after each commit.
-  // Never append a duplicate "current recording" article after stop().
-  // History-only reads are allowed during live recording, and MUST NOT reset
-  // the current ASR stable/draft or the microphone clock.
+  // Canonical storage refresh remains authoritative; it sorts older
+  // recordings and reconciles any async reads without duplicating rows.
   void renderSelectedClassroom({historyOnly:true});
 }
 // Usage records are local and intentionally omit prompts, answers, URLs and keys.
