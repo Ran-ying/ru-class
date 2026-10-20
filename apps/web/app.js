@@ -359,10 +359,8 @@ function appendSavedSentenceRows(rows,recordingId){
 }
 function showBilingualSentenceRows(rows,recordingId,classroomId){
   if(!activeClassroom||activeClassroom.id!==classroomId)return;
-  if(recordingId===lessonId){
-    renderCaption();
-    appendSavedSentenceRows(rows,recordingId);
-  }
+  if(recordingId===lessonId)renderCaption();
+  if(recordingId===lessonId)appendSavedSentenceRows(rows,recordingId);
   $('translation-status').textContent='正式双语句子已保存。';
   // Canonical storage refresh remains authoritative; it sorts older
   // recordings and reconciles any async reads without duplicating rows.
