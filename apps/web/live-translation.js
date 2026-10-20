@@ -57,8 +57,9 @@ export function splitLiveRussian(text,maxChars=LIVE_CHUNK_CHARS){
       const symbols=Array.from(word);
       let pos=0;
       while(pos<symbols.length){
-        const fragment=symbols.slice(pos,pos+maxChars).join('');
-        pos+=Array.from(fragment).length;
+        let fragment='';
+        while(pos<symbols.length&&fragment.length+symbols[pos].length<=maxChars)
+          fragment+=symbols[pos++];
         if(current)flush();
         chunks.push(fragment);
       }
@@ -92,7 +93,8 @@ export class LiveTranslationWorker{
     this.source=text;this.revision++;
     this.emitCached(this.revision);
     if(!text.trim()){
-      this.suspended=false;this.clearTimer();this.onState('waiting');return;
+      this.suspended=false;this.cache.clear();
+      this.clearTimer();this.onState('waiting');return;
     }
     if(this.suspended){this.onState('TRANSLATION_HTTP_404');return;}
     this.schedule();
@@ -106,12 +108,12 @@ export class LiveTranslationWorker{
     }
     return {translated,covered:translated.length,total:chunks.length};
   }
-  emitCached(revision=this.revision,elapsedMs){
+  emitCached(revision=this.revision,elapsedMs,error){
     if(this.closed)return;
     const {translated,covered,total}=this.cachedPrefix();
     this.onUpdate({recordingId:this.recordingId,revision,
       translation:translated.join('\n'),pending:covered<total,
-      coveredChunks:covered,totalChunks:total,elapsedMs});
+      coveredChunks:covered,totalChunks:total,elapsedMs,error});
   }
   remember(chunk,translation){
     this.cache.delete(chunk);this.cache.set(chunk,translation);
@@ -146,6 +148,9 @@ export class LiveTranslationWorker{
           if(typeof translation!=='string'||!translation.trim()||translation.length>4000)
             throw Error('TRANSLATION_INVALID_RESPONSE');
           elapsedMs=Math.round(performance.now()-this.lastStarted);
+          // Never cache an obsolete ASR hypothesis: A→B→A must not
+          // silently resurrect the first A response.
+          if(this.closed||controller.signal.aborted||this.revision!==revision)break;
           this.remember(chunk,translation.trim());
         }
         if(this.closed||controller.signal.aborted||this.revision!==revision)break;
@@ -159,7 +164,7 @@ export class LiveTranslationWorker{
         const code=e instanceof Error?e.message:'TRANSLATION_FAILED';
         if(code==='TRANSLATION_HTTP_404'||code==='TRANSLATION_HTTP_405')this.suspended=true;
         // Leave only the accurately matched cached prefix on screen.
-        this.emitCached(revision);
+        this.emitCached(revision,undefined,code);
         this.onState(code);
       }
     }finally{
