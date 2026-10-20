@@ -104,6 +104,46 @@ test('the same Russian utterance may be spoken again after the buffer empties',a
   w.close();
   assert.equal(requests,2,'a new utterance must not be hidden by last request deduplication');
 });
+test('A→B→A reversion needs a fresh result even when text matches the old rejected request',async()=>{
+  let release:(text:string)=>void=()=>{};
+  const first=new Promise<string>(resolve=>release=resolve);
+  let requests=0;
+  const seen:any[]=[];
+  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
+    request:async()=>++requests===1?first:'新版本对应的中文',
+    onUpdate:(x:any)=>seen.push(x)});
+  worker.start('revert');
+  worker.update('Исходная мысль','revert');
+  const old=worker.tick();
+  worker.update('Измененная мысль','revert');
+  worker.update('Исходная мысль','revert');
+  release('应丢弃的旧译文');
+  await old;
+  assert.ok(!seen.some(x=>x.translation==='应丢弃的旧译文'));
+  await worker.tick();
+  assert.equal(requests,2,'same RU text in a newer revision must be requested again');
+  assert.equal(seen.at(-1).translation,'新版本对应的中文');
+  worker.close();
+});
+test('failed current translation clears an old provisional caption, not the Russian source',async()=>{
+  let requests=0;
+  const seen:any[]=[];const states:any[]=[];
+  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
+    request:async()=>{
+      if(++requests===1)return '旧中文';
+      throw Error('TRANSLATION_HTTP_429');
+    },
+    onUpdate:(x:any)=>seen.push(x),onState:(x:any)=>states.push(x)});
+  worker.start('errors');
+  worker.update('Первая мысль.','errors');await worker.tick();
+  assert.equal(seen.at(-1).translation,'旧中文');
+  worker.update('Другая мысль.','errors');await worker.tick();
+  assert.equal(seen.at(-1).translation,'');
+  assert.equal(seen.at(-1).error,'TRANSLATION_HTTP_429');
+  assert.equal(worker.source,'Другая мысль.');
+  assert.ok(states.includes('TRANSLATION_HTTP_429'));
+  worker.close();
+});
 test('UI projects only uncommitted RU and never writes provisional ZH into history',()=>{
   const js=readFileSync('apps/web/app.js','utf8');
   const html=readFileSync('apps/web/index.html','utf8');
