@@ -95,9 +95,10 @@ export class LiveTranslationWorker{
     try{
       const translated=await this.request(this.profile,text,{signal:controller.signal});
       if(this.closed||this.recordingId!==recordingId||this.revision!==revision)return;
+      const elapsedMs=Math.round(performance.now()-this.lastStarted);
       this.onUpdate({recordingId,revision,translation:translated,pending:false,clipped,
-        elapsedMs:Math.round(performance.now()-this.lastStarted)});
-      this.onState(clipped?'partial':'ready');
+        elapsedMs});
+      this.onState(clipped?'partial':'ready',elapsedMs);
     }catch(e){
       if(this.closed||this.recordingId!==recordingId||this.revision!==revision)return;
       const code=e instanceof Error?e.message:'TRANSLATION_FAILED';

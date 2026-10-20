@@ -1,5 +1,5 @@
-> **CURRENT RUNTIME OVERRIDE · 2026-10-18**: This long-term specification mixes
-> historical gateway/Worker plans with the current product. The active v0.4.0
+> **CURRENT RUNTIME OVERRIDE · 2026-10-20**: This long-term specification mixes
+> historical gateway/Worker plans with the current product. The v0.5 candidate
 > runtime is **anonymous static browser-direct BYOK**: per-user model keys,
 > lesson data, PCM recording, Russian transcript and RU/ZH sentence history
 > remain in browser IndexedDB v5; speech and text APIs are called directly
@@ -10,7 +10,8 @@
 > [current maintainer contract](AGENTS.md) **before implementing roadmap items**.
 > M1 synthetic proof is not live-classroom or deferred M4 acceptance.
 > Formal DeepSeek RU/ZH history and manual completed-session translation retry
-> are implemented in v0.4.0; lower live Chinese is a v0.5 goal. P2 long-session
+> are implemented in v0.4.0; v0.5 local M2M100 lower Chinese is implemented in
+> PR #59 but remains subject to MacBook Safari HTTPS/CORS acceptance. P2 long-session
 > durability/word-aligned playback and physical Safari/provider acceptance are
 > still pending. Later version tables are roadmap targets, not acceptance records.
 > Legacy v0.1 gateway/authentication requirements below are superseded.
@@ -54,7 +55,7 @@ v0.1.6：模型获取成功后，隐藏“获取可用模型”按钮及旁边�
 - 产品端采用 Web/PWA 标准架构，原则上可在 iPad Safari 和其他现代浏览器使用。**项目作者只需在自己具备的 iPad、Mac mini/macOS 等设备上进行真实验收；Windows、Linux、Android 等其他平台不列为项目作者必须覆盖的测试环境。**
 - 不开发原生 iOS App，不购买 Apple Developer Program，不在客户端运行 Whisper 或 LLM。
 - 技术栈：浏览器 JavaScript/TypeScript；网页与应用后端跨平台 Node.js/TypeScript；ASR Worker 采用**跨平台 Node.js/TypeScript 核心**，底层由原生 `whisper.cpp` 推理（允许 C++ 进程，不引入 Python 应用服务器）。**Mac mini M4 + macOS + Metal 是 v0.1 的首个部署和验收环境，不是 ASR 的架构边界。**
-- AI：第一目标在 Mac mini M4 16GB 运行本地多语言 Whisper（Metal 加速）；架构保留 Linux/Windows 等环境运行等价 ASR Worker 的可能性，但不要求项目作者部署或验证；DeepSeek 官方 `deepseek-flash` 用于正式断句、俄语校正、中文翻译；底部实时中文翻译服务**尚未选型**，只设计可替换接口。
+- AI：第一目标在 Mac mini M4 16GB 运行本地多语言 Whisper（Metal 加速）；架构保留 Linux/Windows 等环境运行等价 ASR Worker 的可能性，但不要求项目作者部署或验证；DeepSeek 官方 `deepseek-flash` 用于正式断句、俄语校正、中文翻译；**v0.5 已选定 Mac mini 本地 M2M100 418M INT8** 为首个实时俄中翻译后端（可替换），经独立 Node ASR API 的受认证 `/v1/translate` 提供；Mac mini 两次短句实测已成功，网页端 Safari 验收待完成。
 - 本对话负责头脑风暴、方案、验收和后续任务书；开发交给 Codex。**未经用户明确指令，不主动创建仓库、改代码、部署、升级服务或合并 PR。**
 - 以前生成的 v0.1 实验原型不视为正式基线或验收依据；Codex 可以只读参考，但应按本文重新设计。
 
@@ -224,7 +225,7 @@ ASR host (cross-platform Node.js ASR Worker)
 - 独立于正式断句流水线，从**当前完整、尚未提交的可见俄语缓冲区（stable + partial）**获得输入。没有必要复用 DeepSeek 的句子校正或正式译文。
 - 发生实质内容变化时更新翻译，不要求每次键入/词变化都即时发请求；首轮 0.5–1 秒合并/节流仅供测试，用户可设定。
 - 翻译结果可随内容继续增长而重写；每次请求带缓冲区版本，新版到达后不允许旧版覆盖。
-- 真实翻译 API **候选、尚未选型**：Google Cloud Translation、Azure Translator、OpenAI Realtime Translate、Gemini Live Translate；首选考虑接收文字输入的翻译服务，但保留语音翻译替代适配器。
+- **v0.5 已批准实现的首个翻译后端**：Mac mini 的 M2M100 418M / CTranslate2 CPU INT8。匿名网页从访客自己保存的语音 API `baseUrl` 派生 `/translate`，直接通过 HTTPS/CORS 和原 Token 调用。保持客户端适配接口可替换；Google/Azure/其他服务作为后续可选适配器，当前不实现。
 - 翻译服务失败时仍可正常显示 Whisper 俄语。正式历史中文始终由 DeepSeek 输出，不依赖实时翻译服务质量。
 
 ## 8. 逐句音频和课后对齐（v0.6）
@@ -288,7 +289,7 @@ lesson-YYYY-MM-DD.zip
 | **v0.8** | 自动重连、音频缺失队列与补处理、90 分钟长课测试 | 网络中断后仍本地保存，重连优先直播，课后补齐缺失识别 | 模拟断网、刷新与服务端重启边界；真实 90 分钟回归测试并记录限制 |
 | **v1.0** | 右侧双语转写功能稳定、修复缺陷与文档收口 | 在作者自有设备上可靠地完成俄语课堂并可回看、备份 | v0.1–v0.8 既定功能验收完成（限作者可用硬件）；README 如实区分已验证平台与社区自测/未验证平台；左侧 AI 笔记仍不在范围内 |
 
-**依赖关系说明：** v0.1 优先验证 macOS/Mac mini M4，但从首个版本起坚持跨平台代码分层；**不存在 v0.9 跨平台验证阶段，Windows/Linux 的适配和反馈由愿意尝试的社区用户自发推动，不影响 v1.0。** v0.1 暂不包含可靠录音持久化，**不可用于唯一一份正式课堂录音**。录音持久化从 v0.2 起是必须能力；v0.4 以后有 DeepSeek 调用成本；v0.5 的实时翻译服务仍需用户选型。v0.6 可以为逐句回放补充时间戳校正工具。
+**依赖关系说明：** v0.1 优先验证 macOS/Mac mini M4，但从首个版本起坚持跨平台代码分层；**不存在 v0.9 跨平台验证阶段，Windows/Linux 的适配和反馈由愿意尝试的社区用户自发推动，不影响 v1.0。** v0.1 暂不包含可靠录音持久化，**不可用于唯一一份正式课堂录音**。录音持久化从 v0.2 起是必须能力；v0.4 以后有 DeepSeek 调用成本；v0.5 的首选本地翻译模型是 M2M100 CPU INT8，MacBook Safari 端到端验收仍待完成。v0.6 可以为逐句回放补充时间戳校正工具。
 
 ## 12. 首轮 Codex 任务：仅开发 v0.1
 

@@ -276,7 +276,7 @@ function renderCaption(){
   if(liveWorker)liveWorker.update([pending,draft].filter(Boolean).join(' '),lessonId);
 }
 
-function updateLiveStatus(status){
+function updateLiveStatus(status,elapsedMs){
   const el=$('live-translation-status');
   if(!el)return;
   const lookup={
@@ -287,8 +287,9 @@ function updateLiveStatus(status){
     TRANSLATION_TIMEOUT:'本地翻译超时；俄语识别不受影响。',
     TRANSLATION_NETWORK_OR_CORS:'本地翻译网络或 CORS 不可用。',
   };
-  el.textContent=lookup[status]||(status.startsWith('TRANSLATION_')?
-    '本地翻译暂不可用（'+status+'）':'');
+  const label=lookup[status]||(status.startsWith('TRANSLATION_')?
+    '本地翻译暂不可用（'+status+'）':status);
+  el.textContent=label+(Number.isFinite(elapsedMs)?' · '+elapsedMs+' ms':'');
 }
 function closeLiveTranslation(){
   liveWorker?.close();liveWorker=null;
@@ -303,7 +304,7 @@ function initializeLiveTranslation(){
   liveWorker=new LiveTranslationWorker({
     profile:{...profiles.speech},
     onUpdate:result=>{
-      if(lessonId!==recordingId||result.recordingId!==recordingId)return;
+      if(!liveWorker||lessonId!==recordingId||result.recordingId!==recordingId)return;
       const target=$('live-zh');
       if(result.pending){
         if(!result.translation)target.classList.add('is-pending');
@@ -315,7 +316,10 @@ function initializeLiveTranslation(){
         target.classList.remove('is-pending');
       }
     },
-    onState:updateLiveStatus
+    onState:(...args)=>{
+      if(!liveWorker||lessonId!==recordingId)return;
+      updateLiveStatus(...args);
+    }
   });
   liveWorker.start(recordingId);
   updateLiveStatus('等待俄语…');

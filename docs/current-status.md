@@ -658,3 +658,8 @@ uncommitted RU buffer exceeds backend's 1200-character bound, send a
 readable <=1100-character suffix and explicitly mark the lower ZH as
 recent-section-only. The provisional translation is never persisted.
 Automated tests do not validate 30-minute Safari/browser CORS behavior.
+
+临时中文成功时在页面下方显示最近一次本地翻译耗时（毫秒）。
+另新增 [v0.5 MacBook + Mac mini 联调验收说明](v05-local-translation-acceptance.md)，
+包含真实网页 Origin 的 204 CORS OPTIONS 检查、Node 3000 转发、
+Safari 实时预览、故障隔离及后续长课 P50/P95 验收。

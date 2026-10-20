@@ -322,3 +322,10 @@ Mac mini M4 已在用户设备上完成 M2M100 INT8 和 Whisper Small 同时加�
 清理。若下方积压超过本地引擎长度限制，临时翻译仅覆盖最近的
 一段（会显示提示），不会假装全部内容均已翻译。最终历史始终独立
 由 DeepSeek 负责。配置开关仅保存在该浏览器，不保存任何额外密钥。
+
+
+**v0.5 联调：** 真实 MacBook Safari 跨设备 HTTPS/CORS 的验收步骤、
+端口与 Node 反代检查、语音 API 中的本地翻译开关、错误隔离和
+延迟测量方法参见
+[MacBook / Mac mini 实时中文字幕验收](docs/v05-local-translation-acceptance.md)。
+成功请求后下方会显示最近一次本地翻译耗时（毫秒）。
