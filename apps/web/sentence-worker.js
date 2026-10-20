@@ -99,7 +99,7 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
 // thought is complete without a final period, or return consumed_units:0.
 // A new probe for the same bounded prefix is forbidden until source changes.
 export const SEMANTIC_PROBE_MIN_WORDS=9;
-export const SEMANTIC_PROBE_SINGLE_WINDOW_WORDS=16;
+export const SEMANTIC_PROBE_SINGLE_WINDOW_WORDS=12;
 export const SEMANTIC_PROBE_MAX_UNITS=16;
 export const SEMANTIC_PROBE_MAX_CHARS=3200;
 function probeEligible(units){
