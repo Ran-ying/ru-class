@@ -636,3 +636,25 @@ new stable text, and the bounded prefix can include newly confirmed context
 after an undecidable attempt. Short ambiguous fragments retain +4s fallback.
 The raw ASR, immutable IDs, storage and complete-recording drain are
 unchanged. No speech silence is inferred from nonexistent word timing.
+
+
+## v0.5 provisional RU→ZH lower subtitles on user-chosen M2M100 ASR (2026-10-20)
+
+The existing Mac mini `ru-class-asr` Node service now supports
+opt-in, authenticated `POST /v1/translate` backed by CPU INT8 M2M100.
+Two short local physical tests succeeded: direct model inference 293ms,
+Node API round-trip 357ms. Neither is a concurrent sustained benchmark
+or Safari end-to-end confirmation.
+
+The static browser UI adds an explicit per-browser opt-in toggle in
+Speech API settings. The live worker uses ONLY the visitor's existing
+configured speech `/v1` endpoint plus `/translate`, with the same
+Bearer token and existing CORS restrictions. Coalesce 700ms and throttle
+to >=1.5 seconds, at most one in-flight API call, validate JSON/language,
+reject stale recording/revision results, close on stop/interruption, and
+stop requesting on unsupported 404/405. No shared API key, central Node
+proxy, live translation database, or formal history changes. When the
+uncommitted RU buffer exceeds backend's 1200-character bound, send a
+readable <=1100-character suffix and explicitly mark the lower ZH as
+recent-section-only. The provisional translation is never persisted.
+Automated tests do not validate 30-minute Safari/browser CORS behavior.

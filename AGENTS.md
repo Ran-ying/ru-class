@@ -472,3 +472,24 @@ newly confirmed context rather than remaining permanently blocked by old
 unit IDs. Maintain the legacy +4s fallback for short/no punctuation source,
 exact prefix/unit-ID validation, save-before-ACK, opt-in recovery, and full
 Stop drain; no guessed word timestamps, no extra LLM endpoint.
+
+
+## v0.5 local live translation integration (2026-10-20)
+
+The user's Mac mini actually loaded Whisper Small/Metal and M2M100 418M
+CPU INT8 together, and validated 293ms direct/357ms Node-API short
+RU→ZH calls (two samples, not a sustained latency result).
+For the PUBLIC anonymous website, never hardcode the user's private
+endpoint, server origin, API credential or shared proxy.
+`apps/web/live-translation.js` derives `/translate` from the
+VISITOR'S saved speech API baseUrl, uses only the visitor's own Bearer
+credential, and is opt-in per browser. Only the lower uncommitted stable
+plus replaceable ASR draft projection is translated. Live ZH is
+provisional, does not enter IndexedDB, and cannot mutate v0.4's
+DeepSeek sentence worker or durable source ACK. Enforce one in-flight
+request, 700ms coalescing, >=1.5s request spacing, response validation,
+recording/revision latest-wins discard, stop/failure cleanup, and an
+explicit partial-content label if the RU text exceeds local model bounds.
+An old pending ZH may be dimmed while updating but never claim it matches
+the current source; on stop it is cleared. Missing /translate is not an
+ASR error. Safari CORS/long-session acceptance remains open.
