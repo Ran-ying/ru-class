@@ -46,6 +46,18 @@ function commonPrefix(a, b) {
   while (i < a.length && i < b.length && equal(a[i], b[i])) i++;
   return i;
 }
+// Whisper's terminal punctuation may change even when the lexical word keys
+// match. Confirm an early sentence boundary only when the literal end token
+// agrees in BOTH overlapping hypotheses. Never confirm ellipses or a comma.
+function confirmedSentenceEnd(old, next, from, until){
+  let end=from;
+  for(let i=from;i<until;i++){
+    if(old[i]?.display===next[i]?.display &&
+       /[.!?。！？]["'»”）)\]]*$/u.test(old[i].display) &&
+       !/\.{2,}["'»”）)\]]*$/u.test(old[i].display))end=i+1;
+  }
+  return end;
+}
 
 export class TranscriptBuffer {
   stable = [];
@@ -100,7 +112,21 @@ export class TranscriptBuffer {
     // words are identical to the preceding nonempty hypothesis. Otherwise
     // [speech, silence, unchanged speech, silence] erroneously flushes.
     if (next.length) this.emptyWindows = 0;
-    if (unchanged) return final ? this.flush() : this.state();
+    if (unchanged) {
+      // Two DIFFERENT overlapping windows with the same entire hypothesis
+      // provide stable evidence of a complete sentence. Previously this
+      // fast-path did nothing, trapping even a clear period in the draft.
+      const old=[...this.stable,...this.pending];
+      if(!this.unanchored&&old.length===next.length &&
+         commonPrefix(old,next)===old.length){
+        const end=confirmedSentenceEnd(old,next,this.stable.length,old.length);
+        if(end>this.stable.length){
+          this.stable.push(...this.pending.slice(0,end-this.stable.length));
+          this.pending=this.pending.slice(end-this.stable.length);
+        }
+      }
+      return final ? this.flush() : this.state();
+    }
     if (!next.length) {
       this.emptyWindows++;
       // A single silent window may be a transient ASR miss.  Two successive
@@ -139,7 +165,14 @@ export class TranscriptBuffer {
       if (anchor) {
         this.unanchored = undefined;
         const agreed = commonPrefix(old, candidate);
-        const advanceTo = Math.max(this.stable.length, Math.min(agreed, candidate.length - 3));
+        // Preserve the old 3-word safety margin for running clauses, but
+        // promptly confirm an explicit, repeatedly observed sentence ending.
+        // A candidate prefix inherited from the old buffer is not enough:
+        // the punctuation token must actually be in the NEW audio window.
+        const base=Math.max(this.stable.length,Math.min(agreed,candidate.length-3));
+        const end=confirmedSentenceEnd(old,candidate,
+          Math.max(this.stable.length,possible.old),agreed);
+        const advanceTo=Math.max(base,end);
         if (advanceTo > this.stable.length) this.stable.push(...old.slice(this.stable.length, advanceTo));
         this.pending = candidate.slice(this.stable.length);
       } else if (consecutive && next.length === old.length && commonPrefix(next, old) === next.length) {
