@@ -122,7 +122,13 @@ export class TranscriptBuffer {
       const old=[...this.stable,...this.pending];
       if(uninterrupted&&!this.unanchored&&old.length===next.length &&
          commonPrefix(old,next)===old.length){
-        const end=confirmedSentenceEnd(old,next,this.stable.length,old.length);
+        const end=Math.max(
+          confirmedSentenceEnd(old,next,this.stable.length,old.length),
+          // Two unchanged, independently sampled hypotheses also confirm
+          // a long *unpunctuated* prefix. Hold the final three words as
+          // replaceable draft while DeepSeek checks sentence semantics.
+          Math.max(this.stable.length,old.length-3)
+        );
         if(end>this.stable.length){
           const count=end-this.stable.length;
           this.stable.push(...this.pending.slice(0,count));
