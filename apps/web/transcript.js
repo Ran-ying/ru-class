@@ -121,8 +121,9 @@ export class TranscriptBuffer {
          commonPrefix(old,next)===old.length){
         const end=confirmedSentenceEnd(old,next,this.stable.length,old.length);
         if(end>this.stable.length){
-          this.stable.push(...this.pending.slice(0,end-this.stable.length));
-          this.pending=this.pending.slice(end-this.stable.length);
+          const count=end-this.stable.length;
+          this.stable.push(...this.pending.slice(0,count));
+          this.pending=this.pending.slice(count);
         }
       }
       return final ? this.flush() : this.state();
