@@ -59,7 +59,11 @@ export class LiveTranslationWorker{
     this.source=text;this.revision++;
     this.onUpdate({recordingId,revision:this.revision,translation:'',
       pending:Boolean(text.trim())});
-    if(!text.trim()){this.suspended=false;this.clearTimer();return;}
+    if(!text.trim()){
+      // A later utterance may repeat exactly the previous Russian words.
+      // Never keep the old dedup signature after the visible buffer cleared.
+      this.lastSent='';this.suspended=false;this.clearTimer();return;
+    }
     if(this.suspended){this.onState('TRANSLATION_HTTP_404');return;}
     // Route 404: do not issue paid/failed calls per ASR window.
     this.schedule();
