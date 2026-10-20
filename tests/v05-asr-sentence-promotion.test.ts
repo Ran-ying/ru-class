@@ -52,6 +52,20 @@ test('same exact sample-range replay is not a second confirmation',()=>{
   assert.equal(duplicate.stable_delta,'');
   assert.equal(duplicate.partial_text,'Это полное предложение.');
 });
+test('identical overlapping long speech without punctuation advances confirmed prefix for semantic DeepSeek',()=>{
+  const transcript=new TranscriptBuffer();
+  const journal=new StableUnitJournal({classroomId:'c',recordingId:'no-period',startedAt:1000});
+  const speech='Сегодня преподаватель подробно объясняет студентам способы надежной защиты информации при использовании различных цифровых устройств в университетской аудитории';
+  const first=transcript.update(speech,0,8*RATE);
+  journal.add({...first,window_start_sample:0,window_end_sample:8*RATE});
+  const second=transcript.update(speech,RATE,9*RATE);
+  journal.add({...second,window_start_sample:RATE,window_end_sample:9*RATE});
+  assert.ok(second.stable_delta.split(' ').length>=12);
+  assert.ok(second.partial_text.split(' ').length<=3);
+  assert.deepEqual(journal.ready(),[],'unpunctuated fallback still waits');
+  assert.equal(nextReady(journal).length,1,
+    'semantic probe is now eligible without 4 extra seconds for confirmed long prefix');
+});
 test('a silence gap is not two uninterrupted matching confirmations',()=>{
   const asr=new TranscriptBuffer();
   asr.update('Здесь электронный шокер.',0,2*RATE);
