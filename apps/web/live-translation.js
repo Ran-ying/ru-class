@@ -46,7 +46,7 @@ export class LiveTranslationWorker{
     Object.assign(this,{profile,request,onUpdate,onState,coalesceMs,intervalMs});
     this.recordingId='';this.source='';this.revision=0;
     this.closed=false;this.timer=null;this.inFlight=false;this.controller=null;
-    this.lastStarted=0;this.lastSent='';this.suspended=false;
+    this.lastStarted=0;this.lastSent='';this.lastSentRevision=-1;this.suspended=false;
   }
   start(recordingId){
     if(this.closed||!recordingId)throw Error('INVALID_LIVE_RECORDING');
@@ -62,7 +62,8 @@ export class LiveTranslationWorker{
     if(!text.trim()){
       // A later utterance may repeat exactly the previous Russian words.
       // Never keep the old dedup signature after the visible buffer cleared.
-      this.lastSent='';this.suspended=false;this.clearTimer();return;
+      this.lastSent='';this.lastSentRevision=-1;
+      this.suspended=false;this.clearTimer();return;
     }
     if(this.suspended){this.onState('TRANSLATION_HTTP_404');return;}
     // Route 404: do not issue paid/failed calls per ASR window.
@@ -84,8 +85,12 @@ export class LiveTranslationWorker{
     const input=this.source.trim();
     const clipped=input.length>LIVE_MAX_SOURCE_CHARS;
     const text=clipped?input.slice(-LIVE_MAX_SOURCE_CHARS).replace(/^\S*\s/u,'').trim():input;
-    if(!text||this.lastSent===text)return;
-    this.inFlight=true;this.lastSent=text;this.lastStarted=performance.now();
+    // Source can change A → B → A while A is in flight. Its old response
+    // must be discarded, but the later A still needs a fresh translation.
+    // Compare both text and source revision, never text alone.
+    if(!text||(this.lastSent===text&&this.lastSentRevision===revision))return;
+    this.inFlight=true;this.lastSent=text;this.lastSentRevision=revision;
+    this.lastStarted=performance.now();
     const controller=new AbortController();this.controller=controller;
     try{
       const translated=await this.request(this.profile,text,{signal:controller.signal});
@@ -97,6 +102,9 @@ export class LiveTranslationWorker{
       if(this.closed||this.recordingId!==recordingId||this.revision!==revision)return;
       const code=e instanceof Error?e.message:'TRANSLATION_FAILED';
       if(code==='TRANSLATION_HTTP_404'||code==='TRANSLATION_HTTP_405')this.suspended=true;
+      // Never leave a prior unrelated Chinese caption visible indefinitely
+      // after the CURRENT buffer's translation fails.
+      this.onUpdate({recordingId,revision,translation:'',pending:false,error:code});
       this.onState(code);
     }finally{
       if(this.controller===controller)this.controller=null;
