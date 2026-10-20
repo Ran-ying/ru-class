@@ -134,6 +134,10 @@ export class TranscriptBuffer {
           this.stable.push(...this.pending.slice(0,count));
           this.pending=this.pending.slice(count);
         }
+        // Punctuation can differ even when all lexical word keys match.
+        // Keep stable prefix immutable but show the NEW mutable hypothesis
+        // after it. Only matching literal sentence-ending tokens were promoted.
+        this.pending=next.slice(this.stable.length);
       }
       return final ? this.flush() : this.state();
     }
