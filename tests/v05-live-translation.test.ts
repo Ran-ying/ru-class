@@ -93,9 +93,9 @@ test('full stable+draft RU buffer is translated in ordered short model requests 
   worker.start('full');
   worker.update(source,'full');
   await worker.tick();
-  assert.deepEqual(sent,chunks);
+  assert.deepEqual(sent,[...new Set(chunks)],'identical stable chunks reuse one result');
   assert.equal(seen.at(-1).translation,
-    sent.map((_,i)=>'译文-'+(i+1)).join('\n'));
+    chunks.map(chunk=>'译文-'+(sent.indexOf(chunk)+1)).join('\n'));
   assert.equal(seen.at(-1).pending,false);
   assert.equal(seen.at(-1).coveredChunks,chunks.length);
   assert.equal(seen.at(-1).totalChunks,chunks.length);
@@ -114,7 +114,7 @@ test('pending text changes reuse unaffected confirmed chunks and never show old 
   const first=splitLiveRussian(stable+'предварительный вариант');
   w.update(stable+'уточненный вариант','prefix');
   assert.equal(seen.at(-1).translation,first.slice(0,-1)
-    .map((_,i)=>'片段 '+(i+1)).join('\n'),
+    .map(chunk=>'片段 '+(sent.indexOf(chunk)+1)).join('\n'),
     'only identical prefix chunks may be shown before new model output');
   await w.tick();
   assert.ok(sent.length>previous);
