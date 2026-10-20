@@ -1,6 +1,7 @@
 import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
+import {LiveTranslationWorker} from './live-translation.js';
 import {captureHistoryScroll,restoreHistoryScroll} from './history-scroll.js';
 import {defaultApiParameters,parseApiParameters,isOfficialDeepSeek} from './api-parameters.js';
 import {restoreTranslationProgress,pendingTranscriptAfterCommits} from './translation-recovery.js';
@@ -14,8 +15,9 @@ let running=false,stopping=false,starting=false,stream,context,source,capture,as
 let activeClassroom=null,classroomOptions=[],classroomRevision=0,renderedClassroomKey='';
 let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve(),evidenceWarning='';
 let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
-const CLIENT_VERSION='0.4.0'; // Selected frontend build label, not attested ASR engine metadata.
+const CLIENT_VERSION='0.5.0'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
+let liveWorker=null,liveEnabled=false;
 const translationWorkers=new Map(); // A finished recording may continue draining while another starts.
 let playbackUrl=null,playbackRevision=0;
 const errorMessage=e=>e instanceof Error?e.message:String(e);
@@ -268,8 +270,60 @@ function renderCaption(){
     stable.slice(delivered.length).trimStart():stable;
   $('ru-stable').textContent=pending;
   $('ru-draft').textContent=draft?(pending?' '+draft:draft):'';
+  // The same exact RU projection feeds the provisional local ZH worker.
+  // Historical bilingual commits only adjust this projection, never consume
+  // or persist text from the lower translation task.
+  if(liveWorker)liveWorker.update([pending,draft].filter(Boolean).join(' '),lessonId);
 }
 
+function updateLiveStatus(status,elapsedMs){
+  const el=$('live-translation-status');
+  if(!el)return;
+  const lookup={
+    ready:'本地实时翻译',partial:'本地实时翻译（仅最近一段）',
+    TRANSLATION_HTTP_404:'语音 API 未启用 /translate；俄语识别不受影响。',
+    TRANSLATION_HTTP_405:'语音 API 不支持翻译；俄语识别不受影响。',
+    TRANSLATION_HTTP_429:'本地翻译忙碌；下次俄语变化时重试。',
+    TRANSLATION_TIMEOUT:'本地翻译超时；俄语识别不受影响。',
+    TRANSLATION_NETWORK_OR_CORS:'本地翻译网络或 CORS 不可用。',
+  };
+  const label=lookup[status]||(status.startsWith('TRANSLATION_')?
+    '本地翻译暂不可用（'+status+'）':status);
+  el.textContent=label+(Number.isFinite(elapsedMs)?' · '+elapsedMs+' ms':'');
+}
+function closeLiveTranslation(){
+  liveWorker?.close();liveWorker=null;
+  $('live-zh').textContent='';
+  $('live-zh').classList.remove('is-pending');
+  updateLiveStatus('');
+}
+function initializeLiveTranslation(){
+  closeLiveTranslation();
+  if(!liveEnabled||!profiles.speech?.baseUrl||!lessonId)return;
+  const recordingId=lessonId;
+  liveWorker=new LiveTranslationWorker({
+    profile:{...profiles.speech},
+    onUpdate:result=>{
+      if(!liveWorker||lessonId!==recordingId||result.recordingId!==recordingId)return;
+      const target=$('live-zh');
+      if(result.pending){
+        if(!result.translation)target.classList.add('is-pending');
+        if(!result.translation&&!($('ru-stable').textContent+$('ru-draft').textContent).trim())
+          target.textContent='';
+        updateLiveStatus('正在实时翻译…');
+      }else{
+        target.textContent=result.translation;
+        target.classList.remove('is-pending');
+      }
+    },
+    onState:(...args)=>{
+      if(!liveWorker||lessonId!==recordingId)return;
+      updateLiveStatus(...args);
+    }
+  });
+  liveWorker.start(recordingId);
+  updateLiveStatus('等待俄语…');
+}
 function showBilingualSentenceRows(rows,recordingId,classroomId){
   if(!activeClassroom||activeClassroom.id!==classroomId)return;
   // A prior completed recording can drain while a new recording is active.
@@ -427,6 +481,7 @@ async function onFailure(e){
   const message=errorMessage(e);
   if(!running&&!stopping&&!context){starting=false;$('error').textContent=message;buttons();return;}
   asr?.cancel();
+  closeLiveTranslation();
   if(sentenceWorker){
     sentenceWorker.close();
     translationWorkers.delete(sentenceWorker.journal.recordingId);
@@ -470,6 +525,7 @@ async function start(){
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
   evidenceReceived=0;evidenceFailed=0;evidenceActive=false;
   stable='';draft='';hasTranscript=false;
+  closeLiveTranslation();
   sourceJournal=new StableUnitJournal({classroomId:activeClassroom.id,
     recordingId:lessonId,startedAt});
   renderCaption();
@@ -504,6 +560,7 @@ async function start(){
     };
     running=true;starting=false;buttons();
     startSentenceWorker();
+    initializeLiveTranslation();
     source.connect(capture);capture.connect(context.destination);
     const track=stream.getAudioTracks()[0];
     if(!track||track.readyState!=='live')throw Error('麦克风不可用');
@@ -526,6 +583,7 @@ async function stop(){
     ]);
     await cleanupMicrophone();
     await asr.stop();
+    closeLiveTranslation();
     // The ASR final flush is independent of LLM latency and may release
     // confirmed end-of-class fragments for the history worker.
     sentenceWorker?.finish();
@@ -702,6 +760,15 @@ function showSettingsTab(name){
 for(const tab of ['models','about']){
   $('tab-'+tab).onclick=()=>showSettingsTab(tab);
 }
+const LIVE_OPTION_KEY='ru-class-live-local-translate-v1';
+try{liveEnabled=localStorage.getItem(LIVE_OPTION_KEY)==='enabled';}catch{}
+$('live-translation-enable').checked=liveEnabled;
+$('live-translation-enable').onchange=()=>{
+  liveEnabled=$('live-translation-enable').checked;
+  try{localStorage.setItem(LIVE_OPTION_KEY,liveEnabled?'enabled':'disabled');}catch{}
+  if(!liveEnabled)closeLiveTranslation();
+  else if(running){initializeLiveTranslation();renderCaption();}
+};
 $('settings-open').onclick=()=>{
   displayProfiles();
   showSettingsTab('models');

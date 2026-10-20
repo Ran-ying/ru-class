@@ -298,3 +298,34 @@ Whisper 的 `stable_delta` 已经确认、但没有句号的俄语，也可能�
 已有标点的完整句子仍走最快的即时通道；短小无标点片段仍采用此前
 确认后 4 秒兜底。没有精确音频停顿或逐词时间戳时，不将停顿推测视为
 确定的句子完成证据。判断结果仍受 ASR 质量及模型推断准确度影响。
+
+
+## v0.5 候选：Mac mini M2M100 实时中文字幕
+
+Mac mini M4 已在用户设备上完成 M2M100 INT8 和 Whisper Small 同时加载，
+本地短句翻译 293 ms，受认证 Node API 路由转发约 357 ms（仅两个短句
+样本；还没有连续 Safari 课堂延迟或语义质量验收）。
+在「设置 → API 配置 → 语音」中启用「本地实时中文」后，
+公开 RU-Class 页面**仅对当前用户配置的语音 API** 追加
+`/translate` 路由发送当前下方尚未进入历史的俄语。
+既没有默认 ASR/翻译服务器，也没有中央转发代理。
+例如语音 API 地址 `https://ai.example.test/v1` 会调用
+`https://ai.example.test/v1/translate`，复用相同 Bearer Token。
+如果自带语音服务未部署 `/v1/translate` 或没有为网页来源开放 CORS，
+会提示本地翻译不可用，但 Whisper / DeepSeek 正式历史不受影响。
+
+下方中文使用单独 `LiveTranslationWorker`，700ms 合并、至少
+1.5s 请求间隔、串行最新版本任务、10s 超时；只接受当前
+`recordingId + revision` 对应的结果，不把临时结果保存为正式句子。
+下方 RU 始终来自不可变稳定原文剩余部分和可修订 ASR draft。
+短暂过时的中文会以半透明显示并标注正在更新；录音结束/故障立即
+清理。若下方积压超过本地引擎长度限制，临时翻译仅覆盖最近的
+一段（会显示提示），不会假装全部内容均已翻译。最终历史始终独立
+由 DeepSeek 负责。配置开关仅保存在该浏览器，不保存任何额外密钥。
+
+
+**v0.5 联调：** 真实 MacBook Safari 跨设备 HTTPS/CORS 的验收步骤、
+端口与 Node 反代检查、语音 API 中的本地翻译开关、错误隔离和
+延迟测量方法参见
+[MacBook / Mac mini 实时中文字幕验收](docs/v05-local-translation-acceptance.md)。
+成功请求后下方会显示最近一次本地翻译耗时（毫秒）。
