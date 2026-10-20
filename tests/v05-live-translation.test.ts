@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 // @ts-ignore Browser-only JavaScript is intentionally untyped.
-import {requestLocalTranslation,liveTranslationEndpoint,LiveTranslationWorker,LIVE_MAX_SOURCE_CHARS}
-  from '../apps/web/live-translation.js';
+import {requestLocalTranslation,liveTranslationEndpoint,LiveTranslationWorker,LIVE_MAX_SOURCE_CHARS} from '../apps/web/live-translation.js';
 
 const profile={baseUrl:'https://asr.example.test/v1',model:'small',apiKey:'fake-secret'};
 test('local translation URL derives only from the configured ASR profile',()=>{
@@ -56,7 +55,7 @@ test('late response cannot override a newer RU revision',async()=>{
   const response=new Promise<string>(resolve=>{finish=resolve;});
   let requests=0;const seen:any[]=[];
   const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
-    request:async()=>{requests++;began();return response;},onUpdate:x=>seen.push(x)});
+    request:async()=>{requests++;began();return response;},onUpdate:(x:any)=>seen.push(x)});
   worker.start('r1');worker.update('Первый вариант','r1');
   const inFlight=worker.tick();await started;
   worker.update('Исправленный вариант','r1');
@@ -71,7 +70,7 @@ test('new recording/close invalidates in-flight requests without affecting ASR',
   const slow=new Promise<string>(resolve=>{finish=resolve;});
   const seen:any[]=[];
   const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
-    request:async()=>{called++;return slow;},onUpdate:x=>seen.push(x)});
+    request:async()=>{called++;return slow;},onUpdate:(x:any)=>seen.push(x)});
   worker.start('a');worker.update('Русский','a');
   const inFlight=worker.tick();
   worker.close();finish('过期中文');await inFlight;
@@ -83,7 +82,7 @@ test('large pending RU is bounded and no unchanged clipped source loops',async()
   let count=0;let textLength=0;const seen:any[]=[];
   const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
     request:async(_profile:any,text:string)=>{count++;textLength=text.length;return '本地翻译';},
-    onUpdate:x=>seen.push(x)});
+    onUpdate:(x:any)=>seen.push(x)});
   worker.start('long');
   worker.update('русские слова '.repeat(150),'long');
   await worker.tick();
