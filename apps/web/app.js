@@ -293,6 +293,7 @@ function updateLiveStatus(status){
 function closeLiveTranslation(){
   liveWorker?.close();liveWorker=null;
   $('live-zh').textContent='';
+  $('live-zh').classList.remove('is-pending');
   updateLiveStatus('');
 }
 function initializeLiveTranslation(){
@@ -303,8 +304,16 @@ function initializeLiveTranslation(){
     profile:{...profiles.speech},
     onUpdate:result=>{
       if(lessonId!==recordingId||result.recordingId!==recordingId)return;
-      $('live-zh').textContent=result.translation;
-      if(result.pending)updateLiveStatus('正在实时翻译…');
+      const target=$('live-zh');
+      if(result.pending){
+        if(!result.translation)target.classList.add('is-pending');
+        if(!result.translation&&!($('ru-stable').textContent+$('ru-draft').textContent).trim())
+          target.textContent='';
+        updateLiveStatus('正在实时翻译…');
+      }else{
+        target.textContent=result.translation;
+        target.classList.remove('is-pending');
+      }
     },
     onState:updateLiveStatus
   });

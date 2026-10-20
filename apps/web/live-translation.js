@@ -60,7 +60,8 @@ export class LiveTranslationWorker{
     this.onUpdate({recordingId,revision:this.revision,translation:'',
       pending:Boolean(text.trim())});
     if(!text.trim()){this.suspended=false;this.clearTimer();return;}
-    if(this.suspended)return; // Route 404: do not issue paid/failed calls per ASR window.
+    if(this.suspended){this.onState('TRANSLATION_HTTP_404');return;}
+    // Route 404: do not issue paid/failed calls per ASR window.
     this.schedule();
   }
   clearTimer(){if(this.timer!==null)clearTimeout(this.timer);this.timer=null;}
@@ -96,7 +97,9 @@ export class LiveTranslationWorker{
     }finally{
       if(this.controller===controller)this.controller=null;
       this.inFlight=false;
-      if(!this.closed&&this.lastSent!==this.source.trim()&&!this.suspended)
+      // A clipped buffer compares different strings to the original source.
+      // Only a NEW version can trigger another request; no infinite repeats.
+      if(!this.closed&&this.revision!==revision&&!this.suspended)
         this.schedule();
     }
   }
