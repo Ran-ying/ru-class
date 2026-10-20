@@ -93,6 +93,17 @@ test('large pending RU is bounded and no unchanged clipped source loops',async()
   assert.equal(count,1,'same long buffer must not cause recurring paid requests');
   worker.close();
 });
+test('the same Russian utterance may be spoken again after the buffer empties',async()=>{
+  let requests=0;
+  const w=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
+    request:async()=>{requests++;return '译文';}});
+  w.start('repeat');
+  w.update('Да, правильно.','repeat');await w.tick();
+  w.update('','repeat');
+  w.update('Да, правильно.','repeat');await w.tick();
+  w.close();
+  assert.equal(requests,2,'a new utterance must not be hidden by last request deduplication');
+});
 test('UI projects only uncommitted RU and never writes provisional ZH into history',()=>{
   const js=readFileSync('apps/web/app.js','utf8');
   const html=readFileSync('apps/web/index.html','utf8');
