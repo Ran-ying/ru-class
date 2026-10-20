@@ -85,7 +85,7 @@ test('full stable+draft RU buffer is translated in ordered short model requests 
   const chunks=splitLiveRussian(source);
   assert.ok(chunks.length>2);
   assert.equal(chunks.join(' '),source.replace(/\s+/gu,' '));
-  assert.ok(chunks.every(x=>x.length<=LIVE_CHUNK_CHARS));
+  assert.ok(chunks.every((x:string)=>x.length<=LIVE_CHUNK_CHARS));
   const sent:string[]=[];const seen:any[]=[];
   const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
     request:async(_p:any,text:string)=>{sent.push(text);return '译文-'+sent.length;},
@@ -95,7 +95,7 @@ test('full stable+draft RU buffer is translated in ordered short model requests 
   await worker.tick();
   assert.deepEqual(sent,[...new Set(chunks)],'identical stable chunks reuse one result');
   assert.equal(seen.at(-1).translation,
-    chunks.map(chunk=>'译文-'+(sent.indexOf(chunk)+1)).join('\n'));
+    chunks.map((chunk:string)=>'译文-'+(sent.indexOf(chunk)+1)).join('\n'));
   assert.equal(seen.at(-1).pending,false);
   assert.equal(seen.at(-1).coveredChunks,chunks.length);
   assert.equal(seen.at(-1).totalChunks,chunks.length);
@@ -114,7 +114,7 @@ test('pending text changes reuse unaffected confirmed chunks and never show old 
   const first=splitLiveRussian(stable+'предварительный вариант');
   w.update(stable+'уточненный вариант','prefix');
   assert.equal(seen.at(-1).translation,first.slice(0,-1)
-    .map(chunk=>'片段 '+(sent.indexOf(chunk)+1)).join('\n'),
+    .map((chunk:string)=>'片段 '+(sent.indexOf(chunk)+1)).join('\n'),
     'only identical prefix chunks may be shown before new model output');
   await w.tick();
   assert.ok(sent.length>previous);
@@ -125,7 +125,7 @@ test('word-free Unicode does not split UTF-16 surrogate pairs or skip characters
   const input='😀'.repeat(400);
   const chunks=splitLiveRussian(input);
   assert.equal(chunks.join(''),input);
-  assert.ok(chunks.every(s=>s.length<=LIVE_CHUNK_CHARS));
+  assert.ok(chunks.every((s:string)=>s.length<=LIVE_CHUNK_CHARS));
 });
 test('the same Russian utterance may be spoken again after the buffer empties',async()=>{
   let requests=0;
