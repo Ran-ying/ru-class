@@ -280,7 +280,8 @@ function updateLiveStatus(status,elapsedMs){
   const el=$('live-translation-status');
   if(!el)return;
   const lookup={
-    ready:'本地实时翻译',partial:'本地实时翻译（仅最近一段）',
+    waiting:'等待俄语…',
+    ready:'本地实时翻译完成',partial:'本地实时翻译（正在处理全部缓冲区）',
     TRANSLATION_HTTP_404:'语音 API 未启用 /translate；俄语识别不受影响。',
     TRANSLATION_HTTP_405:'语音 API 不支持翻译；俄语识别不受影响。',
     TRANSLATION_HTTP_429:'本地翻译忙碌；下次俄语变化时重试。',
@@ -294,7 +295,6 @@ function updateLiveStatus(status,elapsedMs){
 function closeLiveTranslation(){
   liveWorker?.close();liveWorker=null;
   $('live-zh').textContent='';
-  $('live-zh').classList.remove('is-pending');
   updateLiveStatus('');
 }
 function initializeLiveTranslation(){
@@ -305,15 +305,11 @@ function initializeLiveTranslation(){
     profile:{...profiles.speech},
     onUpdate:result=>{
       if(!liveWorker||lessonId!==recordingId||result.recordingId!==recordingId)return;
-      const target=$('live-zh');
+      // Only show translations of EXACT cached source chunks still present
+      // in the current RU projection. Never dim valid ZH or retain stale ZH.
+      $('live-zh').textContent=result.translation;
       if(result.pending){
-        if(!result.translation)target.classList.add('is-pending');
-        if(!result.translation&&!($('ru-stable').textContent+$('ru-draft').textContent).trim())
-          target.textContent='';
-        updateLiveStatus('正在实时翻译…');
-      }else{
-        target.textContent=result.translation;
-        target.classList.remove('is-pending');
+        updateLiveStatus('翻译缓冲区中（'+result.coveredChunks+'/'+result.totalChunks+' 段）');
       }
     },
     onState:(...args)=>{
