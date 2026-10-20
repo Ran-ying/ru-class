@@ -101,6 +101,9 @@ export class TranscriptBuffer {
     const next = words(text);
     const unchanged = consecutive && !!next.length && next.length === this.lastHypothesis.length &&
       commonPrefix(this.lastHypothesis, next) === next.length;
+    // Do not treat a hypothesis repeated AFTER an intervening empty window
+    // as a second independent confirmation of terminal punctuation.
+    const uninterrupted=this.emptyWindows===0;
     const recentOverlap = consecutive ? overlap(this.lastHypothesis, next) : undefined;
     this.lastWindowStart = windowStart;
     this.lastWindowEnd = windowEnd;
@@ -117,7 +120,7 @@ export class TranscriptBuffer {
       // provide stable evidence of a complete sentence. Previously this
       // fast-path did nothing, trapping even a clear period in the draft.
       const old=[...this.stable,...this.pending];
-      if(!this.unanchored&&old.length===next.length &&
+      if(uninterrupted&&!this.unanchored&&old.length===next.length &&
          commonPrefix(old,next)===old.length){
         const end=confirmedSentenceEnd(old,next,this.stable.length,old.length);
         if(end>this.stable.length){
