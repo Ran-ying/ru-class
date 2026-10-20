@@ -629,7 +629,7 @@ sentence splitting, old fallback and no mutation of draft evidence.
 
 Beyond punctuation-fast dispatch, the sentence worker now probes a minimum
 confirmed Russian source prefix for semantic completion if punctuation is
-absent: >=9 words from >=2 confirmation windows or >=16 confirmed words
+absent: >=9 words from >=2 confirmation windows or >=12 confirmed words
 within one. DeepSeek's existing translation response may return zero for
 unfinished clauses. Zero-result source signatures are not re-billed without
 new stable text, and the bounded prefix can include newly confirmed context
@@ -653,13 +653,35 @@ Bearer token and existing CORS restrictions. Coalesce 700ms and throttle
 to >=1.5 seconds, at most one in-flight API call, validate JSON/language,
 reject stale recording/revision results, close on stop/interruption, and
 stop requesting on unsupported 404/405. No shared API key, central Node
-proxy, live translation database, or formal history changes. When the
-uncommitted RU buffer exceeds backend's 1200-character bound, send a
-readable <=1100-character suffix and explicitly mark the lower ZH as
-recent-section-only. The provisional translation is never persisted.
+proxy, live translation database, or formal history changes. The entire uncommitted stable RU + replaceable ASR draft is translated,
+even beyond the backend's 1200-character per-call bound: use nonoverlapping
+<=380-character chunks with a cache of unchanged source chunks, ordered
+serialized local requests, progressive matched-prefix display and a
+visible covered/total segment count. Never silently truncate the start
+of the live RU projection. The provisional translation is never persisted.
 Automated tests do not validate 30-minute Safari/browser CORS behavior.
 
 临时中文成功时在页面下方显示最近一次本地翻译耗时（毫秒）。
 另新增 [v0.5 MacBook + Mac mini 联调验收说明](v05-local-translation-acceptance.md)，
 包含真实网页 Origin 的 204 CORS OPTIONS 检查、Node 3000 转发、
 Safari 实时预览、故障隔离及后续长课 P50/P95 验收。
+
+
+## v0.5.1 — full lower RU coverage and earlier formal history (2026-10-20)
+
+Live ZH now displays matching translated text in fully legible dark color,
+not persistent 50% opacity. The lower RU source is the complete unconsumed
+stable+draft projection; all segments are translated in order even when
+longer than one M2M100 request can handle. The UI shows how many chunks
+have finished if the rest is still pending; content is never cut to a suffix.
+
+Two distinct overlapping and uninterrupted identical ASR windows can
+promote a confirmed complete sentence or the nonfinal long shared prefix
+(with a trailing three-word safety margin). On another overlapping hypothesis,
+a verbatim matching terminal token can exceed the three-word hold.
+Different punctuation, ellipses, same-sample-range replay and silence gaps
+do not grant early sentence completion. DeepSeek may still reject an
+unfinished clause. A sentence committed durably to IndexedDB is painted
+immediately in the current lesson's history, then reconciled asynchronously.
+No draft is written into formal history. CI is synthetic: physical Safari
+long-classroom correctness and latency remain to be measured.

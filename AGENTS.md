@@ -462,7 +462,7 @@ ACK and recovery compatibility; no speech/word timing is inferred.
 A finished thought can lack terminal punctuation. Permit the existing
 serialized DeepSeek text completion request to evaluate the SHORTEST eligible
 already-confirmed Russian source prefix (at least 9 words across 2 distinct
-ASR confirmation windows, or at least 16 words from 1 window). Prompt the
+ASR confirmation windows, or at least 12 words from 1 window). Prompt the
 model to consume only semantically complete whole source-unit prefixes, or
 consume 0 if the final clause is unfinished. The original RU stability
 boundary remains authoritative; never send `partial_text`. Avoid repeated
@@ -488,8 +488,25 @@ plus replaceable ASR draft projection is translated. Live ZH is
 provisional, does not enter IndexedDB, and cannot mutate v0.4's
 DeepSeek sentence worker or durable source ACK. Enforce one in-flight
 request, 700ms coalescing, >=1.5s request spacing, response validation,
-recording/revision latest-wins discard, stop/failure cleanup, and an
-explicit partial-content label if the RU text exceeds local model bounds.
-An old pending ZH may be dimmed while updating but never claim it matches
-the current source; on stop it is cleared. Missing /translate is not an
+recording/revision latest-wins discard, stop/failure cleanup, and full-source ordered chunking: each short M2M request has an input budget,
+but the whole unconsumed stable + replaceable draft buffer must be covered.
+Reuse identical confirmed chunks; display only the currently matching
+translated prefix in full-contrast dark text and explicitly label progress.
+Never dim an old translation and silently leave it on screen as if current.
+On stop the provisional Chinese is cleared. Missing /translate is not an
 ASR error. Safari CORS/long-session acceptance remains open.
+
+
+## v0.5.1 immediate history painting and ASR full-sentence confirmation
+
+Two DISTINCT overlapping Whisper windows with the same complete Russian
+hypothesis are evidence to promote matching terminal punctuation into stable
+source without forcing the old 3-word trailing hold. Their confirmed but
+UNPUNCTUATED shared prefix may advance up to three words shy of the draft tail.
+Punctuation must match in both literal tokens; ellipses, same-sample-range
+replays and silence-interrupted repeats cannot trigger punctuation promotion.
+No raw ASR draft enters the formal DeepSeek queue. Once a sentence was
+durably committed with exact source-unit IDs, paint its paired RU/ZH row
+immediately while preserving history scroll state; follow with an async
+IndexedDB history reconciliation. Never paint unsaved LLM text.
+Update package.json, lockfile, HTML header and browser client version together.

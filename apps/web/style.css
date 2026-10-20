@@ -349,4 +349,10 @@ main>.transcription{border-left:1px solid #d9e2d9}
 #settings .live-translation-setting input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#245946}
 #settings .live-translation-setting p{font-size:11px;color:#829084;line-height:1.5;margin:7px 0 0}
 
-.live .zh #live-zh.is-pending{opacity:.5}
+
+
+/* v0.5: a matching Chinese translation is always fully legible.
+   Pending updates show only exact cached-prefix translation, not dim old text. */
+.live .zh #live-zh{color:#172d23;opacity:1;font-size:20px;line-height:1.6;
+  font-weight:400;white-space:pre-wrap}
+@media(max-height:600px){.live .zh #live-zh{font-size:18px}}

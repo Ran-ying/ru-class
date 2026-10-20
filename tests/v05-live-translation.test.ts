@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 // @ts-ignore Browser-only JavaScript is intentionally untyped.
-import {requestLocalTranslation,liveTranslationEndpoint,LiveTranslationWorker,LIVE_MAX_SOURCE_CHARS} from '../apps/web/live-translation.js';
+import {requestLocalTranslation,liveTranslationEndpoint,LiveTranslationWorker,splitLiveRussian,LIVE_CHUNK_CHARS} from '../apps/web/live-translation.js';
 
 const profile={baseUrl:'https://asr.example.test/v1',model:'small',apiKey:'fake-secret'};
 test('local translation URL derives only from the configured ASR profile',()=>{
@@ -78,20 +78,54 @@ test('new recording/close invalidates in-flight requests without affecting ASR',
   assert.equal(called,1);
   assert.ok(!seen.some(s=>s.translation==='过期中文'));
 });
-test('large pending RU is bounded and no unchanged clipped source loops',async()=>{
-  let count=0;let textLength=0;const seen:any[]=[];
-  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
-    request:async(_profile:any,text:string)=>{count++;textLength=text.length;return '本地翻译';},
+test('full stable+draft RU buffer is translated in ordered short model requests without any truncation',async()=>{
+  const stable='Сегодня мы обсуждаем информационную безопасность. '.repeat(34);
+  const draft='А сейчас преподаватель объясняет новую часть без пунктуации';
+  const source=(stable+draft).trim();
+  const chunks=splitLiveRussian(source);
+  assert.ok(chunks.length>2);
+  assert.equal(chunks.join(' '),source.replace(/\s+/gu,' '));
+  assert.ok(chunks.every((x:string)=>x.length<=LIVE_CHUNK_CHARS));
+  const sent:string[]=[];const seen:any[]=[];
+  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
+    request:async(_p:any,text:string)=>{sent.push(text);return '译文-'+sent.length;},
     onUpdate:(x:any)=>seen.push(x)});
-  worker.start('long');
-  worker.update('русские слова '.repeat(150),'long');
+  worker.start('full');
+  worker.update(source,'full');
   await worker.tick();
-  assert.equal(count,1);
-  assert.ok(textLength>0&&textLength<=LIVE_MAX_SOURCE_CHARS);
-  assert.equal(seen.at(-1).clipped,true);
-  await new Promise(resolve=>setTimeout(resolve,10));
-  assert.equal(count,1,'same long buffer must not cause recurring paid requests');
+  assert.deepEqual(sent,[...new Set(chunks)],'identical stable chunks reuse one result');
+  assert.equal(seen.at(-1).translation,
+    chunks.map((chunk:string)=>'译文-'+(sent.indexOf(chunk)+1)).join('\n'));
+  assert.equal(seen.at(-1).pending,false);
+  assert.equal(seen.at(-1).coveredChunks,chunks.length);
+  assert.equal(seen.at(-1).totalChunks,chunks.length);
+  // Nothing was appended to permanent RU/ZH history.
   worker.close();
+});
+test('pending text changes reuse unaffected confirmed chunks and never show old draft translation',async()=>{
+  const stable='У нас достаточно длинная стабильная русская лекция. '.repeat(10);
+  const seen:any[]=[];const sent:string[]=[];
+  const w=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
+    request:async(_p:any,text:string)=>{sent.push(text);return '片段 '+sent.length;},
+    onUpdate:(x:any)=>seen.push(x)});
+  w.start('prefix');
+  w.update(stable+'предварительный вариант','prefix');await w.tick();
+  const previous=sent.length;
+  const first=splitLiveRussian(stable+'предварительный вариант');
+  w.update(stable+'уточненный вариант','prefix');
+  assert.equal(seen.at(-1).translation,first.slice(0,-1)
+    .map((chunk:string)=>'片段 '+(sent.indexOf(chunk)+1)).join('\n'),
+    'only identical prefix chunks may be shown before new model output');
+  await w.tick();
+  assert.ok(sent.length>previous);
+  assert.equal(seen.at(-1).pending,false);
+  w.close();
+});
+test('word-free Unicode does not split UTF-16 surrogate pairs or skip characters',()=>{
+  const input='😀'.repeat(400);
+  const chunks=splitLiveRussian(input);
+  assert.equal(chunks.join(''),input);
+  assert.ok(chunks.every((s:string)=>s.length<=LIVE_CHUNK_CHARS));
 });
 test('the same Russian utterance may be spoken again after the buffer empties',async()=>{
   let requests=0;
@@ -155,4 +189,22 @@ test('UI projects only uncommitted RU and never writes provisional ZH into histo
   assert.match(js,/new LiveTranslationWorker\(/);
   assert.match(served,/\/live-translation\.js/);
   assert.doesNotMatch(module,/saveBilingualSentences|saveLesson|indexedDB|localStorage/);
+});
+
+test('full-buffer ZH is not dimmed by pending class or styled in low-contrast grey',()=>{
+  const css=readFileSync('apps/web/style.css','utf8');
+  const app=readFileSync('apps/web/app.js','utf8');
+  assert.match(css,/#live-zh\{color:#172d23;opacity:1;/);
+  assert.doesNotMatch(css,/is-pending\{opacity:\.5/);
+  assert.doesNotMatch(app,/classList\.add\('is-pending'\)/);
+  assert.match(app,/liveWorker\.update\(\[pending,draft\]/);
+});
+
+test('durably committed history is painted promptly without showing a temporary draft as formal RU',()=>{
+  const app=readFileSync('apps/web/app.js','utf8');
+  assert.match(app,/function appendSavedSentenceRows\(/);
+  assert.match(app,/appendSavedSentenceRows\(rows,recordingId\)/);
+  assert.match(app,/pair\.dataset\.sentenceIndex=index/);
+  assert.match(app,/restoreHistoryScroll\(pane,scroll\)/);
+  assert.match(app,/void renderSelectedClassroom\(\{historyOnly:true\}\)/);
 });

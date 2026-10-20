@@ -46,6 +46,18 @@ function commonPrefix(a, b) {
   while (i < a.length && i < b.length && equal(a[i], b[i])) i++;
   return i;
 }
+// Whisper's terminal punctuation may change even when the lexical word keys
+// match. Confirm an early sentence boundary only when the literal end token
+// agrees in BOTH overlapping hypotheses. Never confirm ellipses or a comma.
+function confirmedSentenceEnd(old, next, from, until){
+  let end=from;
+  for(let i=from;i<until;i++){
+    if(old[i]?.display===next[i]?.display &&
+       /[.!?。！？]["'»”）)\]]*$/u.test(old[i].display) &&
+       !/\.{2,}["'»”）)\]]*$/u.test(old[i].display))end=i+1;
+  }
+  return end;
+}
 
 export class TranscriptBuffer {
   stable = [];
@@ -89,6 +101,9 @@ export class TranscriptBuffer {
     const next = words(text);
     const unchanged = consecutive && !!next.length && next.length === this.lastHypothesis.length &&
       commonPrefix(this.lastHypothesis, next) === next.length;
+    // Do not treat a hypothesis repeated AFTER an intervening empty window
+    // as a second independent confirmation of terminal punctuation.
+    const uninterrupted=this.emptyWindows===0;
     const recentOverlap = consecutive ? overlap(this.lastHypothesis, next) : undefined;
     this.lastWindowStart = windowStart;
     this.lastWindowEnd = windowEnd;
@@ -100,7 +115,32 @@ export class TranscriptBuffer {
     // words are identical to the preceding nonempty hypothesis. Otherwise
     // [speech, silence, unchanged speech, silence] erroneously flushes.
     if (next.length) this.emptyWindows = 0;
-    if (unchanged) return final ? this.flush() : this.state();
+    if (unchanged) {
+      // Two DIFFERENT overlapping windows with the same entire hypothesis
+      // provide stable evidence of a complete sentence. Previously this
+      // fast-path did nothing, trapping even a clear period in the draft.
+      const old=[...this.stable,...this.pending];
+      if(uninterrupted&&!this.unanchored&&old.length===next.length &&
+         commonPrefix(old,next)===old.length){
+        const end=Math.max(
+          confirmedSentenceEnd(old,next,this.stable.length,old.length),
+          // Two unchanged, independently sampled hypotheses also confirm
+          // a long *unpunctuated* prefix. Hold the final three words as
+          // replaceable draft while DeepSeek checks sentence semantics.
+          Math.max(this.stable.length,old.length-3)
+        );
+        if(end>this.stable.length){
+          const count=end-this.stable.length;
+          this.stable.push(...this.pending.slice(0,count));
+          this.pending=this.pending.slice(count);
+        }
+        // Punctuation can differ even when all lexical word keys match.
+        // Keep stable prefix immutable but show the NEW mutable hypothesis
+        // after it. Only matching literal sentence-ending tokens were promoted.
+        this.pending=next.slice(this.stable.length);
+      }
+      return final ? this.flush() : this.state();
+    }
     if (!next.length) {
       this.emptyWindows++;
       // A single silent window may be a transient ASR miss.  Two successive
@@ -139,7 +179,14 @@ export class TranscriptBuffer {
       if (anchor) {
         this.unanchored = undefined;
         const agreed = commonPrefix(old, candidate);
-        const advanceTo = Math.max(this.stable.length, Math.min(agreed, candidate.length - 3));
+        // Preserve the old 3-word safety margin for running clauses, but
+        // promptly confirm an explicit, repeatedly observed sentence ending.
+        // A candidate prefix inherited from the old buffer is not enough:
+        // the punctuation token must actually be in the NEW audio window.
+        const base=Math.max(this.stable.length,Math.min(agreed,candidate.length-3));
+        const end=confirmedSentenceEnd(old,candidate,
+          Math.max(this.stable.length,possible.old),agreed);
+        const advanceTo=Math.max(base,end);
         if (advanceTo > this.stable.length) this.stable.push(...old.slice(this.stable.length, advanceTo));
         this.pending = candidate.slice(this.stable.length);
       } else if (consecutive && next.length === old.length && commonPrefix(next, old) === next.length) {
