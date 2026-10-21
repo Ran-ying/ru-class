@@ -510,3 +510,19 @@ durably committed with exact source-unit IDs, paint its paired RU/ZH row
 immediately while preserving history scroll state; follow with an async
 IndexedDB history reconciliation. Never paint unsaved LLM text.
 Update package.json, lockfile, HTML header and browser client version together.
+
+
+## Whisper silence-credit filter and stop/start hardening (2026-10-21)
+
+On the owner's Mac mini whisper.cpp small endpoint, a pure-silence 8 s window
+returns `Редактор субтитров Н.Закомолдина\n Корректор А.Егорова`. Such text
+kept the previous real draft from retiring during pauses and could be
+committed on Stop and sent to the text model. `apps/web/asr-hallucination.js`
+drops only WHOLE newline-separated Whisper segments that match explicit
+subtitle-credit patterns, and only from the text passed to `TranscriptBuffer`.
+The exact provider text is still archived first as raw evidence. Do not grow
+this into generic phrase deletion; add a pattern only with an observed sample
+and a test proving ordinary speech using the same words passes unchanged.
+A refused microphone no longer saves an empty `interrupted` recording; a
+failed Stop releases the microphone, closes its unfinalizable sentence worker,
+and marks the recording `interrupted` unless `completed` was already saved.

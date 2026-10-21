@@ -17,7 +17,7 @@ test('public RU-Class serves static pages, never user-provider proxy or site log
   site.listen(0,'127.0.0.1');await new Promise<void>(r=>site.once('listening',r));
   const root='http://127.0.0.1:'+(site.address() as any).port;
   try{
-    for(const path of ['/','/app.js','/direct-asr.js','/transcript.js','/local-store.js','/audio.js','/capture-worklet.js','/stable-units.js','/sentence-worker.js','/translation-recovery.js','/stable-source-audit.js']){
+    for(const path of ['/','/app.js','/direct-asr.js','/asr-hallucination.js','/transcript.js','/local-store.js','/audio.js','/capture-worklet.js','/stable-units.js','/sentence-worker.js','/translation-recovery.js','/stable-source-audit.js']){
       const response=await fetch(root+path);
       assert.equal(response.status,200,path);
     }

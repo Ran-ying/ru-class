@@ -129,7 +129,7 @@ test('word-free Unicode does not split UTF-16 surrogate pairs or skip characters
 });
 test('the same Russian utterance may be spoken again after the buffer empties',async()=>{
   let requests=0;
-  const w=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
+  const w=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
     request:async()=>{requests++;return '译文';}});
   w.start('repeat');
   w.update('Да, правильно.','repeat');await w.tick();
@@ -143,7 +143,7 @@ test('A→B→A reversion needs a fresh result even when text matches the old re
   const first=new Promise<string>(resolve=>release=resolve);
   let requests=0;
   const seen:any[]=[];
-  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
+  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
     request:async()=>++requests===1?first:'新版本对应的中文',
     onUpdate:(x:any)=>seen.push(x)});
   worker.start('revert');
@@ -162,7 +162,7 @@ test('A→B→A reversion needs a fresh result even when text matches the old re
 test('failed current translation clears an old provisional caption, not the Russian source',async()=>{
   let requests=0;
   const seen:any[]=[];const states:any[]=[];
-  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
+  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
     request:async()=>{
       if(++requests===1)return '旧中文';
       throw Error('TRANSLATION_HTTP_429');
@@ -207,4 +207,18 @@ test('durably committed history is painted promptly without showing a temporary 
   assert.match(app,/pair\.dataset\.sentenceIndex=index/);
   assert.match(app,/restoreHistoryScroll\(pane,scroll\)/);
   assert.match(app,/void renderSelectedClassroom\(\{historyOnly:true\}\)/);
+});
+test('close() ends an in-progress request-spacing cooldown immediately',async()=>{
+  let requests=0;
+  const w=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:100000,
+    request:async()=>{requests++;return '译文';}});
+  w.start('cooldown');
+  w.update('Первое предложение.','cooldown');await w.tick();
+  w.update('Второе предложение.','cooldown');
+  const pending=w.tick();
+  w.close();
+  const started=Date.now();
+  await pending;
+  assert.ok(Date.now()-started<1000,'closed worker must not wait out the 100 s spacing');
+  assert.equal(requests,1);
 });

@@ -72,7 +72,9 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
     if(typeof content!=='string'||content.length>16000)throw Error('LLM_INVALID_RESPONSE');
     content=content.trim();
     const fence=String.fromCharCode(96).repeat(3);
-    if(content.startsWith(fence+'json')&&content.endsWith(fence))content=content.slice(fence.length+4,-fence.length).trim();
+    // Models fence JSON as ```json, ```JSON or a bare ```; accept all three.
+    const fenced=content.match(new RegExp('^'+fence+'(?:json)?\\s*([\\s\\S]*?)\\s*'+fence+'$','i'));
+    if(fenced)content=fenced[1];
     let parsed;
     try{parsed=JSON.parse(content);}catch{throw Error('LLM_INVALID_JSON');}
     metricStatus='ok';

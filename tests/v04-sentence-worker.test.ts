@@ -408,3 +408,21 @@ test('newly confirmed context enlarges a previously undecidable source prefix',a
   assert.deepEqual(writes[0].consumedUnitIds,['capped:0','capped:1','capped:2','capped:3']);
   assert.equal(journal.delivered.size,4);
 });
+
+test('fenced JSON replies are accepted with or without a json language tag',async()=>{
+  const previous=globalThis.fetch;
+  const fence='`'.repeat(3);
+  const body={consumed_units:1,source_prefix:'Это тест.',sentences:[{ru:'Это тест.',zh:'这是测试。'}]};
+  try{
+    for(const content of [fence+'json\n'+JSON.stringify(body)+'\n'+fence,
+      fence+'\n'+JSON.stringify(body)+'\n'+fence,fence+'JSON '+JSON.stringify(body)+fence,
+      JSON.stringify(body)]){
+      globalThis.fetch=(async()=>new Response(JSON.stringify({
+        choices:[{message:{content},finish_reason:'stop'}]}),{status:200})) as any;
+      const parsed=await requestSentenceBatch(
+        {baseUrl:'https://example.test/v1',model:'test-model',apiKey:'test-key'},
+        [{text:'Это тест.',id:'synthetic-0'}]);
+      assert.deepEqual(parsed,body);
+    }
+  }finally{globalThis.fetch=previous;}
+});

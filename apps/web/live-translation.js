@@ -140,7 +140,13 @@ export class LiveTranslationWorker{
         if(!this.cache.has(chunk)){
           const cooldown=this.lastStarted?this.intervalMs-(performance.now()-this.lastStarted):0;
           if(cooldown>0){
-            await new Promise(resolve=>setTimeout(resolve,cooldown));
+            // close()/a new recording aborts the controller; end the wait too
+            // instead of leaving a pending timer behind a closed worker.
+            await new Promise(resolve=>{
+              const timer=setTimeout(done,cooldown);
+              function done(){clearTimeout(timer);controller.signal.removeEventListener('abort',done);resolve();}
+              controller.signal.addEventListener('abort',done,{once:true});
+            });
             if(this.closed||controller.signal.aborted||this.revision!==revision)break;
           }
           this.lastStarted=performance.now();

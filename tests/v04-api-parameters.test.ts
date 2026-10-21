@@ -16,7 +16,8 @@ test('official DeepSeek only gets prefilled nonthinking JSON, user may override'
     assert.deepEqual(defaultApiParameters('text',url),{});
   }
   assert.deepEqual(defaultApiParameters('text','https://api.deepseek.com/v1'),
-    {thinking:{type:'disabled'},max_tokens:2048,stream:false});
+    {thinking:{type:'disabled'},max_tokens:2048,stream:false,
+      response_format:{type:'json_object'}});
   assert.deepEqual(defaultApiParameters('speech','https://api.deepseek.com/v1'),{});
   const old=validateProfile({baseUrl:'https://api.deepseek.com/v1',
     model:'deepseek-flash',apiKey:'secret'},'text');
