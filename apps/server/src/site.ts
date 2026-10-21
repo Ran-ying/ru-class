@@ -10,6 +10,7 @@ const files:Record<string,[string,string]>={
   '/audio.js':['audio.js','text/javascript; charset=utf-8'],
   '/capture-worklet.js':['capture-worklet.js','text/javascript; charset=utf-8'],
   '/direct-asr.js':['direct-asr.js','text/javascript; charset=utf-8'],
+  '/asr-hallucination.js':['asr-hallucination.js','text/javascript; charset=utf-8'],
   '/stable-units.js':['stable-units.js','text/javascript; charset=utf-8'],
   '/history-scroll.js':['history-scroll.js','text/javascript; charset=utf-8'],
   '/live-translation.js':['live-translation.js','text/javascript; charset=utf-8'],

@@ -1,0 +1,261 @@
+{
+ "source": "Synthetic macOS 'Milena' TTS lesson (no classroom audio), whisper.cpp small temperatureInc 0.2 on the owner's M4, 2026-10-21. 'novad' = VAD off, 'vad' = Silero VAD on.",
+ "windows": {
+  "vad": [
+   {
+    "text": "",
+    "window_start_sample": 0,
+    "window_end_sample": 32000,
+    "final": false
+   },
+   {
+    "text": "Добрый день!",
+    "window_start_sample": 0,
+    "window_end_sample": 48000,
+    "final": false
+   },
+   {
+    "text": "Добрый день!\n Сегодня мы изучаем...",
+    "window_start_sample": 0,
+    "window_end_sample": 64000,
+    "final": false
+   },
+   {
+    "text": "Добрый день!\n Сегодня мы изучаем методы защиты",
+    "window_start_sample": 0,
+    "window_end_sample": 80000,
+    "final": false
+   },
+   {
+    "text": "Добрый день!\n Сегодня мы изучаем методы защиты информации.",
+    "window_start_sample": 0,
+    "window_end_sample": 96000,
+    "final": false
+   },
+   {
+    "text": "Добрый день!\n Сегодня мы изучаем методы защиты информации.",
+    "window_start_sample": 0,
+    "window_end_sample": 112000,
+    "final": false
+   },
+   {
+    "text": "Добрый день!\n Сегодня мы изучаем методы защиты информации.\n Первая тема нашего защита.",
+    "window_start_sample": 16000,
+    "window_end_sample": 144000,
+    "final": false
+   },
+   {
+    "text": "Сегодня мы изучаем методы защиты информации.\n Первая тема нашего занятия – это симметричное шифрование.",
+    "window_start_sample": 48000,
+    "window_end_sample": 176000,
+    "final": false
+   },
+   {
+    "text": "информации.\n Первая тема нашего занятия - это симметричное шифрование.",
+    "window_start_sample": 80000,
+    "window_end_sample": 208000,
+    "final": false
+   },
+   {
+    "text": "Первая тема нашего занятия - это симметричное шифрование.",
+    "window_start_sample": 112000,
+    "window_end_sample": 240000,
+    "final": false
+   },
+   {
+    "text": "Это симметричное шифрование.",
+    "window_start_sample": 144000,
+    "window_end_sample": 272000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студии.",
+    "window_start_sample": 176000,
+    "window_end_sample": 304000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студентам, какие алгоритмы вы уже",
+    "window_start_sample": 208000,
+    "window_end_sample": 336000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студентам, какие алгоритмы вы уже знаете?",
+    "window_start_sample": 240000,
+    "window_end_sample": 368000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студентам, какие алгоритмы вы уже знаете?\n Хорошо.",
+    "window_start_sample": 272000,
+    "window_end_sample": 400000,
+    "final": false
+   },
+   {
+    "text": "Какие алгоритмы вы уже знаете?\n Хорошо.\n Следующая тема криптография с открытым ключом.",
+    "window_start_sample": 304000,
+    "window_end_sample": 432000,
+    "final": false
+   },
+   {
+    "text": "Знаете?\n Хорошо, следующая тема криптография с открытым ключом.",
+    "window_start_sample": 336000,
+    "window_end_sample": 464000,
+    "final": false
+   },
+   {
+    "text": "Хорошо, следующая тема криптография с открытым ключом.",
+    "window_start_sample": 368000,
+    "window_end_sample": 496000,
+    "final": false
+   },
+   {
+    "text": "тема криптография с открытым ключом.",
+    "window_start_sample": 400000,
+    "window_end_sample": 528000,
+    "final": false
+   },
+   {
+    "text": "Чум.",
+    "window_start_sample": 432000,
+    "window_end_sample": 560000,
+    "final": false
+   },
+   {
+    "text": "",
+    "window_start_sample": 448000,
+    "window_end_sample": 576000,
+    "final": true
+   }
+  ],
+  "novad": [
+   {
+    "text": "Редактор субтитров Н.Закомолдина",
+    "window_start_sample": 0,
+    "window_end_sample": 32000,
+    "final": false
+   },
+   {
+    "text": "Добрый день!",
+    "window_start_sample": 0,
+    "window_end_sample": 48000,
+    "final": false
+   },
+   {
+    "text": "Добрый день! Сегодня мы изучаем",
+    "window_start_sample": 0,
+    "window_end_sample": 64000,
+    "final": false
+   },
+   {
+    "text": "Добрый день! Сегодня мы изучаем методы защиты",
+    "window_start_sample": 0,
+    "window_end_sample": 80000,
+    "final": false
+   },
+   {
+    "text": "Добрый день! Сегодня мы изучаем методы защиты информации.",
+    "window_start_sample": 0,
+    "window_end_sample": 96000,
+    "final": false
+   },
+   {
+    "text": "Добрый день! Сегодня мы изучаем методы защиты информации.",
+    "window_start_sample": 0,
+    "window_end_sample": 112000,
+    "final": false
+   },
+   {
+    "text": "Добрый день! Сегодня мы изучаем методы защиты информации.\n Первая тема нашего заявления.",
+    "window_start_sample": 16000,
+    "window_end_sample": 144000,
+    "final": false
+   },
+   {
+    "text": "Сегодня мы изучаем методы защиты информации.\n Первая тема нашего занятия - это симметричное шифрование.",
+    "window_start_sample": 48000,
+    "window_end_sample": 176000,
+    "final": false
+   },
+   {
+    "text": "Первая тема нашего занятия - это симметричное шифрование.",
+    "window_start_sample": 80000,
+    "window_end_sample": 208000,
+    "final": false
+   },
+   {
+    "text": "Первая тема нашего занятия - это симметричное шифрование.",
+    "window_start_sample": 112000,
+    "window_end_sample": 240000,
+    "final": false
+   },
+   {
+    "text": "Это симметричное шифрование.",
+    "window_start_sample": 144000,
+    "window_end_sample": 272000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студии.",
+    "window_start_sample": 176000,
+    "window_end_sample": 304000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студентам, какие алгоритмы вы уже",
+    "window_start_sample": 208000,
+    "window_end_sample": 336000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студентам, какие алгоритмы вы уже знаете?",
+    "window_start_sample": 240000,
+    "window_end_sample": 368000,
+    "final": false
+   },
+   {
+    "text": "Вопрос к студентам, какие алгоритмы вы уже знаете?\n Хорошо, следующий вопрос.",
+    "window_start_sample": 272000,
+    "window_end_sample": 400000,
+    "final": false
+   },
+   {
+    "text": "Какие алгоритмы вы уже знаете?\n Хорошо, следующая тема криптография с открытым ключом.",
+    "window_start_sample": 304000,
+    "window_end_sample": 432000,
+    "final": false
+   },
+   {
+    "text": "Знаете?\n Хорошо, следующая тема криптография с открытым ключом.",
+    "window_start_sample": 336000,
+    "window_end_sample": 464000,
+    "final": false
+   },
+   {
+    "text": "Хорошо, следующая тема криптография с открытым ключом.",
+    "window_start_sample": 368000,
+    "window_end_sample": 496000,
+    "final": false
+   },
+   {
+    "text": "тема криптография с открытым ключом.",
+    "window_start_sample": 400000,
+    "window_end_sample": 528000,
+    "final": false
+   },
+   {
+    "text": "Чум.",
+    "window_start_sample": 432000,
+    "window_end_sample": 560000,
+    "final": false
+   },
+   {
+    "text": "Редактор субтитров Н.Закомолдина\n Корректор А.Егорова",
+    "window_start_sample": 448000,
+    "window_end_sample": 576000,
+    "final": true
+   }
+  ]
+ }
+}

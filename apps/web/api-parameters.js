@@ -13,7 +13,10 @@ export function isOfficialDeepSeek(baseUrl){
 }
 export function defaultApiParameters(kind,baseUrl){
   return kind==='text'&&isOfficialDeepSeek(baseUrl)?
-    {thinking:{type:'disabled'},max_tokens:2048,stream:false}:{};
+    {thinking:{type:'disabled'},max_tokens:2048,stream:false,
+      // The system prompt asks for a JSON object; JSON mode stops prose or
+      // fenced replies from failing as LLM_INVALID_JSON.
+      response_format:{type:'json_object'}}:{};
 }
 export function parseApiParameters(value,kind){
   if(!['speech','image','text'].includes(kind))throw Error('INVALID_API_KIND');

@@ -510,3 +510,53 @@ durably committed with exact source-unit IDs, paint its paired RU/ZH row
 immediately while preserving history scroll state; follow with an async
 IndexedDB history reconciliation. Never paint unsaved LLM text.
 Update package.json, lockfile, HTML header and browser client version together.
+
+
+## Whisper silence-credit filter and stop/start hardening (2026-10-21)
+
+On the owner's Mac mini whisper.cpp small endpoint, a pure-silence 8 s window
+returns `Редактор субтитров Н.Закомолдина\n Корректор А.Егорова`. Such text
+kept the previous real draft from retiring during pauses and could be
+committed on Stop and sent to the text model. `apps/web/asr-hallucination.js`
+drops only WHOLE newline-separated Whisper segments that match explicit
+subtitle-credit patterns, and only from the text passed to `TranscriptBuffer`.
+The exact provider text is still archived first as raw evidence. Do not grow
+this into generic phrase deletion; add a pattern only with an observed sample
+and a test proving ordinary speech using the same words passes unchanged.
+A refused microphone no longer saves an empty `interrupted` recording; a
+failed Stop releases the microphone, closes its unfinalizable sentence worker,
+and marks the recording `interrupted` unless `completed` was already saved.
+Whole-segment sound annotations (`[звук …]`, `(музыка)`, `♪`) are filtered the
+same way. During capture the growing lesson row is saved at most every 5 s
+(final Stop/failure outcomes save immediately and cancel the pending periodic
+save), and post-commit history reconciliation is coalesced to one read per 2 s;
+committed rows are still painted immediately. Server-side Silero VAD in
+`ru-class-asr` (`whisper.vad.enabled`) is the primary fix for silence.
+
+
+## Punctuation-only token keys in TranscriptBuffer (2026-10-21)
+
+`words()` used to give a punctuation-only token (Russian dash `-`/`–`, `…`) an
+empty key, and `equal()` treats empty keys as unequal, so a stable dash never
+equalled ITSELF. After the first stable dash every `commonPrefix(stable,
+candidate)` gate failed and the rest of the session ran on the unanchored path,
+appending overlapping windows twice (`какие алгоритмы вы уже Вопрос к
+студентам, какие алгоритмы вы уже знаете?`). Such tokens now key on their
+normalized punctuation (dash variants unified); letter/number keys unchanged.
+Evidence: synthetic Milena TTS lesson on the M4 (`tests/fixtures/
+v05-synthetic-dash-windows.json`), duplicated with and without VAD before,
+clean after, plus a physical-Chrome fake-microphone run. This IS a reducer
+change: before merge, replay the owner's private C1/C2/44-window exports
+offline and record the changed-window analysis; synthetic speech is not
+classroom accuracy evidence.
+
+## Single-sighting edge fragments at silence (2026-10-21)
+
+When two empty windows (or an empty final window) flush the draft, an
+unanchored hypothesis that was decoded in exactly ONE window is discarded
+instead of committed: it is a window-edge sliver of earlier speech (observed:
+`Чум.` cut from `ключом.`, then translated by DeepSeek as 瘟疫). Real speech
+stays inside the 8 s window for several decodes; repeated unchanged decodes
+count as further sightings. Pending (anchored) text is always flushed, raw
+evidence is untouched, and `silencedFragmentCount/Tokens` record each discard
+as a diagnostic. Reducer change: same private-replay gate as the dash fix.

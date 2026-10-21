@@ -9,10 +9,16 @@
  */
 
 function words(text) {
-  return text.trim().split(/\s+/u).filter(Boolean).map(display => ({
-    display,
-    key: display.normalize('NFKC').toLocaleLowerCase('ru-RU').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-  }));
+  return text.trim().split(/\s+/u).filter(Boolean).map(display => {
+    const normalized = display.normalize('NFKC');
+    const lexical = normalized.toLocaleLowerCase('ru-RU').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    // A punctuation-only token (Russian dash "-"/"–"/"—", "…") used to get an
+    // empty key and never equal even itself. One stable dash then broke every
+    // later stable-prefix check, so the rest of the session fell back to the
+    // unanchored path and appended overlapping windows twice. Compare such
+    // tokens by their punctuation instead; dash variants are one token.
+    return {display, key: lexical || '\u0000' + normalized.replace(/[‐-―−]/gu, '-')};
+  });
 }
 function equal(a, b) { return !!a.key && a.key === b.key; }
 function joined(tokens) { return tokens.map(w => w.display).join(' '); }
@@ -72,6 +78,19 @@ export class TranscriptBuffer {
   // these counters; window-level provenance remains in the separate journal.
   unanchoredReplacementCount = 0;
   unanchoredReplacementTokens = 0;
+  // How many consecutive windows produced the current unanchored hypothesis,
+  // and how many single-sighting fragments a silence flush discarded.
+  unanchoredSightings = 0;
+  silencedFragmentCount = 0;
+  silencedFragmentTokens = 0;
+
+  /** Track repeat sightings of the same tentative hypothesis. */
+  setUnanchored(next) {
+    const same = this.unanchored?.length === next.length &&
+      commonPrefix(this.unanchored, next) === next.length;
+    this.unanchoredSightings = same ? this.unanchoredSightings + 1 : 1;
+    this.unanchored = next;
+  }
 
   /**
    * A repeated result for the very same sample range is a transport/replay
@@ -116,6 +135,10 @@ export class TranscriptBuffer {
     // [speech, silence, unchanged speech, silence] erroneously flushes.
     if (next.length) this.emptyWindows = 0;
     if (unchanged) {
+      // The same tentative hypothesis decoded again from a newer window is
+      // another sighting: real speech, not a one-off window-edge sliver.
+      if (this.unanchored?.length === next.length &&
+          commonPrefix(this.unanchored, next) === next.length) this.unanchoredSightings++;
       // Two DIFFERENT overlapping windows with the same entire hypothesis
       // provide stable evidence of a complete sentence. Previously this
       // fast-path did nothing, trapping even a clear period in the draft.
@@ -147,6 +170,16 @@ export class TranscriptBuffer {
       // empty windows (or an explicit stop) retire the old draft only once.
       if (this.emptyWindows >= 2 || final) {
         this.lastHypothesis = [];
+        // A tentative hypothesis seen in ONE window only, then silence from
+        // the next overlapping window, is a window-edge sliver of earlier
+        // speech (e.g. "Чум." cut from "ключом."). Real speech stays inside
+        // the 8 s window for several decodes before it can leave it. Do not
+        // commit it; pending (already anchored) text is still flushed.
+        if (this.unanchored && this.unanchoredSightings === 1) {
+          this.silencedFragmentCount++;
+          this.silencedFragmentTokens += this.unanchored.length;
+          this.unanchored = undefined;
+        }
         return this.flush();
       }
       return this.state();
@@ -214,7 +247,7 @@ export class TranscriptBuffer {
         this.unanchored = undefined;
       } else if (!this.pending.length && overlap(this.stable.slice(-12), next, 1)) {
         // A historical word alone is not a trustworthy current-window anchor.
-        this.unanchored = next;
+        this.setUnanchored(next);
       } else {
         // An unanchored candidate might be an alternate interpretation OR
         // real speech. The lexical stream alone cannot resolve which one.
@@ -224,7 +257,7 @@ export class TranscriptBuffer {
           this.unanchoredReplacementCount++;
           this.unanchoredReplacementTokens += this.unanchored.length;
         }
-        this.unanchored = next;
+        this.setUnanchored(next);
       }
     }
     if (final) return this.flush();

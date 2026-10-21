@@ -1,5 +1,6 @@
 import {wavHeader} from './local-store.js';
 import {TranscriptBuffer} from './transcript.js';
+import {captionProjectionText} from './asr-hallucination.js';
 import {parseApiParameters,applySpeechParameters,defaultApiParameters} from './api-parameters.js';
 
 export const RATE=16000;
@@ -165,7 +166,9 @@ export class BrowserAsrSession {
       };
       await this.onRawHypothesis(raw);
       this.lastSentEnd=snapshot.end;
-      const result=this.transcript.update(text,snapshot.start,snapshot.end,final);
+      // Silent windows can yield Whisper subtitle-credit hallucinations. Treat
+      // those segments as no speech in the caption only; raw evidence is kept.
+      const result=this.transcript.update(captionProjectionText(text),snapshot.start,snapshot.end,final);
       this.onUpdate({...result,
         raw_hypothesis_text:text,
         window_start_sample:snapshot.start,window_end_sample:snapshot.end,

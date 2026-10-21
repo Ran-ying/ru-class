@@ -15,6 +15,9 @@ let running=false,stopping=false,starting=false,stream,context,source,capture,as
 let activeClassroom=null,classroomOptions=[],classroomRevision=0,renderedClassroomKey='';
 let startedAt=0,flushResolve=null,writing=Promise.resolve(),lessonWrites=Promise.resolve(),evidenceWrites=Promise.resolve(),evidenceWarning='';
 let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
+// True once this recording's metadata row exists. A refused microphone must
+// not leave an empty "interrupted" recording in the course history.
+let lessonPersisted=false;
 const CLIENT_VERSION='0.5.1'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
 let liveWorker=null,liveEnabled=false;
@@ -51,6 +54,7 @@ function renderClassroomList(){
       releasePlayback();
       lessonId='';
       activeClassroom=item;
+      rememberClassroom(item.key);
       $('classroom-feedback').textContent='';
       $('error').textContent='';
       renderClassroomLock(); // Unlock synchronously, before awaited IndexedDB.
@@ -161,12 +165,21 @@ async function renderSelectedClassroom({historyOnly=false}={}){
       $('classroom-feedback').textContent='读取课堂失败：'+errorMessage(e);
   }
 }
+// Per-browser convenience only: a reload mid-class reopens the same course.
+const LAST_CLASSROOM_KEY='ru-class-last-classroom-v1';
+function rememberClassroom(key){
+  try{key?localStorage.setItem(LAST_CLASSROOM_KEY,key):localStorage.removeItem(LAST_CLASSROOM_KEY);}catch{}
+}
+function rememberedClassroom(){
+  try{return localStorage.getItem(LAST_CLASSROOM_KEY)||'';}catch{return '';}
+}
 async function refreshClassrooms(preferredKey=''){
   try{
     const entries=await listClassrooms();
     classroomOptions=entries;
-    const selected=entries.find(x=>x.key===(preferredKey||activeClassroom?.key));
+    const selected=entries.find(x=>x.key===(preferredKey||activeClassroom?.key||rememberedClassroom()));
     activeClassroom=selected||null;
+    rememberClassroom(activeClassroom?.key||'');
     $('classroom-feedback').textContent='';
     renderClassroomLock();
     renderClassroomList();
@@ -357,6 +370,10 @@ function appendSavedSentenceRows(rows,recordingId){
   $('history-empty').hidden=true;
   restoreHistoryScroll(pane,scroll);
 }
+// Reconciliation re-reads every recording and sentence of the classroom. The
+// rows are already painted, so coalesce reads instead of one per sentence.
+const HISTORY_SYNC_DELAY_MS=2000;
+let historySyncTimer=null;
 function showBilingualSentenceRows(rows,recordingId,classroomId){
   if(!activeClassroom||activeClassroom.id!==classroomId)return;
   if(recordingId===lessonId)renderCaption();
@@ -364,7 +381,9 @@ function showBilingualSentenceRows(rows,recordingId,classroomId){
   $('translation-status').textContent='正式双语句子已保存。';
   // Canonical storage refresh remains authoritative; it sorts older
   // recordings and reconciles any async reads without duplicating rows.
-  void renderSelectedClassroom({historyOnly:true});
+  if(historySyncTimer===null)historySyncTimer=setTimeout(()=>{
+    historySyncTimer=null;void renderSelectedClassroom({historyOnly:true});
+  },HISTORY_SYNC_DELAY_MS);
 }
 // Usage records are local and intentionally omit prompts, answers, URLs and keys.
 let metricViewRevision=0;
@@ -468,7 +487,7 @@ function showTranscript(update){
   const point=marks.find(m=>m.end>=update.window_end_sample);
   const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
   $('latency').textContent='识别窗 '+(update.window_start_sample/16000).toFixed(1)+'–'+(update.window_end_sample/16000).toFixed(1)+' s（非逐词时间） · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
-  if(lessonId)void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
+  scheduleRecordingSave();
 }
 function archiveRawHypothesis(entry){
   if(!lessonId)return Promise.resolve();
@@ -495,7 +514,27 @@ async function cleanupMicrophone(){
   if(context&&context.state!=='closed')await context.close().catch(()=>{});
   stream=null;capture=null;source=null;context=null;
 }
+// The lesson row carries the whole transcript and every stable unit, so it grows
+// all class long. Rewriting it on each ~1 s ASR window costs O(n) per window;
+// save the in-progress row at most every 5 s. Stop/failure saves immediately.
+const RECORDING_SAVE_INTERVAL_MS=5000;
+let recordingSaveTimer=null;
+function cancelRecordingSave(){
+  if(recordingSaveTimer!==null)clearTimeout(recordingSaveTimer);
+  recordingSaveTimer=null;
+}
+function scheduleRecordingSave(){
+  if(!lessonId||!lessonPersisted||recordingSaveTimer!==null)return;
+  const id=lessonId;
+  recordingSaveTimer=setTimeout(()=>{
+    recordingSaveTimer=null;
+    if(id!==lessonId||!lessonPersisted)return;
+    void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
+  },RECORDING_SAVE_INTERVAL_MS);
+}
 function finishLesson(outcome){
+  // A queued periodic "recording" save must never land after the final outcome.
+  if(outcome!=='recording')cancelRecordingSave();
   // Snapshot at the time of scheduling, never after a later async callback.
   const record={id:lessonId,title:activeClassroom.title,lessonDate:activeClassroom.date,
     classroomId:activeClassroom.id,classroomKey:activeClassroom.key,
@@ -510,6 +549,7 @@ function finishLesson(outcome){
 async function onFailure(e){
   const message=errorMessage(e);
   if(!running&&!stopping&&!context){starting=false;$('error').textContent=message;buttons();return;}
+  cancelRecordingSave();
   asr?.cancel();
   closeLiveTranslation();
   if(sentenceWorker){
@@ -521,7 +561,7 @@ async function onFailure(e){
   try{
     await cleanupMicrophone();
     await Promise.all([writing,evidenceWrites]);
-    if(lessonId)await finishLesson('interrupted');
+    if(lessonId&&lessonPersisted)await finishLesson('interrupted');
     if(evidenceActive){
       await finishEvidenceSession(lessonId,{receivedCount:evidenceReceived,
         failedCount:evidenceFailed,frameCount:sampleCount,completed:false});
@@ -553,7 +593,7 @@ async function start(){
   starting=true;classroomRevision++;buttons();
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
-  evidenceReceived=0;evidenceFailed=0;evidenceActive=false;
+  evidenceReceived=0;evidenceFailed=0;evidenceActive=false;lessonPersisted=false;cancelRecordingSave();
   stable='';draft='';hasTranscript=false;
   closeLiveTranslation();
   sourceJournal=new StableUnitJournal({classroomId:activeClassroom.id,
@@ -565,6 +605,7 @@ async function start(){
     context=new AudioContext();await context.resume();
     stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     await finishLesson('recording'); // Recovery metadata exists before audio chunks arrive.
+    lessonPersisted=true;
     await beginEvidenceSession(lessonId,{clientVersion:CLIENT_VERSION,selectedModelId:p.model});
     evidenceActive=true;
     await context.audioWorklet.addModule('/capture-worklet.js');
@@ -602,6 +643,7 @@ async function start(){
 async function stop(){
   if(!running||stopping)return;
   stopping=true;buttons();
+  let completedSaved=false;
   try{
     await Promise.race([
       new Promise((resolve,reject)=>{
@@ -624,6 +666,7 @@ async function stop(){
     // evidenceWrites promise only after its completion.
     await Promise.all([writing,evidenceWrites]);
     await finishLesson('completed');
+    completedSaved=true;
     if(evidenceActive){
       const complete=await finishEvidenceSession(lessonId,{receivedCount:evidenceReceived,
         failedCount:evidenceFailed,frameCount:sampleCount,completed:true});
@@ -634,7 +677,18 @@ async function stop(){
     // warning: the raw ASR history might be incomplete despite a saved WAV.
     $('error').textContent=evidenceWarning;
   }catch(e){
-    asr?.cancel();$('error').textContent='停止或保存失败：'+errorMessage(e);
+    asr?.cancel();closeLiveTranslation();$('error').textContent='停止或保存失败：'+errorMessage(e);
+    // A flush timeout happens before the normal cleanup: release the
+    // microphone so no further PCM is captured or saved after this failure.
+    await cleanupMicrophone();
+    // The final flush never happened, so this journal can never finalize:
+    // stop its poller and record the session as interrupted, not "recording".
+    if(sentenceWorker&&!sentenceWorker.journal.finalized){
+      sentenceWorker.close();
+      translationWorkers.delete(sentenceWorker.journal.recordingId);
+      sentenceWorker=null;
+    }
+    if(!completedSaved)try{await finishLesson('interrupted');}catch{/* The prior row stays fail-closed. */}
     if(evidenceActive){
       try{await Promise.all([writing,evidenceWrites]);
         await finishEvidenceSession(lessonId,{receivedCount:evidenceReceived,
