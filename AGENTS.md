@@ -560,3 +560,19 @@ stays inside the 8 s window for several decodes; repeated unchanged decodes
 count as further sightings. Pending (anchored) text is always flushed, raw
 evidence is untouched, and `silencedFragmentCount/Tokens` record each discard
 as a diagnostic. Reducer change: same private-replay gate as the dash fix.
+
+## v0.6 sentence playback (2026-10-21)
+
+Read `docs/v06-sentence-playback.md`. Sentence `[startSample,endSample)` comes
+from Whisper SEGMENT times (`verbose_json`, word times are unusable under VAD),
+interpolated by character offset inside a segment, carried on tokens through
+`TranscriptBuffer` and stored on stable units (`speechTimeSource:
+'whisper_segment_interpolated'`) and sentence rows. Untimed providers fall back
+to `json` and keep `null` times; never invent times. Playback reads only the
+covering 3200-sample chunks (`recordingRangePcm`) and refines the range with
+`speech-bounds.js` from the recorded audio; it never stores clips and is
+disabled while recording. Raw provider text and evidence completeness are
+unchanged; `stable-source-audit.js` must keep replaying the same caption input
+(credit filter + segments) as the browser. Evaluation is synthetic TTS on the
+M4, not classroom acceptance; manual time adjustment, forced alignment and
+per-sentence export remain out of scope.

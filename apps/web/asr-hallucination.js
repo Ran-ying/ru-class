@@ -24,6 +24,10 @@ export function isCreditSegment(segment){
   const text=segment.trim();
   return !!text&&CREDIT_SEGMENTS.some(pattern=>pattern.test(text));
 }
+/** v0.6 segment times with the same credit segments removed as the text. */
+export function captionProjectionSegments(segments){
+  return Array.isArray(segments)?segments.filter(s=>!isCreditSegment(String(s?.text||''))):undefined;
+}
 /** Text for TranscriptBuffer: identical to the input unless a whole segment is a known credit line. */
 export function captionProjectionText(raw){
   if(typeof raw!=='string')return raw;

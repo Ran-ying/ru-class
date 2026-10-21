@@ -456,3 +456,29 @@ test('classrooms display newest creation first regardless of selected lesson dat
     '新添加的旧课','中间课程','未来课程','旧数据']);
   assert.equal(items[0].title,'未来课程','sorting does not mutate caller data');
 });
+
+test('v0.6 range reads return only the covering chunks and refuse gaps',async()=>{
+  const {saveAudioChunk,recordingRangePcm,recordingRangeWav,AUDIO_CHUNK_SAMPLES}=storage;
+  const id='v06-range';
+  const chunk=(n:number,len=AUDIO_CHUNK_SAMPLES)=>Float32Array.from({length:len},(_,i)=>((n*AUDIO_CHUNK_SAMPLES+i)%1000)/1000);
+  for(let n=0;n<4;n++)await saveAudioChunk(id,n,chunk(n,n===3?1000:AUDIO_CHUNK_SAMPLES));
+  const r=await recordingRangePcm(id,3000,7000);
+  assert.deepEqual([r.startSample,r.endSample,r.pcm.length],[3000,7000,4000]);
+  const expect=(s:number)=>Math.round(((s%1000)/1000)*32767);
+  assert.equal(r.pcm[0],expect(3000));assert.equal(r.pcm[3999],expect(6999));
+  const tail=await recordingRangePcm(id,9000,20000);
+  assert.deepEqual([tail.startSample,tail.endSample],[9000,3*AUDIO_CHUNK_SAMPLES+1000],'clipped to stored audio');
+  const wav=await recordingRangeWav(id,0,100);
+  assert.equal(wav.blob.size,44+200);
+  await saveAudioChunk('v06-gap',0,chunk(0));await saveAudioChunk('v06-gap',2,chunk(2));
+  await assert.rejects(recordingRangePcm('v06-gap',100,9000),/LOCAL_AUDIO_GAP_OR_INVALID_CHUNK/);
+  await assert.rejects(recordingRangePcm('v06-none',0,10),/LOCAL_AUDIO_RANGE_MISSING/);
+});
+test('v0.6 raw windows keep provider segment times through export',async()=>{
+  await saveHypothesis('v06-seg',{text:' Да.',startSample:0,endSample:16000,final:false,inferenceMs:5,
+    segments:[{start:0.2,end:0.6,text:' Да.'}]});
+  const [row]=await lessonHypotheses('v06-seg');
+  assert.deepEqual(row.segments,[{start:0.2,end:0.6,text:' Да.'}]);
+  await saveHypothesis('v06-seg',{text:'Нет',startSample:16000,endSample:32000,final:true,inferenceMs:5});
+  assert.equal((await lessonHypotheses('v06-seg'))[1].segments,undefined,'untimed providers keep the old shape');
+});

@@ -81,13 +81,14 @@ test('actual ASR transcription forwards scalar extras but retains required FormD
     extraParams:{prompt:'security lecture',temperature:0.3}
   },()=>{},()=>{});
   try{
-    const text=await session.transcribe({pcm:new Float32Array(16000)});
+    const {text,segments}=await session.transcribe({pcm:new Float32Array(16000)});
     assert.equal(text,'Привет');
+    assert.equal(segments,null,'a provider without segments yields untimed text');
     assert.equal(seen.get('prompt'),'security lecture');
     assert.equal(seen.get('temperature'),'0.3');
     assert.equal(seen.get('model'),'small');
     assert.equal(seen.get('language'),'ru');
-    assert.equal(seen.get('response_format'),'json');
+    assert.equal(seen.get('response_format'),'verbose_json','v0.6 asks for segment times first');
     assert.ok(seen.get('file') instanceof Blob);
   }finally{session.cancel();(globalThis as any).fetch=originalFetch;}
 });

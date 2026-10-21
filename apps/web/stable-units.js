@@ -24,6 +24,8 @@ export function isSentenceEnd(text){
   const tail=text.trim().replace(/["'»”）)\]]+$/u,'');
   return /[!?。！？]$/u.test(tail)||(tail.endsWith('.')&&!tail.endsWith('..'));
 }
+const validTime=t=>Array.isArray(t)&&Number.isSafeInteger(t[0])&&Number.isSafeInteger(t[1])&&
+  t[0]>=0&&t[1]>=t[0]?[t[0],t[1]]:null;
 export class StableUnitJournal{
   constructor({classroomId,recordingId,startedAt}){
     if(typeof classroomId!=='string'||!classroomId||
@@ -47,8 +49,19 @@ export class StableUnitJournal{
     const delta=update?.stable_delta;
     if(typeof delta!=='string')throw Error('INVALID_STABLE_DELTA');
     const additions=[];
-    for(const text of splitStableSentenceUnits(delta)){
+    const texts=splitStableSentenceUnits(delta);
+    // v0.6: per-word [start,end] samples from Whisper segments, one entry per
+    // delta token. Ignore (untimed) if absent or not token-aligned.
+    const times=Array.isArray(update.stable_times)&&
+      update.stable_times.length===texts.reduce((n,t)=>n+t.split(/\s+/u).length,0)?
+      update.stable_times:null;
+    let cursor=0;
+    for(const text of texts){
       const ordinal=this.units.length;
+      const count=text.split(/\s+/u).length;
+      const wordTimes=times?times.slice(cursor,cursor+count).map(validTime):null;
+      cursor+=count;
+      const timed=wordTimes?.filter(Boolean)||[];
       const unit={
         id:this.recordingId+':'+ordinal,
         classroomId:this.classroomId,
@@ -60,9 +73,11 @@ export class StableUnitJournal{
         confirmedWindowEndSample:end,
         estimatedConfirmationWallTimeMs:this.startedAt+end/RATE*1000,
         timeBasis:'estimated_capture_epoch_plus_confirmation_window_end',
-        // Explicitly unavailable until a future verified alignment is added.
-        speechStartSample:null,
-        speechEndSample:null
+        // v0.6 estimate from Whisper segment times interpolated by character
+        // position; null when the provider gave no segments. Not forced alignment.
+        speechStartSample:timed.length?Math.min(...timed.map(t=>t[0])):null,
+        speechEndSample:timed.length?Math.max(...timed.map(t=>t[1])):null,
+        ...(timed.length?{speechTimeSource:'whisper_segment_interpolated',wordTimes}:{})
       };
       this.units.push(unit);
       additions.push(unit);

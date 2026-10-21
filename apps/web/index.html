@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.5.1</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RU-Class · v0.6.0</title><link rel="stylesheet" href="/style.css"></head>
 <body>
 <main><section class="notes"><div class="workspace-top">
   <div class="classroom-heading" aria-live="polite">
@@ -97,10 +97,10 @@
   </section>
   <section id="panel-about" role="tabpanel" aria-labelledby="tab-about" hidden>
     <div class="settings-about">
-      <h3>RU-Class <small>v0.5.1</small></h3>
+      <h3>RU-Class <small>v0.6.0</small></h3>
       <p>为俄语课堂提供实时语音识别、录音保存、正式俄中双语句子历史和手动恢复未完成翻译。</p>
       <p>无需登录。API 配置、Token、录音和历史记录保存在当前浏览器中；音频和待翻译的俄语只会发送至你自行配置的 API 提供商，可能产生费用。</p>
-      <p>可启用本地俄中实时临时字幕；词级时间对齐尚未实现。重要课堂请及时导出 WAV 和原始识别记录。</p>
+      <p>可启用本地俄中实时临时字幕。点击历史中带时间的句子即可回放该句录音（时间来自 Whisper 分段估计，并按录音音量修剪首尾，不是逐词对齐）。重要课堂请及时导出 WAV 和原始识别记录。</p>
       <section class="llm-metrics" aria-label="文字模型请求统计">
         <h4>文字 API 请求统计</h4>
         <p>仅保存在此浏览器。记录调用时间、模型、成功或失败、耗时及 API 返回的 Token 统计；不记录请求正文、翻译内容或 Token 密钥。推理 Token 为 — 表示服务商未报告，不代表零。</p>

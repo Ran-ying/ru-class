@@ -1,6 +1,6 @@
 import {wavHeader} from './local-store.js';
 import {TranscriptBuffer} from './transcript.js';
-import {captionProjectionText} from './asr-hallucination.js';
+import {captionProjectionText,captionProjectionSegments} from './asr-hallucination.js';
 import {parseApiParameters,applySpeechParameters,defaultApiParameters} from './api-parameters.js';
 
 export const RATE=16000;
@@ -96,6 +96,19 @@ export function wavBlob(samples){
   }
   return new Blob([wavHeader(samples.length),pcm],{type:'audio/wav'});
 }
+// Window-relative Whisper segment times; malformed lists are ignored (untimed),
+// never fatal: timing is an optional v0.6 enhancement of the same text.
+export function validSegments(raw,duration){
+  if(!Array.isArray(raw)||raw.length>200)return null;
+  const out=[];let previous=0;
+  for(const s of raw){
+    const start=Number(s?.start),end=Number(s?.end);
+    if(typeof s?.text!=='string'||s.text.length>4000||!Number.isFinite(start)||!Number.isFinite(end)||
+       start<0||end<start||end>duration+0.5||start+0.05<previous)return null;
+    previous=start;out.push({start,end,text:s.text});
+  }
+  return out;
+}
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export class BrowserAsrSession {
   constructor(profile,onUpdate,onError,onRawHypothesis=()=>{}){
@@ -111,6 +124,9 @@ export class BrowserAsrSession {
     this.lastSentEnd=0;
     this.startAt=0;
     this.controller=new AbortController();
+    // v0.6: ask for segment times; a provider that rejects verbose_json with
+    // HTTP 400 is retried once as plain json and stays on json afterwards.
+    this.verbose=true;
   }
   push(samples){
     if(!this.active)return;
@@ -123,13 +139,26 @@ export class BrowserAsrSession {
     }
   }
   async transcribe(snapshot){
-    const {baseUrl,model,apiKey,extraParams}=this.profile;
+    const {model,extraParams}=this.profile;
     const form=new FormData();
     form.set('file',wavBlob(snapshot.pcm),'window.wav');
     form.set('model',model);
     form.set('language','ru');
-    form.set('response_format','json');
+    form.set('response_format',this.verbose?'verbose_json':'json');
     applySpeechParameters(form,extraParams);
+    let response=await this.post(form);
+    if(this.verbose&&response.status===400){
+      this.verbose=false;
+      form.set('response_format','json');
+      response=await this.post(form);
+    }
+    if(!response.ok)throw Error('ASR_HTTP_'+response.status);
+    const result=await response.json();
+    if(typeof result?.text!=='string'||result.text.length>20000)throw Error('INVALID_ASR_RESPONSE');
+    return {text:result.text,segments:this.verbose?validSegments(result.segments,snapshot.pcm.length/RATE):null};
+  }
+  async post(form){
+    const {baseUrl,apiKey}=this.profile;
     let response;
     for(let attempt=0;attempt<4;attempt++){
       response=await apiFetch(baseUrl+'/audio/transcriptions',{
@@ -138,10 +167,7 @@ export class BrowserAsrSession {
       if(response.status!==429 || attempt===3)break;
       await sleep([400,800,1600][attempt]);
     }
-    if(!response.ok)throw Error('ASR_HTTP_'+response.status);
-    const result=await response.json();
-    if(typeof result?.text!=='string'||result.text.length>20000)throw Error('INVALID_ASR_RESPONSE');
-    return result.text;
+    return response;
   }
   async run(final=false){
     if(this.inFlight)return this.inFlight;
@@ -156,19 +182,20 @@ export class BrowserAsrSession {
     }
     const task=(async()=>{
       const start=performance.now();
-      const text=await this.transcribe(snapshot);
+      const {text,segments}=await this.transcribe(snapshot);
       if(!this.active&&!final)return;
       const raw={
         // Preserve the exact provider text before any lossy transcript
         // stabilization. A projection failure must not erase this evidence.
         text,startSample:snapshot.start,endSample:snapshot.end,
-        inferenceMs:performance.now()-start,final
+        inferenceMs:performance.now()-start,final,
+        ...(segments?{segments}:{})
       };
       await this.onRawHypothesis(raw);
       this.lastSentEnd=snapshot.end;
       // Silent windows can yield Whisper subtitle-credit hallucinations. Treat
       // those segments as no speech in the caption only; raw evidence is kept.
-      const result=this.transcript.update(captionProjectionText(text),snapshot.start,snapshot.end,final);
+      const result=this.transcript.update(captionProjectionText(text),snapshot.start,snapshot.end,final,captionProjectionSegments(segments));
       this.onUpdate({...result,
         raw_hypothesis_text:text,
         window_start_sample:snapshot.start,window_end_sample:snapshot.end,

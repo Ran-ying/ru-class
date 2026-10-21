@@ -148,6 +148,41 @@ export function nextReady(journal,{minUnits=0}={}){
   }
   return result;
 }
+/**
+ * v0.6: audio range of each committed sentence, from the consumed source units'
+ * Whisper-segment word times. One sentence per unit maps directly; otherwise
+ * sentences split the batch's word timeline in proportion to their word counts
+ * (the model may correct words, so this is an estimate). null when untimed.
+ */
+export function sentenceTimes(units,sentences){
+  const words=text=>String(text).trim().split(/\s+/u).filter(Boolean).length||1;
+  const span=times=>{
+    const valid=times.filter(t=>Array.isArray(t));
+    return valid.length?[Math.min(...valid.map(t=>t[0])),Math.max(...valid.map(t=>t[1]))]:null;
+  };
+  const unitTimes=u=>Array.isArray(u.wordTimes)?u.wordTimes:Array(words(u.text)).fill(null);
+  if(sentences.length===units.length)return units.map(u=>span(unitTimes(u)));
+  const timeline=units.flatMap(unitTimes);
+  const key=w=>w.normalize('NFKC').toLocaleLowerCase('ru-RU').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu,'');
+  const source=units.flatMap(u=>String(u.text).trim().split(/\s+/u)).map(key);
+  const counts=sentences.map(x=>words(x.ru));
+  const total=counts.reduce((a,b)=>a+b,0);
+  // Each sentence starts where its first word appears in the source (the model
+  // may drop or fix words, which skews pure proportions); else by word share.
+  const starts=[0];
+  let before=counts[0];
+  for(let i=1;i<sentences.length;i++){
+    const first=key(String(sentences[i].ru).trim().split(/\s+/u)[0]||'');
+    const guess=Math.floor(timeline.length*before/total);
+    let found=-1;
+    if(first)for(let k=starts[i-1]+1;k<Math.min(source.length,guess+12);k++)if(source[k]===first){
+      found=k;if(k>=guess-3)break;
+    }
+    starts.push(found>starts[i-1]?found:Math.max(starts[i-1]+1,guess));
+    before+=counts[i];
+  }
+  return starts.map((from,i)=>span(timeline.slice(from,Math.max(from+1,starts[i+1]??timeline.length))));
+}
 export class SentenceWorker{
   constructor({journal,profile,save,onCommit=()=>{},onError=()=>{},onDrain=()=>{},onRequestMetric=()=>{},request=requestSentenceBatch,intervalMs=800}){
     if(!journal||typeof save!=='function')throw Error('LLM_INVALID_WORKER');
@@ -227,7 +262,9 @@ export class SentenceWorker{
         return;
       }
       const consumed=ready.slice(0,accepted.count);
+      const times=sentenceTimes(consumed,accepted.sentences);
       const rows=accepted.sentences.map((s,i)=>({
+        ...(times[i]?{startSample:times[i][0],endSample:times[i][1],timeSource:'whisper_segment_interpolated'}:{}),
         recordingId:this.journal.recordingId,classroomId:this.journal.classroomId,
         index:this.nextIndex+i,ru:s.ru,zh:s.zh,sourcePrefix:accepted.prefix,
         consumedUnitIds:consumed.map(u=>u.id),

@@ -20,6 +20,41 @@ function words(text) {
     return {display, key: lexical || '\u0000' + normalized.replace(/[‐-―−]/gu, '-')};
   });
 }
+const SAMPLE_RATE = 16000;
+/**
+ * v0.6: estimate each word's audio position from Whisper SEGMENT times
+ * (seconds within the submitted window). Inside a segment the time is
+ * interpolated by character offset: an estimate, not a forced alignment.
+ */
+export function segmentWordTimes(segments, windowStart) {
+  if (!Array.isArray(segments)) return [];
+  const timed = [];
+  for (const segment of segments) {
+    const text = typeof segment?.text === 'string' ? segment.text.trim() : '';
+    const start = Number(segment?.start), end = Number(segment?.end);
+    if (!text || !Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+    const at = offset => windowStart + Math.round((start + (end - start) * offset / text.length) * SAMPLE_RATE);
+    for (const match of text.matchAll(/\S+/gu)) {
+      timed.push({display: match[0].normalize('NFKC'), startSample: at(match.index),
+        endSample: at(match.index + match[0].length)});
+    }
+  }
+  return timed;
+}
+/** Copy times onto hypothesis tokens by in-order literal match; unmatched stay untimed. */
+function attachTimes(tokens, timed) {
+  let j = 0;
+  for (const token of tokens) {
+    const display = token.display.normalize('NFKC');
+    for (let k = j; k < Math.min(timed.length, j + 8); k++) {
+      if (timed[k].display !== display) continue;
+      token.startSample = timed[k].startSample;
+      token.endSample = timed[k].endSample;
+      j = k + 1;
+      break;
+    }
+  }
+}
 function equal(a, b) { return !!a.key && a.key === b.key; }
 function joined(tokens) { return tokens.map(w => w.display).join(' '); }
 
@@ -103,7 +138,7 @@ export class TranscriptBuffer {
   }
 
   /** Apply the next ordered hypothesis for this session's audio time range. */
-  update(text, windowStart, windowEnd, final = false) {
+  update(text, windowStart, windowEnd, final = false, segments = undefined) {
     if (!Number.isSafeInteger(windowStart) || !Number.isSafeInteger(windowEnd) || windowStart < 0 || windowEnd <= windowStart || windowEnd < this.lastWindowEnd) {
       throw new Error('TRANSCRIPT_WINDOW_ORDER');
     }
@@ -118,6 +153,7 @@ export class TranscriptBuffer {
     // the immediately preceding raw Whisper window and actual audio overlap.
     const consecutive = this.lastWindowEnd < 0 || windowStart < this.lastWindowEnd;
     const next = words(text);
+    if (segments) attachTimes(next, segmentWordTimes(segments, windowStart));
     const unchanged = consecutive && !!next.length && next.length === this.lastHypothesis.length &&
       commonPrefix(this.lastHypothesis, next) === next.length;
     // Do not treat a hypothesis repeated AFTER an intervening empty window
@@ -297,9 +333,12 @@ export class TranscriptBuffer {
   /** Send only the newly confirmed delta; the browser holds the full text. */
   sentStable = 0;
   state(forcePartial) {
-    const stable_delta = joined(this.stable.slice(this.sentStable));
+    const delta = this.stable.slice(this.sentStable);
+    const stable_delta = joined(delta);
+    // One entry per delta token: [startSample, endSample] or null if untimed.
+    const stable_times = delta.map(t => Number.isSafeInteger(t.startSample) ? [t.startSample, t.endSample] : null);
     this.sentStable = this.stable.length;
     const pending = forcePartial === undefined ? this.effectiveDraft() : [];
-    return {stable_delta, partial_text: joined(pending), revision: ++this.revision};
+    return {stable_delta, stable_times, partial_text: joined(pending), revision: ++this.revision};
   }
 }
