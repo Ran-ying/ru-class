@@ -549,3 +549,14 @@ clean after, plus a physical-Chrome fake-microphone run. This IS a reducer
 change: before merge, replay the owner's private C1/C2/44-window exports
 offline and record the changed-window analysis; synthetic speech is not
 classroom accuracy evidence.
+
+## Single-sighting edge fragments at silence (2026-10-21)
+
+When two empty windows (or an empty final window) flush the draft, an
+unanchored hypothesis that was decoded in exactly ONE window is discarded
+instead of committed: it is a window-edge sliver of earlier speech (observed:
+`Чум.` cut from `ключом.`, then translated by DeepSeek as 瘟疫). Real speech
+stays inside the 8 s window for several decodes; repeated unchanged decodes
+count as further sightings. Pending (anchored) text is always flushed, raw
+evidence is untouched, and `silencedFragmentCount/Tokens` record each discard
+as a diagnostic. Reducer change: same private-replay gate as the dash fix.

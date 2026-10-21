@@ -43,3 +43,24 @@ test('real M4 synthetic lesson windows: no duplicated sentences with or without 
     assert.doesNotMatch(text,/Редактор субтитров|Корректор/);
   }
 });
+test('a one-window edge sliver before silence is not committed, but repeated short speech is',()=>{
+  const fixture=JSON.parse(readFileSync('tests/fixtures/v05-synthetic-dash-windows.json','utf8'));
+  for(const key of ['novad','vad'])assert.doesNotMatch(replay(fixture.windows[key]),/Чум/,key);
+  const b=new TranscriptBuffer();const out:string[]=[];
+  // Overlapping windows: "Всё." is unanchored (no 2-token link to the stable
+  // sentence) and then decoded again unchanged by the next windows.
+  for(const [text,s,e,final] of [['Это важная тема.',0,8,false],['Это важная тема.',1,9,false],
+    ['Всё.',2,10,false],['Всё.',3,11,false],['Всё.',4,12,false],['',5,13,false],['',6,14,true]] as const){
+    const u=b.update(text,s*R,e*R,final);if(u.stable_delta)out.push(u.stable_delta);
+  }
+  assert.match(out.join(' '),/Всё\.$/,'a short utterance seen in several windows must survive silence');
+  assert.equal(b.silencedFragmentCount,0);
+});
+test('a fragment seen once and followed by two empty windows is dropped and counted',()=>{
+  const b=new TranscriptBuffer();const out:string[]=[];
+  for(const [text,s,e] of [['Это важная тема.',0,8],['Это важная тема.',1,9],['Чум.',3,11],['',4,12],['',5,13]] as const){
+    const u=b.update(text,s*R,e*R);if(u.stable_delta)out.push(u.stable_delta);
+  }
+  assert.equal(out.join(' '),'Это важная тема.');
+  assert.equal(b.silencedFragmentCount,1);assert.equal(b.silencedFragmentTokens,1);
+});
