@@ -54,6 +54,7 @@ function renderClassroomList(){
       releasePlayback();
       lessonId='';
       activeClassroom=item;
+      rememberClassroom(item.key);
       $('classroom-feedback').textContent='';
       $('error').textContent='';
       renderClassroomLock(); // Unlock synchronously, before awaited IndexedDB.
@@ -164,12 +165,21 @@ async function renderSelectedClassroom({historyOnly=false}={}){
       $('classroom-feedback').textContent='读取课堂失败：'+errorMessage(e);
   }
 }
+// Per-browser convenience only: a reload mid-class reopens the same course.
+const LAST_CLASSROOM_KEY='ru-class-last-classroom-v1';
+function rememberClassroom(key){
+  try{key?localStorage.setItem(LAST_CLASSROOM_KEY,key):localStorage.removeItem(LAST_CLASSROOM_KEY);}catch{}
+}
+function rememberedClassroom(){
+  try{return localStorage.getItem(LAST_CLASSROOM_KEY)||'';}catch{return '';}
+}
 async function refreshClassrooms(preferredKey=''){
   try{
     const entries=await listClassrooms();
     classroomOptions=entries;
-    const selected=entries.find(x=>x.key===(preferredKey||activeClassroom?.key));
+    const selected=entries.find(x=>x.key===(preferredKey||activeClassroom?.key||rememberedClassroom()));
     activeClassroom=selected||null;
+    rememberClassroom(activeClassroom?.key||'');
     $('classroom-feedback').textContent='';
     renderClassroomLock();
     renderClassroomList();

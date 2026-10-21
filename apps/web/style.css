@@ -356,3 +356,13 @@ main>.transcription{border-left:1px solid #d9e2d9}
 .live .zh #live-zh{color:#172d23;opacity:1;font-size:20px;line-height:1.6;
   font-weight:400;white-space:pre-wrap}
 @media(max-height:600px){.live .zh #live-zh{font-size:18px}}
+/* Settings footnote: align with the centered card grid instead of the dialog
+   edge, and leave air below the tallest (speech) card. */
+#panel-models>.settings-help{max-width:900px;margin:16px auto 0}
+@media(max-width:960px){#panel-models>.settings-help{max-width:650px}}
+@media(max-width:650px){#panel-models>.settings-help{max-width:380px}}
+/* Quiet, thin scrollbars for the bilingual history and settings panes. */
+.history,#settings .settings-body{scrollbar-width:thin;scrollbar-color:#c9d2c6 transparent}
+.history::-webkit-scrollbar,#settings .settings-body::-webkit-scrollbar{width:8px}
+.history::-webkit-scrollbar-thumb,#settings .settings-body::-webkit-scrollbar-thumb{background:#c9d2c6;border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+.history::-webkit-scrollbar-track,#settings .settings-body::-webkit-scrollbar-track{background:transparent}
