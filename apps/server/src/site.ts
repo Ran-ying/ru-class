@@ -13,6 +13,7 @@ const files:Record<string,[string,string]>={
   '/asr-hallucination.js':['asr-hallucination.js','text/javascript; charset=utf-8'],
   '/stable-units.js':['stable-units.js','text/javascript; charset=utf-8'],
   '/history-scroll.js':['history-scroll.js','text/javascript; charset=utf-8'],
+  '/speech-bounds.js':['speech-bounds.js','text/javascript; charset=utf-8'],
   '/live-translation.js':['live-translation.js','text/javascript; charset=utf-8'],
   '/api-parameters.js':['api-parameters.js','text/javascript; charset=utf-8'],
   '/sentence-worker.js':['sentence-worker.js','text/javascript; charset=utf-8'],
@@ -47,7 +48,7 @@ export function createSite(root=resolve('apps/web')){
     res.setHeader('Permissions-Policy','microphone=(self)');
     res.setHeader('Cache-Control','no-store');
     // Dynamic user-chosen HTTPS API origins must be allowed; no server proxy.
-    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self' blob:; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405).end();return;}
     let path;
     try{path=new URL(req.url||'/','http://localhost').pathname;}catch{res.writeHead(400).end();return;}

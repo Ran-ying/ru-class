@@ -247,7 +247,9 @@ export async function saveBilingualSentences(recordingId,rows){
     if(row?.recordingId!==recordingId||!Number.isSafeInteger(row.index)||
        row.index<0||typeof row.ru!=='string'||!row.ru.trim()||
        typeof row.zh!=='string'||!row.zh.trim()||
-       !Array.isArray(row.consumedUnitIds)||!row.consumedUnitIds.length)
+       !Array.isArray(row.consumedUnitIds)||!row.consumedUnitIds.length||
+       (row.startSample!==undefined&&!(Number.isSafeInteger(row.startSample)&&
+         Number.isSafeInteger(row.endSample)&&row.startSample>=0&&row.endSample>=row.startSample)))
       throw Error('INVALID_SENTENCE_RECORD');
   }
   const db=await connection();
@@ -288,7 +290,10 @@ export async function saveHypothesis(lessonId,hypothesis){
   const entry={
     lessonId,startSample:hypothesis.startSample,endSample:hypothesis.endSample,
     text:hypothesis.text,final:hypothesis.final===true,
-    inferenceMs:Number.isFinite(hypothesis.inferenceMs)?Math.max(0,hypothesis.inferenceMs):null
+    inferenceMs:Number.isFinite(hypothesis.inferenceMs)?Math.max(0,hypothesis.inferenceMs):null,
+    // v0.6 optional provider segment times (seconds within this window).
+    ...(Array.isArray(hypothesis.segments)?{segments:hypothesis.segments.slice(0,200).map(x=>({
+      start:Number(x.start),end:Number(x.end),text:String(x.text)}))}:{})
   };
   // Store by the audio position, not receipt order. The first provider
   // response is immutable evidence: do not silently overwrite it with a
@@ -314,7 +319,8 @@ export async function lessonHypotheses(lessonId){
   return rows.map(x=>({
     text:x.text,window_start_sample:x.startSample,
     window_end_sample:x.endSample,final:x.final,
-    inference_ms:x.inferenceMs
+    inference_ms:x.inferenceMs,
+    ...(Array.isArray(x.segments)?{segments:x.segments}:{})
   }));
 }
 /**
@@ -469,6 +475,49 @@ export async function recordingWav(lessonId){
     IDBKeyRange.bound([lessonId,0],[lessonId,Number.MAX_SAFE_INTEGER])
   ));
   return recordingWavFromChunks(chunks);
+}
+// capture-worklet.js posts fixed 3200-sample (0.2 s) chunks; only the final
+// flush chunk of a recording may be shorter.
+export const AUDIO_CHUNK_SAMPLES=3200;
+/**
+ * v0.6 sentence playback: a WAV of ONLY [startSample, endSample) of one
+ * recording, read from the chunks covering it, so a 90-minute lesson is never
+ * loaded whole for a 4-second sentence. The range is clipped to the audio
+ * actually stored; a gap or unexpected chunk size is refused, not papered over.
+ */
+export async function recordingRangeWav(lessonId,startSample,endSample){
+  const range=await recordingRangePcm(lessonId,startSample,endSample);
+  return {blob:new Blob([wavHeader(range.pcm.length),range.pcm],{type:'audio/wav'}),
+    startSample:range.startSample,endSample:range.endSample};
+}
+/** The same range as 16-bit PCM samples, for playback refinement. */
+export async function recordingRangePcm(lessonId,startSample,endSample){
+  if(typeof lessonId!=='string'||!lessonId||!Number.isSafeInteger(startSample)||
+     !Number.isSafeInteger(endSample)||startSample<0||endSample<=startSample)throw Error('INVALID_AUDIO_RANGE');
+  const first=Math.floor(startSample/AUDIO_CHUNK_SAMPLES);
+  const last=Math.floor((endSample-1)/AUDIO_CHUNK_SAMPLES);
+  const chunks=await withStore('audio','readonly',s=>s.getAll(
+    IDBKeyRange.bound([lessonId,first],[lessonId,last])));
+  if(!chunks.length||chunks[0].index!==first)throw Error('LOCAL_AUDIO_RANGE_MISSING');
+  chunks.sort((a,b)=>a.index-b.index);
+  for(const [i,chunk] of chunks.entries()){
+    const samples=chunk.data?.byteLength/2;
+    if(chunk.index!==first+i||!(chunk.data instanceof Uint8Array)||
+       (i<chunks.length-1&&samples!==AUDIO_CHUNK_SAMPLES)||samples>AUDIO_CHUNK_SAMPLES)
+      throw Error('LOCAL_AUDIO_GAP_OR_INVALID_CHUNK');
+  }
+  const offset=first*AUDIO_CHUNK_SAMPLES;
+  const available=offset+(chunks.length-1)*AUDIO_CHUNK_SAMPLES+chunks.at(-1).data.byteLength/2;
+  const from=startSample-offset,to=Math.min(endSample,available)-offset;
+  if(to<=from)throw Error('LOCAL_AUDIO_RANGE_MISSING');
+  const pcm=new Uint8Array((to-from)*2);
+  let written=0;
+  for(const [i,chunk] of chunks.entries()){
+    const chunkStart=i*AUDIO_CHUNK_SAMPLES,chunkEnd=chunkStart+chunk.data.byteLength/2;
+    const a=Math.max(from,chunkStart),b=Math.min(to,chunkEnd);
+    if(b>a){pcm.set(chunk.data.subarray((a-chunkStart)*2,(b-chunkStart)*2),written);written+=(b-a)*2;}
+  }
+  return {pcm:new Int16Array(pcm.buffer),startSample:offset+from,endSample:offset+to};
 }
 export async function clearBrowserData(){
   const db=await connection();

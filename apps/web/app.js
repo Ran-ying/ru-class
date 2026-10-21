@@ -3,9 +3,10 @@ import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
 import {LiveTranslationWorker} from './live-translation.js';
 import {captureHistoryScroll,restoreHistoryScroll} from './history-scroll.js';
+import {speechBounds} from './speech-bounds.js';
 import {defaultApiParameters,parseApiParameters,isOfficialDeepSeek} from './api-parameters.js';
 import {restoreTranslationProgress,pendingTranscriptAfterCommits} from './translation-recovery.js';
-import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,saveTextRequestMetric,loadTextRequestMetrics,clearBrowserData} from './local-store.js';
+import {loadProfiles,saveProfile,saveLesson,listLessons,listClassrooms,createClassroom,renameClassroom,listClassroomRecordings,localCalendarDate,saveAudioChunk,recordingWav,recordingRangePcm,wavHeader,saveHypothesis,lessonHypothesesJson,beginEvidenceSession,markEvidenceWriteFailure,finishEvidenceSession,lessonEvidenceStatus,saveBilingualSentences,loadBilingualSentences,saveTextRequestMetric,loadTextRequestMetrics,clearBrowserData} from './local-store.js';
 
 const $=id=>document.getElementById(id);
 const kinds=['speech','image','text'];
@@ -18,7 +19,7 @@ let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 // True once this recording's metadata row exists. A refused microphone must
 // not leave an empty "interrupted" recording in the course history.
 let lessonPersisted=false;
-const CLIENT_VERSION='0.5.1'; // Selected frontend build label, not attested ASR engine metadata.
+const CLIENT_VERSION='0.6.0'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
 let liveWorker=null,liveEnabled=false;
 const translationWorkers=new Map(); // A finished recording may continue draining while another starts.
@@ -113,13 +114,7 @@ async function renderSelectedClassroom({historyOnly=false}={}){
       sentences.className='session-sentences';
       // One paired row per saved sentence: RU and ZH can never drift apart
       // when their line heights differ or a recording contains many sentences.
-      for(const sentence of rows){
-        const pair=document.createElement('div');pair.className='history-sentence-row';
-        pair.dataset.sentenceIndex=String(sentence.index);
-        const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
-        const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
-        pair.append(ru,zh);sentences.append(pair);
-      }
+      for(const sentence of rows)sentences.append(sentenceRow(sentence,session.id));
       article.append(sentences);
       if(Array.isArray(session.stableUnits)&&session.stableUnits.length){
         const last=session.stableUnits.at(-1);
@@ -334,6 +329,82 @@ function initializeLiveTranslation(){
   liveWorker.start(recordingId);
   updateLiveStatus('等待俄语…');
 }
+// v0.6: a history row whose sentence has an audio range plays exactly that
+// range of its own recording (plus 0.25 s padding) when clicked.
+const clock=samples=>{
+  const t=Math.max(0,Math.floor(samples/16000));
+  return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+};
+function sentenceRow(sentence,recordingId){
+  const pair=document.createElement('div');
+  pair.className='history-sentence-row';
+  const index=String(sentence.index);
+  pair.dataset.sentenceIndex=index;
+  const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
+  const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
+  pair.append(ru,zh);
+  if(Number.isSafeInteger(sentence.startSample)&&Number.isSafeInteger(sentence.endSample)){
+    pair.classList.add('is-playable');
+    pair.dataset.startSample=String(sentence.startSample);
+    pair.dataset.endSample=String(sentence.endSample);
+    pair.tabIndex=0;pair.setAttribute('role','button');
+    pair.title='播放这句录音（'+clock(sentence.startSample)+'–'+clock(sentence.endSample)+'）';
+    const time=document.createElement('time');
+    time.className='sentence-time';time.textContent=clock(sentence.startSample);
+    ru.prepend(time);
+    pair.onclick=()=>void playSentence(recordingId,sentence,pair);
+    pair.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pair.click();}};
+  }
+  return pair;
+}
+// Load 1.5 s of context on each side to estimate the room's noise floor, trim
+// the Whisper estimate to actual speech, then pad the result slightly.
+const PLAYBACK_CONTEXT_SAMPLES=24000,PLAYBACK_LEAD_SAMPLES=2400,PLAYBACK_TAIL_SAMPLES=3200;
+let sentencePlayback=null,sentencePlaybackRevision=0;
+function stopSentencePlayback(){
+  sentencePlaybackRevision++;
+  const current=sentencePlayback;sentencePlayback=null;
+  if(!current)return;
+  current.audio.pause();current.audio.removeAttribute('src');current.audio.load();
+  URL.revokeObjectURL(current.url);
+  current.row.classList.remove('is-playing');
+}
+async function playSentence(recordingId,sentence,row){
+  const toggledOff=sentencePlayback?.row===row;
+  stopSentencePlayback();
+  if(toggledOff)return;
+  if(running||starting||stopping){
+    // Never play earlier audio while the microphone is recording.
+    $('translation-status').textContent='录音进行中不能回放，以免声音被麦克风录入。';
+    return;
+  }
+  releasePlayback();
+  const revision=sentencePlaybackRevision;
+  row.classList.add('is-loading');
+  try{
+    const context=await recordingRangePcm(recordingId,
+      Math.max(0,sentence.startSample-PLAYBACK_CONTEXT_SAMPLES),sentence.endSample+PLAYBACK_CONTEXT_SAMPLES);
+    if(revision!==sentencePlaybackRevision)return;
+    const base=context.startSample;
+    const neighbour=(node,key)=>node?.classList.contains('is-playable')?Number(node.dataset[key])-base:undefined;
+    const bounds=speechBounds(context.pcm,sentence.startSample-base,sentence.endSample-base,{
+      prevEnd:neighbour(row.previousElementSibling,'endSample'),
+      nextStart:neighbour(row.nextElementSibling,'startSample')});
+    const from=Math.max(0,bounds.from-PLAYBACK_LEAD_SAMPLES);
+    const to=Math.min(context.pcm.length,bounds.to+PLAYBACK_TAIL_SAMPLES);
+    const clip=context.pcm.subarray(from,to);
+    const url=URL.createObjectURL(new Blob([wavHeader(clip.length),clip],{type:'audio/wav'}));
+    const audio=new Audio(url);
+    sentencePlayback={audio,url,row};
+    row.classList.add('is-playing');
+    audio.onended=()=>{if(sentencePlayback?.audio===audio)stopSentencePlayback();};
+    await audio.play();
+  }catch(e){
+    if(revision!==sentencePlaybackRevision)return;
+    stopSentencePlayback();
+    $('translation-status').textContent='无法播放这句录音：'+errorMessage(e);
+  }finally{row.classList.remove('is-loading');}
+}
 // onCommit is called ONLY after the full source prefix and paired RU/ZH
 // sentences have been durably saved. Paint those rows immediately: waiting
 // for a fresh read of every prior recording can make several sentences appear
@@ -361,11 +432,7 @@ function appendSavedSentenceRows(rows,recordingId){
   for(const sentence of rows){
     const index=String(sentence.index);
     if(existing.has(index))continue;
-    const pair=document.createElement('div');
-    pair.className='history-sentence-row';pair.dataset.sentenceIndex=index;
-    const ru=document.createElement('p');ru.lang='ru';ru.textContent=sentence.ru;
-    const zh=document.createElement('p');zh.lang='zh-CN';zh.textContent=sentence.zh;
-    pair.append(ru,zh);list.append(pair);existing.add(index);
+    list.append(sentenceRow(sentence,recordingId));existing.add(index);
   }
   $('history-empty').hidden=true;
   restoreHistoryScroll(pane,scroll);
@@ -882,6 +949,7 @@ for(const kind of kinds){
 }
 function releasePlayback(){
   playbackRevision++;
+  if(sentencePlayback)stopSentencePlayback();
   const player=$('local-player');
   if(player){
     player.pause();

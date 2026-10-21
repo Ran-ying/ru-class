@@ -5,6 +5,7 @@
  */
 import {TranscriptBuffer} from './transcript.js';
 import {StableUnitJournal,RATE} from './stable-units.js';
+import {captionProjectionText,captionProjectionSegments} from './asr-hallucination.js';
 
 export function auditStableSourceExport(input){
   const windows=input?.windows;
@@ -36,7 +37,9 @@ export function auditStableSourceExport(input){
     previousEnd=end;
     if(row.final===true)finalCount++;
     if(finalCount>1)throw Error('MULTIPLE_FINAL_SOURCE_WINDOWS');
-    const update=transcript.update(row.text,start,end,row.final===true);
+    // Same caption input as the browser: credit filter and v0.6 segments.
+    const update=transcript.update(captionProjectionText(row.text),start,end,row.final===true,
+      captionProjectionSegments(row.segments));
     if(journal)journal.add({
       ...update,window_start_sample:start,window_end_sample:end,final:row.final===true
     });
@@ -67,8 +70,8 @@ export function auditStableSourceExport(input){
     if(have.sourceWindowStartSample!==want.sourceWindowStartSample||
        have.confirmedWindowEndSample!==want.confirmedWindowEndSample||
        !sourceWindowEnds.has(have.confirmedWindowEndSample)||
-       have.state!=='stable'||have.speechStartSample!==null||
-       have.speechEndSample!==null)provenanceMismatches++;
+       have.state!=='stable'||have.speechStartSample!==want.speechStartSample||
+       have.speechEndSample!==want.speechEndSample)provenanceMismatches++;
     if(have.timeBasis!=='estimated_capture_epoch_plus_confirmation_window_end'||
        !Number.isFinite(have.estimatedConfirmationWallTimeMs)){
       estimatedClockMismatches++;

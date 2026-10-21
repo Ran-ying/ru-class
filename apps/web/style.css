@@ -366,3 +366,18 @@ main>.transcription{border-left:1px solid #d9e2d9}
 .history::-webkit-scrollbar,#settings .settings-body::-webkit-scrollbar{width:8px}
 .history::-webkit-scrollbar-thumb,#settings .settings-body::-webkit-scrollbar-thumb{background:#c9d2c6;border-radius:8px;border:2px solid transparent;background-clip:padding-box}
 .history::-webkit-scrollbar-track,#settings .settings-body::-webkit-scrollbar-track{background:transparent}
+/* v0.6 sentence playback: the whole row is the control; the start time is a
+   quiet label that turns into a play mark on hover/focus. */
+.history-sentence-row.is-playable{cursor:pointer;transition:background-color .15s}
+.history-sentence-row.is-playable:hover{background:#eef3ec}
+.history-sentence-row.is-playable:focus-visible{outline:2px solid #2f5d4f;outline-offset:-2px}
+.history-sentence-row.is-loading{cursor:progress}
+.history-sentence-row.is-playing{background:#e3ece2;box-shadow:inset 3px 0 0 #2f5d4f}
+.sentence-time{display:inline-block;min-width:3.4em;margin-right:8px;font-size:11px;line-height:1;
+  color:#8a998d;font-variant-numeric:tabular-nums;letter-spacing:.02em;vertical-align:1px}
+.history-sentence-row.is-playable:hover .sentence-time,
+.history-sentence-row.is-playable:focus-visible .sentence-time{color:#2f5d4f}
+.history-sentence-row.is-playable:hover .sentence-time::before,
+.history-sentence-row.is-playable:focus-visible .sentence-time::before{content:'▶ ';font-size:9px}
+.history-sentence-row.is-playing .sentence-time{color:#2f5d4f}
+.history-sentence-row.is-playing .sentence-time::before{content:'❚❚ ';font-size:8px}
