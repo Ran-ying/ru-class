@@ -532,3 +532,20 @@ same way. During capture the growing lesson row is saved at most every 5 s
 save), and post-commit history reconciliation is coalesced to one read per 2 s;
 committed rows are still painted immediately. Server-side Silero VAD in
 `ru-class-asr` (`whisper.vad.enabled`) is the primary fix for silence.
+
+
+## Punctuation-only token keys in TranscriptBuffer (2026-10-21)
+
+`words()` used to give a punctuation-only token (Russian dash `-`/`–`, `…`) an
+empty key, and `equal()` treats empty keys as unequal, so a stable dash never
+equalled ITSELF. After the first stable dash every `commonPrefix(stable,
+candidate)` gate failed and the rest of the session ran on the unanchored path,
+appending overlapping windows twice (`какие алгоритмы вы уже Вопрос к
+студентам, какие алгоритмы вы уже знаете?`). Such tokens now key on their
+normalized punctuation (dash variants unified); letter/number keys unchanged.
+Evidence: synthetic Milena TTS lesson on the M4 (`tests/fixtures/
+v05-synthetic-dash-windows.json`), duplicated with and without VAD before,
+clean after, plus a physical-Chrome fake-microphone run. This IS a reducer
+change: before merge, replay the owner's private C1/C2/44-window exports
+offline and record the changed-window analysis; synthetic speech is not
+classroom accuracy evidence.

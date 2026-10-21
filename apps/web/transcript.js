@@ -9,10 +9,16 @@
  */
 
 function words(text) {
-  return text.trim().split(/\s+/u).filter(Boolean).map(display => ({
-    display,
-    key: display.normalize('NFKC').toLocaleLowerCase('ru-RU').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-  }));
+  return text.trim().split(/\s+/u).filter(Boolean).map(display => {
+    const normalized = display.normalize('NFKC');
+    const lexical = normalized.toLocaleLowerCase('ru-RU').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    // A punctuation-only token (Russian dash "-"/"–"/"—", "…") used to get an
+    // empty key and never equal even itself. One stable dash then broke every
+    // later stable-prefix check, so the rest of the session fell back to the
+    // unanchored path and appended overlapping windows twice. Compare such
+    // tokens by their punctuation instead; dash variants are one token.
+    return {display, key: lexical || '\u0000' + normalized.replace(/[‐-―−]/gu, '-')};
+  });
 }
 function equal(a, b) { return !!a.key && a.key === b.key; }
 function joined(tokens) { return tokens.map(w => w.display).join(' '); }
