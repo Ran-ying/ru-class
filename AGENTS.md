@@ -526,3 +526,9 @@ and a test proving ordinary speech using the same words passes unchanged.
 A refused microphone no longer saves an empty `interrupted` recording; a
 failed Stop releases the microphone, closes its unfinalizable sentence worker,
 and marks the recording `interrupted` unless `completed` was already saved.
+Whole-segment sound annotations (`[звук …]`, `(музыка)`, `♪`) are filtered the
+same way. During capture the growing lesson row is saved at most every 5 s
+(final Stop/failure outcomes save immediately and cancel the pending periodic
+save), and post-commit history reconciliation is coalesced to one read per 2 s;
+committed rows are still painted immediately. Server-side Silero VAD in
+`ru-class-asr` (`whisper.vad.enabled`) is the primary fix for silence.

@@ -12,6 +12,10 @@ test('whole Whisper subtitle-credit segments are not caption speech',()=>{
   assert.equal(captionProjectionText(SILENCE).trim(),'');
   assert.equal(captionProjectionText('Субтитры сделал DimaTorzok').trim(),'');
   assert.equal(captionProjectionText('Продолжение следует...').trim(),'');
+  assert.equal(captionProjectionText(' [звук систии]\n').trim(),'');
+  assert.equal(captionProjectionText('(музыка)').trim(),'');
+  assert.equal(captionProjectionText('♪ ♪').trim(),'');
+  assert.equal(captionProjectionText('Пример (см. выше) важен.'),'Пример (см. выше) важен.');
   assert.equal(captionProjectionText('Мы изучаем методы защиты.\n Редактор субтитров А.Синецкая'),
     'Мы изучаем методы защиты.');
 });

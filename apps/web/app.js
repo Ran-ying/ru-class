@@ -360,6 +360,10 @@ function appendSavedSentenceRows(rows,recordingId){
   $('history-empty').hidden=true;
   restoreHistoryScroll(pane,scroll);
 }
+// Reconciliation re-reads every recording and sentence of the classroom. The
+// rows are already painted, so coalesce reads instead of one per sentence.
+const HISTORY_SYNC_DELAY_MS=2000;
+let historySyncTimer=null;
 function showBilingualSentenceRows(rows,recordingId,classroomId){
   if(!activeClassroom||activeClassroom.id!==classroomId)return;
   if(recordingId===lessonId)renderCaption();
@@ -367,7 +371,9 @@ function showBilingualSentenceRows(rows,recordingId,classroomId){
   $('translation-status').textContent='正式双语句子已保存。';
   // Canonical storage refresh remains authoritative; it sorts older
   // recordings and reconciles any async reads without duplicating rows.
-  void renderSelectedClassroom({historyOnly:true});
+  if(historySyncTimer===null)historySyncTimer=setTimeout(()=>{
+    historySyncTimer=null;void renderSelectedClassroom({historyOnly:true});
+  },HISTORY_SYNC_DELAY_MS);
 }
 // Usage records are local and intentionally omit prompts, answers, URLs and keys.
 let metricViewRevision=0;
@@ -471,7 +477,7 @@ function showTranscript(update){
   const point=marks.find(m=>m.end>=update.window_end_sample);
   const lag=point?Math.max(0,performance.now()-point.time).toFixed(0)+' ms':'—';
   $('latency').textContent='识别窗 '+(update.window_start_sample/16000).toFixed(1)+'–'+(update.window_end_sample/16000).toFixed(1)+' s（非逐词时间） · 推理 '+update.inference_ms.toFixed(0)+' ms · 音频末端至显示 '+lag;
-  if(lessonId&&lessonPersisted)void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
+  scheduleRecordingSave();
 }
 function archiveRawHypothesis(entry){
   if(!lessonId)return Promise.resolve();
@@ -498,7 +504,27 @@ async function cleanupMicrophone(){
   if(context&&context.state!=='closed')await context.close().catch(()=>{});
   stream=null;capture=null;source=null;context=null;
 }
+// The lesson row carries the whole transcript and every stable unit, so it grows
+// all class long. Rewriting it on each ~1 s ASR window costs O(n) per window;
+// save the in-progress row at most every 5 s. Stop/failure saves immediately.
+const RECORDING_SAVE_INTERVAL_MS=5000;
+let recordingSaveTimer=null;
+function cancelRecordingSave(){
+  if(recordingSaveTimer!==null)clearTimeout(recordingSaveTimer);
+  recordingSaveTimer=null;
+}
+function scheduleRecordingSave(){
+  if(!lessonId||!lessonPersisted||recordingSaveTimer!==null)return;
+  const id=lessonId;
+  recordingSaveTimer=setTimeout(()=>{
+    recordingSaveTimer=null;
+    if(id!==lessonId||!lessonPersisted)return;
+    void finishLesson('recording').catch(e=>{$('error').textContent='课堂文本本地保存失败：'+errorMessage(e);});
+  },RECORDING_SAVE_INTERVAL_MS);
+}
 function finishLesson(outcome){
+  // A queued periodic "recording" save must never land after the final outcome.
+  if(outcome!=='recording')cancelRecordingSave();
   // Snapshot at the time of scheduling, never after a later async callback.
   const record={id:lessonId,title:activeClassroom.title,lessonDate:activeClassroom.date,
     classroomId:activeClassroom.id,classroomKey:activeClassroom.key,
@@ -513,6 +539,7 @@ function finishLesson(outcome){
 async function onFailure(e){
   const message=errorMessage(e);
   if(!running&&!stopping&&!context){starting=false;$('error').textContent=message;buttons();return;}
+  cancelRecordingSave();
   asr?.cancel();
   closeLiveTranslation();
   if(sentenceWorker){
@@ -556,7 +583,7 @@ async function start(){
   starting=true;classroomRevision++;buttons();
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
-  evidenceReceived=0;evidenceFailed=0;evidenceActive=false;lessonPersisted=false;
+  evidenceReceived=0;evidenceFailed=0;evidenceActive=false;lessonPersisted=false;cancelRecordingSave();
   stable='';draft='';hasTranscript=false;
   closeLiveTranslation();
   sourceJournal=new StableUnitJournal({classroomId:activeClassroom.id,

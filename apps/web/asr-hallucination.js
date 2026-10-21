@@ -13,7 +13,12 @@ const CREDIT_SEGMENTS=[
   /^субтитры\s+(сделал|создавал|подготовил|делал)(а|и)?(\s|$)/iu,
   /^субтитры\s+(от|by)\s/iu,
   /dimatorzok/iu,
-  /^продолжение\s+следует[.…!]*$/iu
+  /^продолжение\s+следует[.…!]*$/iu,
+  // Whole-segment sound annotations, e.g. "[звук систии]" returned for 8 s of
+  // low noise on the same endpoint. Spoken words are never fully bracketed.
+  /^\[[^\]]*\]$/u,
+  /^\([^)]*\)$/u,
+  /^[♪♫*\s]+$/u
 ];
 export function isCreditSegment(segment){
   const text=segment.trim();
