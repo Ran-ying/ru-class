@@ -20,7 +20,7 @@ let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 // not leave an empty "interrupted" recording in the course history.
 let lessonPersisted=false;
 let asrNotice=''; // current ASR reconnect warning, cleared on recovery
-const CLIENT_VERSION='0.6.2'; // Selected frontend build label, not attested ASR engine metadata.
+const CLIENT_VERSION='0.6.3'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
 let liveWorker=null,liveEnabled=false;
 const translationWorkers=new Map(); // A finished recording may continue draining while another starts.
@@ -575,8 +575,40 @@ function archiveRawHypothesis(entry){
     });
   return evidenceWrites;
 }
+// A laptop left alone during a lecture must not sleep (that ends capture).
+let wakeLock=null;
+async function holdWakeLock(){
+  if(!running||document.visibilityState!=='visible'||wakeLock)return;
+  try{
+    wakeLock=await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release',()=>{wakeLock=null;});
+  }catch{/* Unsupported or refused: recording works, the OS may sleep. */}
+}
+// Lessons are stored in IndexedDB, which is best-effort by default: under disk
+// pressure the browser may evict the whole site. Ask once for persistence.
+// Both are set up on the first recording, not at page load.
+let lessonGuardsReady=false;
+// 16 kHz Int16 audio is ~1.9 MB/min, ~175 MB for a 90-minute lesson. Warn up
+// front instead of failing mid-lesson when IndexedDB hits its quota.
+const LOW_STORAGE_BYTES=300e6;
+async function warnIfStorageLow(){
+  try{
+    const {quota,usage}=await navigator.storage.estimate();
+    const free=quota-usage;
+    if(running&&Number.isFinite(free)&&free<LOW_STORAGE_BYTES&&!$('error').textContent)
+      $('error').textContent='浏览器可用存储只剩约 '+Math.max(0,Math.round(free/1e6))+
+        ' MB（90 分钟录音约需 175 MB），可能录不完整节课；请清理磁盘或删除旧录音。';
+  }catch{/* estimate unsupported: nothing to warn about */}
+}
+function prepareLessonGuards(){
+  if(lessonGuardsReady)return;lessonGuardsReady=true;
+  navigator.storage?.persist?.().catch(()=>{});
+  // The lock is dropped while the tab is hidden; take it again on return.
+  document.addEventListener('visibilitychange',()=>void holdWakeLock());
+}
 async function cleanupMicrophone(){
   running=false;
+  wakeLock?.release().catch(()=>{});wakeLock=null;
   stream?.getTracks().forEach(t=>t.stop());
   capture?.disconnect();source?.disconnect();
   if(context&&context.state!=='closed')await context.close().catch(()=>{});
@@ -659,6 +691,7 @@ async function start(){
     return;
   }
   starting=true;classroomRevision++;buttons();
+  prepareLessonGuards();
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
   evidenceReceived=0;evidenceFailed=0;evidenceActive=false;lessonPersisted=false;cancelRecordingSave();
@@ -718,8 +751,19 @@ async function start(){
     const track=stream.getAudioTracks()[0];
     if(!track||track.readyState!=='live')throw Error('麦克风不可用');
     track.onended=()=>{if(running&&!stopping)void onFailure(Error('麦克风已中断'));};
-    track.onmute=()=>{if(running&&!stopping)void onFailure(Error('麦克风已暂停'));};
-    context.onstatechange=()=>{if(running&&!stopping&&context?.state==='suspended')void onFailure(Error('浏览器暂停了录音，请保持页面处于前台'));};
+    // mute is often temporary (device switch, another app briefly taking the
+    // mic); the track keeps delivering silence. Warn instead of ending class.
+    const muteNotice='麦克风被系统暂停，这段时间录到的是静音；恢复后自动继续。';
+    track.onmute=()=>{if(running&&!stopping)$('error').textContent=muteNotice;};
+    track.onunmute=()=>{if($('error').textContent===muteNotice)$('error').textContent='';};
+    context.onstatechange=()=>{
+      if(!running||stopping||context?.state!=='suspended')return;
+      const ctx=context;
+      ctx.resume().then(()=>{if(ctx.state!=='running')throw Error();})
+        .catch(()=>{if(running&&!stopping&&context===ctx)void onFailure(Error('浏览器暂停了录音，请保持页面处于前台'));});
+    };
+    void holdWakeLock();
+    void warnIfStorageLow();
   }catch(e){await onFailure(e);}
 }
 async function stop(){

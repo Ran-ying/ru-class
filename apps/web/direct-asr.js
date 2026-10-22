@@ -152,7 +152,7 @@ export class BrowserAsrSession {
     // HTTP 400 is retried once as plain json and stays on json afterwards.
     this.verbose=true;
     this.onRetry=onRetry;this.onRecover=onRecover;
-    this.failures=0;this.retryAt=0;this.succeeded=false;
+    this.failures=0;this.retryAt=0;this.succeeded=false;this.lastRunAt=0;
   }
   push(samples){
     if(!this.active)return;
@@ -160,9 +160,18 @@ export class BrowserAsrSession {
     // Trigger first inference after ~2 seconds; thereafter at most once/second.
     if(this.ring.end>=2*RATE && !this.startAt){
       this.startAt=performance.now();
-      void this.run(false).catch(e=>this.fail(e));
-      this.timer=setInterval(()=>void this.run(false).catch(e=>this.fail(e)),1000);
+      this.tick();
+      this.timer=setInterval(()=>this.tick(),1000);
+    }else if(this.startAt&&performance.now()-this.lastRunAt>=1000){
+      // Audio arrives every 0.2 s even in a background tab, where Chrome may
+      // throttle setInterval to once a minute; drive inference from it too.
+      this.tick();
     }
+  }
+  tick(){
+    if(this.inFlight)return;
+    this.lastRunAt=performance.now();
+    void this.run(false).catch(e=>this.fail(e));
   }
   async transcribe(snapshot){
     const {model,extraParams}=this.profile;
