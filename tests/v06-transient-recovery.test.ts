@@ -111,3 +111,19 @@ test('mid-lesson retry reasons are short',()=>{
   assert.equal(asrFailureReason('API 请求超时'),'请求超时');
   assert.equal(asrFailureReason('无法直接连接此 API。可能不支持 CORS'),'网络连接失败');
 });
+test('incoming audio drives inference even if the interval timer is throttled (background tab)',async()=>{
+  let calls=0;
+  const restore=withFetch(()=>{calls++;return ok('Да.');});
+  const session=new BrowserAsrSession(profile,()=>{},()=>{});
+  try{
+    session.push(new Float32Array(2*R));          // first window starts
+    await session.inFlight;
+    clearInterval(session.timer);                 // simulate a frozen setInterval
+    session.push(new Float32Array(3200));         // < 1 s since last run: no request
+    assert.equal(calls,1);
+    session.lastRunAt=performance.now()-1100;
+    session.push(new Float32Array(3200));         // audio chunk triggers the next run
+    await session.inFlight;
+    assert.equal(calls,2);
+  }finally{session.cancel();restore();}
+});

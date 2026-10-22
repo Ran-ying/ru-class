@@ -612,3 +612,19 @@ signature stalled history until Stop). The post-Stop drain stays bounded to
 3 failures -> paused / `LLM_RETRY_EXHAUSTED`.
 Verified in Chrome with a fault proxy (ASR 502 30 s, connection drop 30 s,
 DeepSeek 503 70 s, ASR down during Stop): no interruption, recovery < 5 s.
+
+
+## v0.6.3 long-lesson hardening (2026-10-22)
+
+Screen Wake Lock while recording (re-taken on visibilitychange); one
+`navigator.storage.persist()` request and a <300 MB free-storage warning on
+the first recording (set up lazily, not at module load). `track.onmute` now
+warns instead of ending the lesson (`onended` still fails); a suspended
+AudioContext is resumed before failing. `BrowserAsrSession.push` also
+triggers `tick()` when >=1 s since the last run, so inference does not depend
+on setInterval (throttled in background tabs). Hidden-tab behaviour could not
+be reproduced on this host's WM-less Xvfb; covered by a unit test only.
+17.5-min real-lesson soak on v0.6.2: 0 ASR/LLM failures, ASR P90 0.9-1.9 s
+with no drift, JS heap 7-11 MB, 283 history rows, buffer median 42 chars.
+Translation recovery for `interrupted` sessions is still refused (owner
+contract in the v0.4 recovery section); not changed.
