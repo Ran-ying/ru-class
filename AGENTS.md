@@ -576,3 +576,18 @@ unchanged; `stable-source-audit.js` must keep replaying the same caption input
 (credit filter + segments) as the browser. Evaluation is synthetic TTS on the
 M4, not classroom acceptance; manual time adjustment, forced alignment and
 per-sentence export remain out of scope.
+
+
+## v0.6.1 live history stall on real classroom audio (2026-10-22)
+
+With real (noisy) lesson audio DeepSeek answered `consumed_units 0` to every
+live probe, so no sentence reached history until Stop. The prompt now says
+garbled words are not a reason to wait, asks the model to actively correct ASR
+errors from context (never adding content), and treats a fragment ending in
+. ? ! as a normal boundary. Backstop: `overdueBatch` — once the oldest pending
+confirmed unit is `FLUSH_AGE_SAMPLES` (15 s) behind the ASR clock, send a
+punctuation-bounded prefix (or only the overdue units if none is punctuated)
+with `flush:true`, which the model must consume. A flush may run without new
+text, but its signature (ids|final|flush) is still never re-billed after an
+empty reply. Validation, save-before-ACK and raw evidence are unchanged.
+Measured on a 2-minute real lesson clip: 0 live history rows before, 41 after.
