@@ -66,19 +66,29 @@ export function splitLiveRussian(text,maxChars=LIVE_CHUNK_CHARS){
       continue;
     }
     current=current?current+' '+word:word;
-    if(current.length>=150&&/[.!?。！？]["'»”）)\]]*$/u.test(word))flush();
+    // One chunk per sentence: a finished sentence keeps its cached ZH while
+    // the next one is spoken, and dropping committed sentences from the front
+    // (they move to history) does not re-partition, so nothing re-translates.
+    if(/[.!?。！？…]["'»”）)\]]*$/u.test(word))flush();
   }
   flush();
   return chunks;
 }
 
+const SHOWN_LIMIT=64;
+// A sentence being spoken keeps its first words while it grows or its ending
+// is re-decoded; those words identify "the same sentence" across updates.
+export function openingKey(chunk){
+  return String(chunk).toLocaleLowerCase('ru-RU').split(/\s+/u)
+    .map(w=>w.replace(/[^\p{L}\p{N}]/gu,'')).filter(Boolean).slice(0,2).join(' ');
+}
 export class LiveTranslationWorker{
   constructor({profile,request=requestLocalTranslation,onUpdate=()=>{},
     onState=()=>{},coalesceMs=LIVE_COALESCE_MS,intervalMs=LIVE_MIN_INTERVAL_MS}){
     Object.assign(this,{profile,request,onUpdate,onState,coalesceMs,intervalMs});
     this.recordingId='';this.source='';this.revision=0;
     this.closed=false;this.timer=null;this.inFlight=false;this.controller=null;
-    this.lastStarted=0;this.suspended=false;this.cache=new Map();
+    this.lastStarted=0;this.suspended=false;this.cache=new Map();this.shown=new Map();
   }
   start(recordingId){
     if(this.closed||!recordingId)throw Error('INVALID_LIVE_RECORDING');
@@ -93,7 +103,7 @@ export class LiveTranslationWorker{
     this.source=text;this.revision++;
     this.emitCached(this.revision);
     if(!text.trim()){
-      this.suspended=false;this.cache.clear();
+      this.suspended=false;this.cache.clear();this.shown.clear();
       this.clearTimer();this.onState('waiting');return;
     }
     if(this.suspended){this.onState('TRANSLATION_HTTP_404');return;}
@@ -108,12 +118,32 @@ export class LiveTranslationWorker{
     }
     return {translated,covered:translated.length,total:chunks.length};
   }
+  // Per-chunk view for display. A chunk with an exact cached result is
+  // 'ready'. A chunk still being spoken shows the last DISPLAYED translation of
+  // a chunk with the same opening words as 'stale' (labelled "updating" by
+  // the page) until its own result arrives, so the Chinese neither blanks nor
+  // flickers every second. Discarded obsolete responses never get here.
+  parts(chunks=this.chunks()){
+    return chunks.map(chunk=>{
+      if(this.cache.has(chunk))return {text:this.cache.get(chunk),state:'ready'};
+      const previous=this.shown.get(openingKey(chunk));
+      return previous?{text:previous,state:'stale'}:null;
+    }).filter(Boolean);
+  }
   emitCached(revision=this.revision,elapsedMs,error){
     if(this.closed)return;
-    const {translated,covered,total}=this.cachedPrefix();
+    const chunks=this.chunks();
+    const {translated,covered,total}=this.cachedPrefix(chunks);
+    const parts=this.parts(chunks);
+    for(const chunk of chunks)if(this.cache.has(chunk))this.rememberShown(chunk,this.cache.get(chunk));
     this.onUpdate({recordingId:this.recordingId,revision,
-      translation:translated.join('\n'),pending:covered<total,
+      translation:translated.join('\n'),parts,pending:covered<total,
       coveredChunks:covered,totalChunks:total,elapsedMs,error});
+  }
+  rememberShown(chunk,translation){
+    const key=openingKey(chunk);
+    this.shown.delete(key);this.shown.set(key,translation);
+    while(this.shown.size>SHOWN_LIMIT)this.shown.delete(this.shown.keys().next().value);
   }
   remember(chunk,translation){
     this.cache.delete(chunk);this.cache.set(chunk,translation);
@@ -154,10 +184,15 @@ export class LiveTranslationWorker{
           if(typeof translation!=='string'||!translation.trim()||translation.length>4000)
             throw Error('TRANSLATION_INVALID_RESPONSE');
           elapsedMs=Math.round(performance.now()-this.lastStarted);
-          // Never cache an obsolete ASR hypothesis: A→B→A must not
-          // silently resurrect the first A response.
-          if(this.closed||controller.signal.aborted||this.revision!==revision)break;
-          this.remember(chunk,translation.trim());
+          if(this.closed||controller.signal.aborted)break;
+          // The RU buffer changes every ASR step (~1.5 s) and a translation
+          // takes about as long, so requiring an unchanged revision discarded
+          // nearly every result. A result is the translation of exactly this
+          // chunk text: keep it whenever that text is still in the buffer;
+          // only a chunk that is no longer there is dropped.
+          const current=this.revision===revision?chunks:this.chunks();
+          if(current.includes(chunk))this.remember(chunk,translation.trim());
+          if(this.revision!==revision){this.emitCached(this.revision,elapsedMs);break;}
         }
         if(this.closed||controller.signal.aborted||this.revision!==revision)break;
         this.emitCached(revision,elapsedMs);
@@ -181,6 +216,6 @@ export class LiveTranslationWorker{
   }
   close(){
     this.closed=true;this.revision++;this.clearTimer();this.controller?.abort();
-    this.controller=null;this.cache.clear();
+    this.controller=null;this.cache.clear();this.shown.clear();
   }
 }

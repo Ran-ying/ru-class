@@ -381,3 +381,11 @@ main>.transcription{border-left:1px solid #d9e2d9}
 .history-sentence-row.is-playable:focus-visible .sentence-time::before{content:'▶ ';font-size:9px}
 .history-sentence-row.is-playing .sentence-time{color:#2f5d4f}
 .history-sentence-row.is-playing .sentence-time::before{content:'❚❚ ';font-size:8px}
+/* A sentence still being spoken keeps its previous translation, marked as
+   updating, instead of disappearing until the new one arrives. */
+.live .zh #live-zh .is-updating{color:#6f8a7c}
+.live .zh #live-zh .is-updating::after{content:' …';color:#9aab9f}
+/* Fixed three-line ZH box: as sentences move to history the box no longer
+   shrinks and grows, so the RU/ZH divider stops jumping. */
+.live .zh #live-zh{height:min(4.8em,14dvh);min-height:0;max-height:none}
+.live .zh #live-zh .is-waiting{color:#9aab9f}

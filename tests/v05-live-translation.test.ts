@@ -138,25 +138,42 @@ test('the same Russian utterance may be spoken again after the buffer empties',a
   w.close();
   assert.equal(requests,2,'a new utterance must not be hidden by last request deduplication');
 });
-test('A→B→A reversion needs a fresh result even when text matches the old rejected request',async()=>{
+test('a result for RU that left the buffer is dropped, never shown or cached',async()=>{
+  let release:(text:string)=>void=()=>{};
+  const first=new Promise<string>(resolve=>release=resolve);
+  const seen:any[]=[];
+  const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
+    request:async()=>first,onUpdate:(x:any)=>seen.push(x)});
+  worker.start('gone');
+  worker.update('Исходная мысль','gone');
+  const old=worker.tick();
+  worker.update('Совсем другая мысль','gone');
+  release('应丢弃的旧译文');
+  await old;
+  assert.ok(!seen.some(x=>x.translation==='应丢弃的旧译文'||x.parts?.some((p:any)=>p.text==='应丢弃的旧译文')));
+  assert.equal(worker.cache.has('Исходная мысль'),false);
+  worker.close();
+});
+// v0.6.4: the buffer changes every ~1.5 s and a translation takes about as
+// long; dropping every result whose request outlived a revision left the ZH
+// line empty most of the time. Same text => same translation, so keep it.
+test('A→B→A: a result whose exact RU text is back in the buffer is used without a new request',async()=>{
   let release:(text:string)=>void=()=>{};
   const first=new Promise<string>(resolve=>release=resolve);
   let requests=0;
   const seen:any[]=[];
   const worker=new LiveTranslationWorker({profile,coalesceMs:100000,intervalMs:0,
-    request:async()=>++requests===1?first:'新版本对应的中文',
-    onUpdate:(x:any)=>seen.push(x)});
+    request:async()=>{requests++;return first;},onUpdate:(x:any)=>seen.push(x)});
   worker.start('revert');
   worker.update('Исходная мысль','revert');
   const old=worker.tick();
   worker.update('Измененная мысль','revert');
   worker.update('Исходная мысль','revert');
-  release('应丢弃的旧译文');
+  release('原来的想法');
   await old;
-  assert.ok(!seen.some(x=>x.translation==='应丢弃的旧译文'));
+  assert.equal(seen.at(-1).translation,'原来的想法');
   await worker.tick();
-  assert.equal(requests,2,'same RU text in a newer revision must be requested again');
-  assert.equal(seen.at(-1).translation,'新版本对应的中文');
+  assert.equal(requests,1);
   worker.close();
 });
 test('failed current translation clears an old provisional caption, not the Russian source',async()=>{
@@ -185,7 +202,7 @@ test('UI projects only uncommitted RU and never writes provisional ZH into histo
   const module=readFileSync('apps/web/live-translation.js','utf8');
   assert.match(html,/id="live-translation-enable"/);
   assert.match(html,/id="live-zh"/);
-  assert.match(js,/liveWorker\.update\(\[pending,draft\]\.filter\(Boolean\)\.join\(' '\),lessonId\)/);
+  assert.match(js,/liveWorker\.update\(\[pending,shownDraft\]\.filter\(Boolean\)\.join\(' '\),lessonId\)/);
   assert.match(js,/new LiveTranslationWorker\(/);
   assert.match(served,/\/live-translation\.js/);
   assert.doesNotMatch(module,/saveBilingualSentences|saveLesson|indexedDB|localStorage/);
@@ -197,7 +214,7 @@ test('full-buffer ZH is not dimmed by pending class or styled in low-contrast gr
   assert.match(css,/#live-zh\{color:#172d23;opacity:1;/);
   assert.doesNotMatch(css,/is-pending\{opacity:\.5/);
   assert.doesNotMatch(app,/classList\.add\('is-pending'\)/);
-  assert.match(app,/liveWorker\.update\(\[pending,draft\]/);
+  assert.match(app,/liveWorker\.update\(\[pending,shownDraft\]/);
 });
 
 test('durably committed history is painted promptly without showing a temporary draft as formal RU',()=>{

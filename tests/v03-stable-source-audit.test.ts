@@ -106,7 +106,7 @@ test('switching classrooms clears stale live subtitles before async IndexedDB fi
   const fetch=code.indexOf('const sessions=await listClassroomRecordings(key);',start);
   const clear=code.indexOf("if(selectedKey!==renderedClassroomKey){",start);
   assert.ok(start>=0&&clear>start&&clear<fetch);
-  assert.ok(code.slice(clear,fetch).includes("stable='';draft='';renderCaption();"));
+  assert.ok(code.slice(clear,fetch).includes("stable='';draft='';clearDraftDisplay();renderCaption();"));
 });
 test('eight-second cut-off cannot be bypassed with a forged external finalized/clock override',()=>{
   const j=new StableUnitJournal({

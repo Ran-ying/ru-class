@@ -110,7 +110,8 @@ test('text model timeout and one-sentence-per-pair contract use bounded requests
       [{text:'Это тест.',id:'synthetic-0'}]),/LLM_TIMEOUT/);
   }finally{globalThis.fetch=previous;}
   const source=readFileSync('apps/web/sentence-worker.js','utf8');
-  assert.match(source,/Return ONE Russian sentence and its ONE matching Simplified Chinese translation/);
+  // v0.6.4: a row is normally one sentence; only 2-3 SHORT related ones may share it.
+  assert.match(source,/A row is normally ONE sentence, but group 2-3 consecutive closely related SHORT sentences/);
   assert.match(source,/result\.length>=8/);
   assert.match(source,/size\+unit\.text\.length\+1>1600/);
 });
@@ -254,25 +255,31 @@ test('text provider errors and missing usage generate a single safe metric',asyn
   }finally{(globalThis as any).fetch=before;}
 });
 
-test('a complete confirmed sentence is eligible immediately, no extra 4s clock',()=>{
+test('a complete sentence is eligible once the speaker pauses, not the instant it is confirmed',()=>{
   const j=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
   j.add({stable_delta:'Завершённое предложение.',window_start_sample:0,window_end_sample:4*RATE});
   assert.deepEqual(j.ready(),[],'legacy age gate still requires 4s for fallback');
+  assert.deepEqual(nextReady(j),[],'the newest unit may still continue');
+  j.add({stable_delta:'',window_start_sample:0,window_end_sample:8*RATE});
   assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Завершённое предложение.']);
 });
-test('one model call contains at most two completed sentences and no unconfirmed tail',()=>{
+test('a batch carries following units as context and the open newest unit as a non-consumable tail',()=>{
   const j=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
   j.add({stable_delta:'Первое. Второе. Третье. И ещё',
     window_start_sample:0,window_end_sample:RATE});
-  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Первое.','Второе.']);
-  j.acknowledge(nextReady(j).map((x:any)=>x.id));
-  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Третье.']);
-  j.acknowledge(nextReady(j).map((x:any)=>x.id));
-  assert.deepEqual(nextReady(j),[],'unfinished tail is held until aged or full stop');
+  const first=nextReady(j);
+  assert.deepEqual(first.map((x:any)=>x.text),['Первое.','Второе.','Третье.','И ещё']);
+  assert.equal(first.openTail,true,'"И ещё" is still being spoken');
+  j.acknowledge(first.slice(0,2).map((x:any)=>x.id));
+  assert.deepEqual(nextReady(j).map((x:any)=>x.text),['Третье.','И ещё']);
+  j.acknowledge([nextReady(j)[0].id]);
+  assert.deepEqual(nextReady(j),[],'only the open unit is left');
   j.add({stable_delta:' продолжается.',window_start_sample:RATE,
     window_end_sample:2*RATE});
+  assert.deepEqual(nextReady(j),[],'"продолжается." is now the open unit; "И ещё" alone is not a sentence');
+  j.add({stable_delta:'',window_start_sample:RATE,window_end_sample:6*RATE});
   assert.deepEqual(nextReady(j).map((x:any)=>x.text),['И ещё','продолжается.'],
-    'a new confirmed sentence-ending fragment promptly releases its incomplete prefix');
+    'after a pause the completed sentence is released with its prefix');
 });
 test('as each complete sentence arrives, each durable commit appears separately before Stop',async()=>{
   const journal=new StableUnitJournal({classroomId:'c',recordingId:'r',startedAt:1000});
@@ -287,9 +294,13 @@ test('as each complete sentence arrives, each durable commit appears separately 
   });
   journal.add({stable_delta:'Первая закончена.',window_start_sample:0,window_end_sample:RATE});
   await worker.tick();
+  assert.deepEqual(commits,[],'held while it may still continue');
+  journal.add({stable_delta:'',window_start_sample:RATE,window_end_sample:5*RATE});
+  await worker.tick();
   assert.deepEqual(commits,[1]);
   assert.equal(journal.ready().length,0);
-  journal.add({stable_delta:'Вторая закончена.',window_start_sample:RATE,window_end_sample:2*RATE});
+  journal.add({stable_delta:'Вторая закончена.',window_start_sample:5*RATE,window_end_sample:6*RATE});
+  journal.add({stable_delta:'',window_start_sample:6*RATE,window_end_sample:10*RATE});
   await worker.tick();
   worker.close();
   assert.deepEqual(commits,[1,1],'new sentence is committed on a separate update, not in a burst');
@@ -303,6 +314,7 @@ test('trailing ellipsis is incomplete and does not trigger speculative fast tran
   assert.deepEqual(nextReady(j),[],
     'ellipsis is not a full sentence boundary before the old age threshold');
   j.add({stable_delta:' после примера.',window_start_sample:RATE,window_end_sample:2*RATE});
+  j.add({stable_delta:'',window_start_sample:RATE,window_end_sample:6*RATE});
   assert.deepEqual(nextReady(j).map((x:any)=>x.text),[
     'Ну, я думаю...','Тогда продолжим','после примера.']);
 });
@@ -324,7 +336,11 @@ test('confirmed unpunctuated speech can be probed before the +4s fallback',()=>{
     window_start_sample:RATE,window_end_sample:2*RATE});
   assert.deepEqual(journal.ready(),[],'no +4s gate has elapsed');
   assert.equal(SEMANTIC_PROBE_MIN_WORDS,9);
-  assert.deepEqual(nextReady(journal).map((u:any)=>u.id),['semantic:0','semantic:1']);
+  assert.deepEqual(nextReady(journal),[],'the second unit is still open');
+  journal.add({stable_delta:'потому что это',window_start_sample:2*RATE,window_end_sample:3*RATE});
+  const probe=nextReady(journal);
+  assert.deepEqual(probe.map((u:any)=>u.id),['semantic:0','semantic:1','semantic:2']);
+  assert.equal(probe.openTail,true,'the newest unit is sent only as context');
 });
 test('semantic probe uses shortest stable source prefix, not an eight-fragment burst',()=>{
   const journal=new StableUnitJournal({classroomId:'c',recordingId:'minimal',startedAt:1000});
@@ -357,6 +373,7 @@ test('the model may translate a complete thought without punctuation and ACK onl
       consumed_units:2,source_prefix:units.map(x=>x.text).join(' '),
       sentences:[{ru:units.map(x=>x.text).join(' ')+'.',zh:'首先需要确定保存了哪些数据，因为隐私很重要。'}]
     }),save:async(rows:any[])=>saved.push(...rows)});
+  journal.add({stable_delta:'',window_start_sample:2*RATE,window_end_sample:6*RATE}); // speaker pauses
   await worker.tick();worker.close();
   assert.equal(saved.length,1);
   assert.deepEqual(saved[0].consumedUnitIds,['meaning:0','meaning:1']);

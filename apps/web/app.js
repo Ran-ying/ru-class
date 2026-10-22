@@ -1,3 +1,4 @@
+import {DraftDisplay} from './caption-display.js';
 import {BrowserAsrSession,asrFailureReason,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
@@ -20,7 +21,9 @@ let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 // not leave an empty "interrupted" recording in the course history.
 let lessonPersisted=false;
 let asrNotice=''; // current ASR reconnect warning, cleared on recovery
-const CLIENT_VERSION='0.6.3'; // Selected frontend build label, not attested ASR engine metadata.
+const draftDisplay=new DraftDisplay({fresh:1});let shownDraftText='';
+function clearDraftDisplay(){draftDisplay.reset();shownDraftText='';}
+const CLIENT_VERSION='0.6.4'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
 let liveWorker=null,liveEnabled=false;
 const translationWorkers=new Map(); // A finished recording may continue draining while another starts.
@@ -87,11 +90,11 @@ async function renderSelectedClassroom({historyOnly=false}={}){
   // class's asynchronous IndexedDB read is pending.
   if(selectedKey!==renderedClassroomKey){
     renderedClassroomKey=selectedKey;
-    stable='';draft='';renderCaption();
+    stable='';draft='';clearDraftDisplay();renderCaption();
     $('latency').textContent='—';
   }
   if(!activeClassroom){
-    stable='';draft='';sourceJournal=null;
+    stable='';draft='';clearDraftDisplay();sourceJournal=null;
     renderCaption();$('duration').textContent='00:00';
     $('latency').textContent='—';return;
   }
@@ -150,7 +153,7 @@ async function renderSelectedClassroom({historyOnly=false}={}){
       sourceJournal=null;
       stable=last?pendingTranscriptAfterCommits(last,translations.at(-1)||[]):'';
     }
-    draft='';
+    draft='';clearDraftDisplay();
     renderCaption();
     $('duration').textContent=last?
       String(Math.floor((last.durationSeconds||0)/60)).padStart(2,'0')+':'+
@@ -278,12 +281,16 @@ function renderCaption(){
   const delivered=sourceJournal?.units.filter(unit=>sourceJournal.delivered.has(unit.id)).map(unit=>unit.text).join(' ')||'';
   const pending=delivered && (stable===delivered||stable.startsWith(delivered+' '))?
     stable.slice(delivered.length).trimStart():stable;
+  // Only draft words two consecutive ASR windows agree on (plus one newer
+  // word) are painted: the window-edge tail Whisper rewrites every step no
+  // longer makes the caption jump. Display only; confirmation is unchanged.
+  const shownDraft=shownDraftText;
   $('ru-stable').textContent=pending;
-  $('ru-draft').textContent=draft?(pending?' '+draft:draft):'';
+  $('ru-draft').textContent=shownDraft?(pending?' '+shownDraft:shownDraft):'';
   // The same exact RU projection feeds the provisional local ZH worker.
   // Historical bilingual commits only adjust this projection, never consume
   // or persist text from the lower translation task.
-  if(liveWorker)liveWorker.update([pending,draft].filter(Boolean).join(' '),lessonId);
+  if(liveWorker)liveWorker.update([pending,shownDraft].filter(Boolean).join(' '),lessonId);
 }
 
 function updateLiveStatus(status,elapsedMs){
@@ -302,9 +309,30 @@ function updateLiveStatus(status,elapsedMs){
     '本地翻译暂不可用（'+status+'）':status);
   el.textContent=label+(Number.isFinite(elapsedMs)?' · '+elapsedMs+' ms':'');
 }
+// Ready sentences are exact translations of RU still in the buffer. A sentence
+// still being spoken may show its previous translation, explicitly marked as
+// updating, until the new one arrives: the Chinese never blanks or flickers.
+let liveZhSignature='';
+function renderLiveZh(parts){
+  // A new sentence with no translation yet shows a quiet placeholder rather
+  // than an empty box while Russian is on screen.
+  const ruShown=($('ru-stable').textContent+$('ru-draft').textContent).trim();
+  if(!parts.length&&ruShown)parts=[{text:'翻译中…',state:'waiting'}];
+  const signature=JSON.stringify(parts);
+  if(signature===liveZhSignature)return; // no DOM churn when nothing changed
+  liveZhSignature=signature;
+  const box=$('live-zh');
+  box.replaceChildren(...parts.flatMap((part,i)=>{
+    const span=document.createElement('span');
+    span.textContent=part.text;
+    if(part.state==='stale'){span.className='is-updating';span.title='这句还在说，译文正在更新';}
+    else if(part.state==='waiting')span.className='is-waiting';
+    return i?[document.createTextNode('\n'),span]:[span];
+  }));
+}
 function closeLiveTranslation(){
   liveWorker?.close();liveWorker=null;
-  $('live-zh').textContent='';
+  $('live-zh').textContent='';liveZhSignature='';
   updateLiveStatus('');
 }
 function initializeLiveTranslation(){
@@ -315,9 +343,7 @@ function initializeLiveTranslation(){
     profile:{...profiles.speech},
     onUpdate:result=>{
       if(!liveWorker||lessonId!==recordingId||result.recordingId!==recordingId)return;
-      // Only show translations of EXACT cached source chunks still present
-      // in the current RU projection. Never dim valid ZH or retain stale ZH.
-      $('live-zh').textContent=result.translation;
+      renderLiveZh(result.parts||[{text:result.translation,state:'ready'}]);
       if(result.pending){
         updateLiveStatus('翻译缓冲区中（'+result.coveredChunks+'/'+result.totalChunks+' 段）');
       }
@@ -547,6 +573,7 @@ function showTranscript(update){
   if(update.stable_delta?.trim()||update.final)sentenceWorker?.wake();
   if(update.stable_delta?.trim())stable=stable?[stable,update.stable_delta.trim()].join(' '):update.stable_delta.trim();
   draft=update.partial_text?.trim()||'';
+  shownDraftText=update.final?'':draftDisplay.update(draft,stable);
   const text=[stable,draft].filter(Boolean).join(' ');
   // Silence or an empty ASR window leaves the reserved RU region blank.
   renderCaption();
@@ -695,7 +722,7 @@ async function start(){
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
   evidenceReceived=0;evidenceFailed=0;evidenceActive=false;lessonPersisted=false;cancelRecordingSave();
-  stable='';draft='';hasTranscript=false;asrNotice='';
+  stable='';draft='';hasTranscript=false;asrNotice='';clearDraftDisplay();
   closeLiveTranslation();
   sourceJournal=new StableUnitJournal({classroomId:activeClassroom.id,
     recordingId:lessonId,startedAt});

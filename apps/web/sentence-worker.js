@@ -18,10 +18,11 @@ export function textUsage(usage){
     cacheHitTokens:tokenCount(usage?.prompt_cache_hit_tokens)
   };
 }
-export function validateSentenceResult(payload,units){
+export function validateSentenceResult(payload,units,{openTail=false}={}){
   if(!Array.isArray(units)||!units.length)throw Error('LLM_SOURCE_UNAVAILABLE');
   const count=payload?.consumed_units;
-  if(!Number.isSafeInteger(count)||count<0||count>units.length)throw Error('LLM_INVALID_CONSUMPTION');
+  const max=units.length-(openTail?1:0);
+  if(!Number.isSafeInteger(count)||count<0||count>max)throw Error('LLM_INVALID_CONSUMPTION');
   const prefix=units.slice(0,count).map(u=>u.text).join(' ');
   if(payload.source_prefix!==prefix)throw Error('LLM_PREFIX_MISMATCH');
   if(!Array.isArray(payload.sentences)||payload.sentences.length>12)throw Error('LLM_INVALID_SENTENCES');
@@ -44,8 +45,8 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
   const source=units.map(u=>u.text).join(' ');
   if(source.length>4500)throw Error('LLM_INPUT_TOO_LONG');
   const messages=[
-    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Return ONE Russian sentence and its ONE matching Simplified Chinese translation per sentences array element. Split long responses into multiple aligned sentence pairs; never put multiple sentences or newlines in a single row. Multiple sentence-pair elements are allowed. Use Russian meaning and syntax as well as punctuation to decide if an already-confirmed utterance is a complete independent sentence. A sentence may be complete WITHOUT terminal punctuation. Only consume a prefix of WHOLE fragments which expresses one or more complete thoughts; do not consume an unfinished final clause, dangling conjunction/preposition, dependent condition, or a question still awaiting completion. This is real, noisy classroom speech: misrecognized or garbled words are NOT a reason to wait. In ru, actively correct ASR errors from context (near-homophones, broken word forms, wrong case endings, e.g. "в алетронном шоте" -> "в электронном счёте"); keep a word unchanged only when no plausible correction exists, and never add content that was not said. A fragment ending with . ? or ! normally ends a sentence, so consume through such fragments unless the last of them is clearly cut off mid-clause. Only if the meaning is genuinely unfinished, return consumed_units 0, source_prefix empty and sentences []; wait for further confirmed fragments. When final or flush is true, these fragments are overdue: you MUST consume at least the first fragment, and should consume all of them unless the last one is clearly an unfinished clause. When final, process meaningful remaining fragments. Never modify source_prefix.'},
-    {role:'user',content:JSON.stringify({final:Boolean(units[0]?.finalBatch),...(units[0]?.flushBatch?{flush:true}:{}),fragments:units.map((u,i)=>({n:i+1,text:u.text})),source})}
+    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Each sentences array element is one history row: Russian text and its matching Simplified Chinese translation, with no newlines. A row is normally ONE sentence, but group 2-3 consecutive closely related SHORT sentences (each under about 6 words, e.g. "Вот. Всё, финал." or a short question and its answer) into one row so the history reads as natural chunks of roughly 8-25 words; never group unrelated or long sentences. Split long text into multiple aligned rows. Multiple row elements are allowed. Use Russian meaning and syntax as well as punctuation to decide if an already-confirmed utterance is a complete independent sentence. A sentence may be complete WITHOUT terminal punctuation. Only consume a prefix of WHOLE fragments which expresses one or more complete thoughts; do not consume an unfinished final clause, dangling conjunction/preposition, dependent condition, or a question still awaiting completion. This is real, noisy classroom speech: misrecognized or garbled words are NOT a reason to wait. In ru, actively correct ASR errors from context (near-homophones, broken word forms, wrong case endings, e.g. "в алетронном шоте" -> "в электронном счёте"); keep a word unchanged only when no plausible correction exists, and never add content that was not said. Whisper often puts a period where the speaker merely paused or where its audio window ended: if the next fragment continues the same clause (starts lowercase, with a conjunction or preposition, a dependent clause, or completes the thought), that period is wrong, so merge them into ONE natural sentence. Prefer complete, natural sentences; never emit a 1-3 word fragment as its own sentence unless it is a genuine standalone utterance (e.g. a reply, a greeting, a short question to the class), merge it with its neighbour instead. Consume through the last fragment that ends a complete thought; leave a trailing fragment that may still continue for the next request. Only if no complete thought is present, return consumed_units 0, source_prefix empty and sentences []; wait for further confirmed fragments. When final or flush is true, these fragments are overdue: you MUST consume at least the first fragment, and should consume all of them unless the last one is clearly an unfinished clause. When final, process meaningful remaining fragments. Never end a row with an unfinished clause or a dangling word (то, и, а, но, что, если, когда, который, чем, a preposition); if a sentence continues into a fragment you may not consume, stop BEFORE the fragment where that sentence starts and leave it for the next request. zh must be entirely natural Simplified Chinese: never leave Russian words in it; translate fillers such as вот, ну, так naturally or omit them, and write names in Chinese characters. If open_tail is true, the LAST fragment is still being spoken: never consume it; use it only to judge whether the sentence in the previous fragments continues (if it does, do not consume that unfinished sentence either). Never modify source_prefix.'},
+    {role:'user',content:JSON.stringify({final:Boolean(units[0]?.finalBatch),...(units[0]?.flushBatch?{flush:true}:{}),...(units.at(-1)?.openTail?{open_tail:true}:{}),fragments:units.map((u,i)=>({n:i+1,text:u.text})),source})}
   ];
   let response;
   const timeoutSignal=AbortSignal.timeout(LLM_TIMEOUT_MS);
@@ -111,8 +112,27 @@ function probeEligible(units){
   return count>=SEMANTIC_PROBE_MIN_WORDS&&
     (windows.size>=2||count>=SEMANTIC_PROBE_SINGLE_WINDOW_WORDS);
 }
+// The newest confirmed unit may still be growing: teachers pause mid-sentence
+// and the continuation ("который...", "при ...") is confirmed seconds later.
+// Committing it early splits one sentence into two history rows. Until it is
+// SETTLED (nothing new for SETTLE_SAMPLES of ASR time, or the lesson stopped)
+// it is sent only as an open tail: context the model must not consume, so it
+// can tell whether the previous fragment's sentence continues. Up to
+// LOOKAHEAD_UNITS settled units after the last sentence end are also sent.
+export const SETTLE_SAMPLES=4*16000;
+export const LOOKAHEAD_UNITS=2;
 export function nextReady(journal,{minUnits=0}={}){
-  const pending=journal.units.filter(unit=>!journal.delivered.has(unit.id));
+  const all=journal.units.filter(unit=>!journal.delivered.has(unit.id));
+  if(!all.length)return [];
+  const open=!journal.finalized&&
+    journal.lastWindowEnd-all.at(-1).confirmedWindowEndSample<SETTLE_SAMPLES;
+  const pending=open?all.slice(0,-1):all;
+  const withTail=batch=>{
+    if(open&&batch.length&&batch.at(-1)===pending.at(-1)){
+      const out=[...batch,all.at(-1)];out.openTail=true;return out;
+    }
+    return batch;
+  };
   if(!pending.length)return [];
   const required=Math.min(SEMANTIC_PROBE_MAX_UNITS,Math.max(0,minUnits));
   const limit=Math.max(8,required);
@@ -126,8 +146,12 @@ export function nextReady(journal,{minUnits=0}={}){
       if(sentences>=2&&batch.length>=required)break;
     }
   }
-  if(lastSentenceIndex>=0&&lastSentenceIndex+1>=required)
-    return batch.slice(0,lastSentenceIndex+1);
+  if(lastSentenceIndex>=0&&lastSentenceIndex+1>=required){
+    // Whisper's periods are often false (a pause, the window edge): include
+    // the following units so the model can merge a continuation.
+    const more=pending.slice(lastSentenceIndex+1,lastSentenceIndex+1+LOOKAHEAD_UNITS);
+    return withTail([...batch.slice(0,lastSentenceIndex+1),...more]);
+  }
   // A word-complete thought may have no Whisper period at all. Probe
   // the SHORTEST prefix with enough stable context, rather than shipping
   // eight units that could each contain another sentence. If a prior probe
@@ -137,16 +161,17 @@ export function nextReady(journal,{minUnits=0}={}){
   for(const unit of batch){
     if(semantic.length>=probeLimit)break;
     semantic.push(unit);
-    if(semantic.length>=required&&probeEligible(semantic))return semantic;
+    if(semantic.length>=required&&probeEligible(semantic))return withTail(semantic);
   }
   // Keep the established +4s fallback for short, ambiguous confirmed text.
   // The final flush still releases every remaining stable unit.
-  const ready=journal.ready(),result=[];size=0;
+  const settledIds=new Set(pending.map(u=>u.id));
+  const ready=journal.ready().filter(u=>settledIds.has(u.id)),result=[];size=0;
   for(const unit of ready){
     if(result.length>=8||(result.length&&size+unit.text.length+1>1600))break;
     result.push(unit);size+=unit.text.length+1;
   }
-  return result;
+  return withTail(result);
 }
 /**
  * v0.6: audio range of each committed sentence, from the consumed source units'
@@ -272,10 +297,11 @@ export class SentenceWorker{
     const signal=this.controller.signal;
     let delay=this.intervalMs;
     try{
-      const payload=await this.request(this.profile,ready.map(u=>({...u,finalBatch:this.journal.finalized,...(flush?{flushBatch:true}:{})})),
+      const payload=await this.request(this.profile,ready.map((u,i)=>({...u,finalBatch:this.journal.finalized,...(flush?{flushBatch:true}:{}),
+          ...(ready.openTail&&!flush&&i===ready.length-1?{openTail:true}:{})})),
         {signal,onTelemetry:this.onRequestMetric});
       if(this.closed||signal.aborted)return;
-      const accepted=validateSentenceResult(payload,ready);
+      const accepted=validateSentenceResult(payload,ready,{openTail:Boolean(ready.openTail)&&!flush});
       if(!accepted.count){
         // Final flush may arrive while the previous request was in flight.
         // Retry a final empty response once, but never spin or charge forever.
