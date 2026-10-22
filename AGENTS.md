@@ -591,3 +591,24 @@ with `flush:true`, which the model must consume. A flush may run without new
 text, but its signature (ids|final|flush) is still never re-billed after an
 empty reply. Validation, save-before-ACK and raw evidence are unchanged.
 Measured on a 2-minute real lesson clip: 0 live history rows before, 41 after.
+
+
+## v0.6.2 transient failures never end a lesson (2026-10-22)
+
+Before, any rejected `BrowserAsrSession.run` (one 502/429 after its 3 internal
+retries, a timeout, a Wi-Fi drop) called `onFailure`: mic released, lesson
+`interrupted`. A real soak hit this at 6 min from a 429 when a second client
+shared the Mac ASR (it allows one inference at a time). Now
+`isTransientAsrError` (408/429/5xx, timeout, network, bad body) is retried
+with 1-2-4 s backoff while audio keeps recording; `onRetry`/`onRecover` drive
+the notice. Config errors (401/403/404/400) still fail at once, and an address
+that never succeeded fails after `ASR_STARTUP_FAILURES` (3). `stop()` retries
+the tail 3x then flushes with `tail_lost:true` so Stop always completes. The
+ring keeps only the newest 8 s: the outage's captions are lost (audio is not);
+the transcript resumes as a non-consecutive window.
+`SentenceWorker`: live failures back off 5 s doubling to 60 s and are never
+blocked for the rest of the lesson (previously 3 failures on a capped batch
+signature stalled history until Stop). The post-Stop drain stays bounded to
+3 failures -> paused / `LLM_RETRY_EXHAUSTED`.
+Verified in Chrome with a fault proxy (ASR 502 30 s, connection drop 30 s,
+DeepSeek 503 70 s, ASR down during Stop): no interruption, recovery < 5 s.

@@ -211,7 +211,7 @@ export class SentenceWorker{
     Object.assign(this,{journal,profile,save,onCommit,onError,onDrain,onRequestMetric,request,intervalMs});
     this.closed=false;this.running=false;this.timer=null;this.controller=null;
     this.nextIndex=0;this.lastEmptySignature='';
-    this.failedSignature='';this.failuresOnSignature=0;
+    this.failedSignature='';this.failuresOnSignature=0;this.consecutiveFailures=0;
     this.emptySignature='';this.emptyOnSignature=0;
     this.lastEmptyFrontier=0;this.lastEmptyBatchSize=0;
   }
@@ -302,18 +302,21 @@ export class SentenceWorker{
       this.nextIndex+=rows.length;
       this.lastEmptySignature='';
       this.lastEmptyFrontier=0;this.lastEmptyBatchSize=0;
-      this.failedSignature='';this.failuresOnSignature=0;
+      this.failedSignature='';this.failuresOnSignature=0;this.consecutiveFailures=0;
       this.emptySignature='';this.emptyOnSignature=0;
       delay=0; // Drain remaining eligible sentences immediately after ACK.
       this.onCommit(rows);
     }catch(e){
       if(!this.closed&&!signal.aborted){
-        delay=5000;
         if(this.failedSignature===signature)this.failuresOnSignature++;
         else{this.failedSignature=signature;this.failuresOnSignature=1;}
-        // A permanently invalid API/token must not generate unbounded paid
-        // retries. New confirmed text or a final flush forms a new signature.
-        if(this.failuresOnSignature>=3)this.lastEmptySignature=signature;
+        // While recording, a provider outage must not stall history for the
+        // rest of the lesson: retry with backoff (5 s doubling to 60 s) for
+        // as long as it lasts. Failed requests are not billed. After Stop the
+        // drain stays bounded: three failures pause it for manual recovery.
+        this.consecutiveFailures++;
+        delay=Math.min(60000,5000*2**(this.consecutiveFailures-1));
+        if(this.journal.finalized&&this.failuresOnSignature>=3)this.lastEmptySignature=signature;
         this.onError(e instanceof Error?e.message:'LLM_PROCESSING_ERROR');
       }
     }finally{
