@@ -1,4 +1,4 @@
-import {BrowserAsrSession,discoverModels,testConnection,validateProfile} from './direct-asr.js';
+import {BrowserAsrSession,asrFailureReason,discoverModels,testConnection,validateProfile} from './direct-asr.js';
 import {StableUnitJournal} from './stable-units.js';
 import {SentenceWorker} from './sentence-worker.js';
 import {LiveTranslationWorker} from './live-translation.js';
@@ -19,7 +19,8 @@ let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 // True once this recording's metadata row exists. A refused microphone must
 // not leave an empty "interrupted" recording in the course history.
 let lessonPersisted=false;
-const CLIENT_VERSION='0.6.1'; // Selected frontend build label, not attested ASR engine metadata.
+let asrNotice=''; // current ASR reconnect warning, cleared on recovery
+const CLIENT_VERSION='0.6.2'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
 let liveWorker=null,liveEnabled=false;
 const translationWorkers=new Map(); // A finished recording may continue draining while another starts.
@@ -661,7 +662,7 @@ async function start(){
   lessonId=crypto.randomUUID();startedAt=Date.now();
   sampleCount=0;chunkIndex=0;marks=[];writing=Promise.resolve();lessonWrites=Promise.resolve();evidenceWrites=Promise.resolve();evidenceWarning='';
   evidenceReceived=0;evidenceFailed=0;evidenceActive=false;lessonPersisted=false;cancelRecordingSave();
-  stable='';draft='';hasTranscript=false;
+  stable='';draft='';hasTranscript=false;asrNotice='';
   closeLiveTranslation();
   sourceJournal=new StableUnitJournal({classroomId:activeClassroom.id,
     recordingId:lessonId,startedAt});
@@ -678,7 +679,21 @@ async function start(){
     await context.audioWorklet.addModule('/capture-worklet.js');
     source=context.createMediaStreamSource(stream);
     capture=new AudioWorkletNode(context,'ru-capture');
-    asr=new BrowserAsrSession(p,showTranscript,e=>void onFailure(e),archiveRawHypothesis);
+    asr=new BrowserAsrSession(p,showTranscript,e=>void onFailure(e),archiveRawHypothesis,{
+      onRetry:({failures,message})=>{
+        console.warn('ASR transient failure',failures,message);
+        asrNotice='语音识别连接中断（'+asrFailureReason(message)+'），正在第 '+failures+
+          ' 次重试；录音仍在本地保存，恢复后自动继续。';
+        $('error').textContent=asrNotice;
+      },
+      onRecover:({failures})=>{
+        // Kept visible (the latency line is rewritten every window): the
+        // gap's captions are missing, but its audio is in the recording.
+        if(!$('error').textContent||$('error').textContent===asrNotice)
+          $('error').textContent='语音识别已恢复（重试 '+failures+' 次）；中断期间的字幕缺失，录音完整。';
+        asrNotice='';
+      }
+    });
     capture.port.onmessage=({data})=>{
       if(data?.type==='flushed'){flushResolve?.();flushResolve=null;return;}
       if(data?.type!=='audio'||!running)return;

@@ -110,8 +110,32 @@ export function validSegments(raw,duration){
   return out;
 }
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+// A lesson must survive a Wi-Fi drop, a slow/restarting ASR server or a 5xx:
+// those are retried while audio keeps being recorded. Only a configuration
+// error (bad token, wrong URL/model, rejected request) stops the session.
+export function isTransientAsrError(e){
+  const message=e instanceof Error?e.message:String(e);
+  if(message==='REQUEST_ABORTED')return false;
+  const http=/^ASR_HTTP_(\d+)$/.exec(message);
+  if(http){const status=Number(http[1]);return status===408||status===429||status>=500;}
+  // Network/CORS failure, timeout, truncated or non-JSON body.
+  return message==='API 请求超时'||message.startsWith('无法直接连接')||
+    message==='INVALID_ASR_RESPONSE'||e instanceof SyntaxError;
+}
+export const ASR_RETRY_MAX_MS=4000;
+/** Short, user-facing reason for a transient failure (shown mid-lesson). */
+export function asrFailureReason(message){
+  const http=/^ASR_HTTP_(\d+)$/.exec(message);
+  if(http)return http[1]==='429'?'服务器忙（429）':'服务器错误（HTTP '+http[1]+'）';
+  if(message==='API 请求超时')return '请求超时';
+  if(message.startsWith('无法直接连接'))return '网络连接失败';
+  return '响应无效';
+}
+// Before any window has succeeded, repeated connection errors are almost
+// always a wrong address; fail like before instead of retrying silently.
+export const ASR_STARTUP_FAILURES=3;
 export class BrowserAsrSession {
-  constructor(profile,onUpdate,onError,onRawHypothesis=()=>{}){
+  constructor(profile,onUpdate,onError,onRawHypothesis=()=>{},{onRetry=()=>{},onRecover=()=>{}}={}){
     this.profile=validateProfile(profile,'speech');
     this.onUpdate=onUpdate;this.onError=onError;
     this.onRawHypothesis=onRawHypothesis;
@@ -127,6 +151,8 @@ export class BrowserAsrSession {
     // v0.6: ask for segment times; a provider that rejects verbose_json with
     // HTTP 400 is retried once as plain json and stays on json afterwards.
     this.verbose=true;
+    this.onRetry=onRetry;this.onRecover=onRecover;
+    this.failures=0;this.retryAt=0;this.succeeded=false;
   }
   push(samples){
     if(!this.active)return;
@@ -172,6 +198,7 @@ export class BrowserAsrSession {
   async run(final=false){
     if(this.inFlight)return this.inFlight;
     if(!this.active&&!final)return;
+    if(!final&&performance.now()<this.retryAt)return; // backing off after a failure
     const snapshot=this.ring.snapshot();
     if(snapshot.end===this.lastSentEnd || !snapshot.pcm.length){
       if(final){
@@ -182,7 +209,27 @@ export class BrowserAsrSession {
     }
     const task=(async()=>{
       const start=performance.now();
-      const {text,segments}=await this.transcribe(snapshot);
+      let transcript;
+      try{transcript=await this.transcribe(snapshot);}
+      catch(e){
+        if(!isTransientAsrError(e)||(!this.succeeded&&this.failures+1>=ASR_STARTUP_FAILURES))throw e;
+        // Keep recording. The ring always holds the newest 8 s, so after
+        // recovery captions resume from live audio; the missed span stays in
+        // the saved recording and its transcript resumes as a new segment.
+        this.failures++;
+        const delay=Math.min(ASR_RETRY_MAX_MS,1000*2**(this.failures-1));
+        this.retryAt=performance.now()+delay;
+        if(this.active)this.onRetry({failures:this.failures,delayMs:delay,
+          message:e instanceof Error?e.message:String(e)});
+        if(final)throw e;
+        return;
+      }
+      const {text,segments}=transcript;
+      if(this.failures){
+        const failures=this.failures;this.failures=0;this.retryAt=0;
+        this.onRecover({failures});
+      }
+      this.succeeded=true;
       if(!this.active&&!final)return;
       const raw={
         // Preserve the exact provider text before any lossy transcript
@@ -208,8 +255,23 @@ export class BrowserAsrSession {
     clearInterval(this.timer);
     this.timer=null;
     // Await the previous rolling inference, then process any unsent tail.
-    if(this.inFlight)await this.inFlight;
-    await this.run(true);
+    if(this.inFlight)await this.inFlight.catch(()=>{});
+    // The tail window is retried a few times; if the server is still down,
+    // finish with what is already transcribed rather than failing the Stop.
+    for(let attempt=0;;attempt++){
+      try{await this.run(true);break;}
+      catch(e){
+        if(!isTransientAsrError(e)||attempt>=2){
+          if(!isTransientAsrError(e))throw e;
+          const update=this.transcript.flush();
+          const snapshot=this.ring.snapshot();
+          this.onUpdate({...update,window_start_sample:snapshot.start,window_end_sample:snapshot.end,
+            inference_ms:0,final:true,tail_lost:true});
+          break;
+        }
+        await sleep(1000);
+      }
+    }
     this.active=false;
   }
   cancel(){
