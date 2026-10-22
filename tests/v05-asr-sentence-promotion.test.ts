@@ -19,8 +19,12 @@ test('two distinct overlapping windows confirming the same full sentence immedia
   assert.equal(second.stable_delta,'Сегодня мы изучаем защиту информации.');
   assert.equal(second.partial_text,'');
   assert.equal(journal.ready().length,0,'legacy four-second fallback still untouched');
+  // v0.6.4: the newest unit may still continue after a pause ("..., который"),
+  // so it is held until SETTLE_SAMPLES of ASR time pass with nothing new.
+  assert.deepEqual(nextReady(journal),[],'a just-confirmed last sentence is not committed yet');
+  journal.add({stable_delta:'',partial_text:'',window_start_sample:5*RATE,window_end_sample:13*RATE});
   assert.equal(nextReady(journal)[0].text,second.stable_delta,
-    'complete sentence must be eligible for DeepSeek without waiting 4 more seconds');
+    'after a 4 s pause the complete sentence is eligible');
   let persisted:any[]=[];
   const worker=new SentenceWorker({journal,profile:{},intervalMs:100000,
     request:async(_profile:any,units:any[])=>({
@@ -65,8 +69,10 @@ test('identical overlapping long speech without punctuation advances confirmed p
   assert.ok(second.stable_delta.split(' ').length>=12);
   assert.ok(second.partial_text.split(' ').length<=3);
   assert.deepEqual(journal.ready(),[],'unpunctuated fallback still waits');
+  assert.deepEqual(nextReady(journal),[],'the newest unit is still open');
+  journal.add({stable_delta:'',partial_text:'',window_start_sample:5*RATE,window_end_sample:13*RATE});
   assert.equal(nextReady(journal).length,1,
-    'semantic probe is now eligible without 4 extra seconds for confirmed long prefix');
+    'once settled, the confirmed long prefix is eligible for the semantic probe');
 });
 test('a silence gap is not two uninterrupted matching confirmations',()=>{
   const asr=new TranscriptBuffer();

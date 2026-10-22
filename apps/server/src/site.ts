@@ -14,6 +14,7 @@ const files:Record<string,[string,string]>={
   '/stable-units.js':['stable-units.js','text/javascript; charset=utf-8'],
   '/history-scroll.js':['history-scroll.js','text/javascript; charset=utf-8'],
   '/speech-bounds.js':['speech-bounds.js','text/javascript; charset=utf-8'],
+  '/caption-display.js':['caption-display.js','text/javascript; charset=utf-8'],
   '/live-translation.js':['live-translation.js','text/javascript; charset=utf-8'],
   '/api-parameters.js':['api-parameters.js','text/javascript; charset=utf-8'],
   '/sentence-worker.js':['sentence-worker.js','text/javascript; charset=utf-8'],

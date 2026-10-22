@@ -628,3 +628,36 @@ be reproduced on this host's WM-less Xvfb; covered by a unit test only.
 with no drift, JS heap 7-11 MB, 283 history rows, buffer median 42 chars.
 Translation recovery for `interrupted` sessions is still refused (owner
 contract in the v0.4 recovery section); not changed.
+
+
+## v0.6.4 calmer buffer and fuller history rows (2026-10-22)
+
+Owner request: no jumping/flicker in the lower buffer, and history rows that
+are not fragmentary. Several earlier contracts were deliberately changed:
+- Draft display (`caption-display.js`, display only): paint draft words two
+  consecutive hypotheses agree on, plus `fresh:1` newer word. Real-lesson
+  replay: rewritten on-screen words 108 -> 18.5/min with no more blank drafts.
+  The 8 s window stays: 6 s had the same jitter (105/min) but confirmed ~10%
+  fewer words than a 30 s reference pass (8 s ~9% more: some duplication).
+- Live ZH (supersedes the v0.5 "never leave old translation on screen" rule):
+  one chunk per sentence; a chunk still being spoken shows the last DISPLAYED
+  translation of a chunk with the same two opening words, explicitly marked
+  `stale` ("updating …"), never a discarded response. A response is cached
+  whenever its exact chunk text is still in the buffer (requiring an
+  unchanged revision discarded nearly every result: 4% ZH coverage). A->B->A
+  therefore reuses the A result. Fixed 3-line ZH box; "翻译中…" placeholder.
+- History (supersedes v0.5.1 "a complete sentence is eligible immediately"):
+  the newest pending unit is OPEN until `SETTLE_SAMPLES` (4 s ASR time) pass
+  without a newer unit; it is sent only as `open_tail` context and
+  `validateSentenceResult(...,{openTail})` rejects consuming it. Up to
+  `LOOKAHEAD_UNITS` (2) units after the last sentence end ride along. Root
+  cause found in replay: mid-sentence pauses made the semantic probe commit
+  "... назначенный человек." before "который меняет ..." was confirmed.
+- Rows (supersedes v0.4 "one sentence per row"): a row is normally one
+  sentence; 2-3 consecutive related SHORT sentences may share it. Prompt also
+  forbids dangling-word endings and Russian left in zh.
+Measured (3 real clips, offline replay with real DeepSeek; held-out clip C):
+rows <=4 words 25/25/33% -> 13/21/17%, dangling 3 -> 1, Cyrillic in zh
+14 -> 4; history lags ~1.5 s more (p90 4.5-6 s). Browser A/B on a 3-min clip:
+divider moves 12 -> 0, ZH coverage 4% -> 60%, RU rewritten 79 -> 13/min,
+rows <=4 words 26% -> 10%.
