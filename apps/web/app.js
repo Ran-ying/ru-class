@@ -19,7 +19,7 @@ let evidenceReceived=0,evidenceFailed=0,evidenceActive=false;
 // True once this recording's metadata row exists. A refused microphone must
 // not leave an empty "interrupted" recording in the course history.
 let lessonPersisted=false;
-const CLIENT_VERSION='0.6.0'; // Selected frontend build label, not attested ASR engine metadata.
+const CLIENT_VERSION='0.6.1'; // Selected frontend build label, not attested ASR engine metadata.
 let stable='',draft='',hasTranscript=false,marks=[],sourceJournal=null,sentenceWorker=null;
 let liveWorker=null,liveEnabled=false;
 const translationWorkers=new Map(); // A finished recording may continue draining while another starts.

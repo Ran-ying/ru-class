@@ -44,8 +44,8 @@ export async function requestSentenceBatch(profile,units,{signal,onTelemetry=()=
   const source=units.map(u=>u.text).join(' ');
   if(source.length>4500)throw Error('LLM_INPUT_TOO_LONG');
   const messages=[
-    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Return ONE Russian sentence and its ONE matching Simplified Chinese translation per sentences array element. Split long responses into multiple aligned sentence pairs; never put multiple sentences or newlines in a single row. Multiple sentence-pair elements are allowed. Use Russian meaning and syntax as well as punctuation to decide if an already-confirmed utterance is a complete independent sentence. A sentence may be complete WITHOUT terminal punctuation. Only consume a prefix of WHOLE fragments which expresses one or more complete thoughts; do not consume an unfinished final clause, dangling conjunction/preposition, dependent condition, or a question still awaiting completion. If uncertain, return consumed_units 0, source_prefix empty and sentences []; wait for further confirmed fragments. When final, process meaningful remaining fragments. Never modify source_prefix.'},
-    {role:'user',content:JSON.stringify({final:Boolean(units[0]?.finalBatch),fragments:units.map((u,i)=>({n:i+1,text:u.text})),source})}
+    {role:'system',content:'You process Russian classroom ASR stable fragments. Return ONLY a JSON object with consumed_units, source_prefix, and sentences array of {ru,zh}. Consume a PREFIX of WHOLE fragments and copy the exact joined raw source into source_prefix. Correct clear Russian ASR mistakes and punctuation in ru without fabricating information. Return ONE Russian sentence and its ONE matching Simplified Chinese translation per sentences array element. Split long responses into multiple aligned sentence pairs; never put multiple sentences or newlines in a single row. Multiple sentence-pair elements are allowed. Use Russian meaning and syntax as well as punctuation to decide if an already-confirmed utterance is a complete independent sentence. A sentence may be complete WITHOUT terminal punctuation. Only consume a prefix of WHOLE fragments which expresses one or more complete thoughts; do not consume an unfinished final clause, dangling conjunction/preposition, dependent condition, or a question still awaiting completion. This is real, noisy classroom speech: misrecognized or garbled words are NOT a reason to wait. In ru, actively correct ASR errors from context (near-homophones, broken word forms, wrong case endings, e.g. "в алетронном шоте" -> "в электронном счёте"); keep a word unchanged only when no plausible correction exists, and never add content that was not said. A fragment ending with . ? or ! normally ends a sentence, so consume through such fragments unless the last of them is clearly cut off mid-clause. Only if the meaning is genuinely unfinished, return consumed_units 0, source_prefix empty and sentences []; wait for further confirmed fragments. When final or flush is true, these fragments are overdue: you MUST consume at least the first fragment, and should consume all of them unless the last one is clearly an unfinished clause. When final, process meaningful remaining fragments. Never modify source_prefix.'},
+    {role:'user',content:JSON.stringify({final:Boolean(units[0]?.finalBatch),...(units[0]?.flushBatch?{flush:true}:{}),fragments:units.map((u,i)=>({n:i+1,text:u.text})),source})}
   ];
   let response;
   const timeoutSignal=AbortSignal.timeout(LLM_TIMEOUT_MS);
@@ -183,6 +183,28 @@ export function sentenceTimes(units,sentences){
   }
   return starts.map((from,i)=>span(timeline.slice(from,Math.max(from+1,starts[i+1]??timeline.length))));
 }
+// Live-history backstop. Real classroom ASR is noisy enough that the model can
+// keep answering consumed_units 0, leaving every sentence in the buffer until
+// Stop. Once the oldest pending confirmed unit is this far behind the ASR
+// clock, ask with flush:true for a punctuation-bounded prefix that MUST be
+// consumed, so history keeps moving during the lesson.
+export const FLUSH_AGE_SAMPLES=15*16000;
+export function overdueBatch(journal){
+  if(journal.finalized)return [];
+  const pending=journal.units.filter(unit=>!journal.delivered.has(unit.id));
+  const cutoff=journal.lastWindowEnd-FLUSH_AGE_SAMPLES;
+  if(!pending.length||pending[0].confirmedWindowEndSample>cutoff)return [];
+  const batch=[];let size=0,lastSentence=-1;
+  for(const unit of pending){
+    if(batch.length>=8||(batch.length&&size+unit.text.length+1>1600))break;
+    batch.push(unit);size+=unit.text.length+1;
+    if(isSentenceEnd(unit.text))lastSentence=batch.length-1;
+  }
+  if(lastSentence>=0)return batch.slice(0,lastSentence+1);
+  // No punctuation at all: release only the units that are themselves overdue.
+  const old=batch.filter(unit=>unit.confirmedWindowEndSample<=cutoff);
+  return old.length?old:batch.slice(0,1);
+}
 export class SentenceWorker{
   constructor({journal,profile,save,onCommit=()=>{},onError=()=>{},onDrain=()=>{},onRequestMetric=()=>{},request=requestSentenceBatch,intervalMs=800}){
     if(!journal||typeof save!=='function')throw Error('LLM_INVALID_WORKER');
@@ -214,7 +236,11 @@ export class SentenceWorker{
   }
   async tick(){
     if(this.closed||this.running)return;
-    if(this.lastEmptySignature&&!this.journal.finalized&&
+    const overdue=overdueBatch(this.journal);
+    const flush=overdue.length>0;
+    // An overdue flush may run without new text (the teacher paused after a
+    // sentence); its own signature still forbids re-billing the same prefix.
+    if(!flush&&this.lastEmptySignature&&!this.journal.finalized&&
        this.journal.units.length<=this.lastEmptyFrontier){
       // Both the ASR window clock and our poll timer may advance without
       // new stable text. Do not re-bill for the exact same source prefix.
@@ -228,13 +254,13 @@ export class SentenceWorker{
       this.journal.units.length>this.lastEmptyFrontier;
     const minUnits=moreSinceEmpty?
       Math.min(SEMANTIC_PROBE_MAX_UNITS,this.lastEmptyBatchSize+1):0;
-    const ready=nextReady(this.journal,{minUnits});
+    const ready=flush?overdue:nextReady(this.journal,{minUnits});
     if(!ready.length){
       if(this.journal.finalized)this.reportDrain('complete');
       else this.schedule();
       return;
     }
-    const signature=ready.map(u=>u.id).join('|')+'|'+this.journal.finalized;
+    const signature=ready.map(u=>u.id).join('|')+'|'+this.journal.finalized+'|'+flush;
     const sourceFrontier=this.journal.units.length;
     if(signature===this.lastEmptySignature){
       if(this.journal.finalized)this.reportDrain('paused',
@@ -246,7 +272,7 @@ export class SentenceWorker{
     const signal=this.controller.signal;
     let delay=this.intervalMs;
     try{
-      const payload=await this.request(this.profile,ready.map(u=>({...u,finalBatch:this.journal.finalized})),
+      const payload=await this.request(this.profile,ready.map(u=>({...u,finalBatch:this.journal.finalized,...(flush?{flushBatch:true}:{})})),
         {signal,onTelemetry:this.onRequestMetric});
       if(this.closed||signal.aborted)return;
       const accepted=validateSentenceResult(payload,ready);
